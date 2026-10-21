@@ -1,0 +1,28 @@
+# Build output and the portable bundle (published as a GitHub Release instead)
+bin/
+build/
+Darkroom_Portable/
+*.zip
+
+# AI models and runtimes: large binaries, shipped in the Release zip
+ai/*.onnx
+ai/*.dll
+ai/*.bin
+
+# Per-user files the app writes next to itself or next to photos
+settings.ini
+presets/
+styles/
+*.pedit
+*.lre
+.photoeditor_ai
+.photoeditor_thumbs
+.photoeditor_cache/
+
+# Editor / OS noise
+.vs/
+.vscode/
+*.user
+Thumbs.db
+desktop.ini
+__pycache__/
