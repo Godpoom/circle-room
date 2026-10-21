@@ -1,4 +1,4 @@
-// Darkroom: a lightweight, GPU-accelerated photo editor.
+// Circle Room: a lightweight, GPU-accelerated photo editor.
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -316,7 +316,7 @@ static void finishLoad(App& a) {
   }
   a.autoValid = false;
   if (anyLayer(a.params) || a.localPanelOpen) startSegmentation(a);
-  std::string title = "Darkroom - " + fileName(a.path);
+  std::string title = "Circle Room - " + fileName(a.path);
   glfwSetWindowTitle(a.win, title.c_str());
 }
 
@@ -1005,16 +1005,16 @@ static void drawTopBar(App& a, float barH) {
   float W = ImGui::GetWindowWidth();
   float fh = ImGui::GetFrameHeight();
 
-  // Wordmark: the mark, then "Dark" in paper white and "room" in the lamp's red.
+  // Wordmark: the mark, then "Circle" in paper white and "Room" in the lamp's red.
   float x = 16.f * s, cy = w0.y + barH * 0.5f;
   float mk = 30.f * s;
   drawIcon(dl, IC_LOGO, ImVec2(w0.x + x + mk * 0.5f, cy), mk, 0);
   x += mk + 10.f * s;
   ImGui::PushFont(g_fontTitle);
-  ImVec2 t1 = ImGui::CalcTextSize("Dark"), t2 = ImGui::CalcTextSize("room");
+  ImVec2 t1 = ImGui::CalcTextSize("Circle "), t2 = ImGui::CalcTextSize("Room");
   float ty = cy - t1.y * 0.5f - 1.f * s;
-  dl->AddText(ImVec2(w0.x + x, ty), pal::kText, "Dark");
-  dl->AddText(ImVec2(w0.x + x + t1.x, ty), pal::kAccent, "room");
+  dl->AddText(ImVec2(w0.x + x, ty), pal::kText, "Circle");
+  dl->AddText(ImVec2(w0.x + x + t1.x, ty), pal::kAccent, "Room");
   ImGui::PopFont();
   x += t1.x + t2.x + 30.f * s;
 
@@ -1853,7 +1853,7 @@ static void drawStatusBar(App& a) {
   if (a.hasImage && a.mode == 0) {
     ImGui::Text("%s", a.path.c_str());
   } else {
-    ImGui::TextUnformatted("Darkroom");
+    ImGui::TextUnformatted("Circle Room");
   }
   char right[256];
   snprintf(right, sizeof(right), "RAM %.0f MB   /   %s", processPrivateWorkingSet() / (1024.0 * 1024.0), a.gpuName.c_str());
@@ -2096,7 +2096,7 @@ static GLFWwindow* createWindow(int w, int h, bool visible, std::string& err) {
   glfwWindowHint(GLFW_SCALE_TO_MONITOR, GLFW_TRUE);
   glfwWindowHint(GLFW_DEPTH_BITS, 0);
   glfwWindowHint(GLFW_STENCIL_BITS, 0);
-  GLFWwindow* win = glfwCreateWindow(w, h, "Darkroom", nullptr, nullptr);
+  GLFWwindow* win = glfwCreateWindow(w, h, "Circle Room", nullptr, nullptr);
   if (!win) {
     err = "OpenGL 3.3 is not available";
     return nullptr;
@@ -2162,8 +2162,8 @@ static bool endsWithI(const std::string& s, const char* suf) {
   return true;
 }
 
-// Darkroom.exe --export in.jpg params.pedit|- out.jpg [--long N] [--quality Q]
-// Darkroom.exe --bench in.jpg
+// CircleRoom.exe --export in.jpg params.pedit|- out.jpg [--long N] [--quality Q]
+// CircleRoom.exe --bench in.jpg
 static int runHeadless(const std::vector<std::string>& args) {
   attachParentConsole();
   bool bench = args[1] == "--bench";
@@ -2285,7 +2285,7 @@ static int runHeadless(const std::vector<std::string>& args) {
   return 0;
 }
 
-// Darkroom.exe --ai-tokcheck <tests.txt>: compares C++ tokenizers with reference ids (tab separated)
+// CircleRoom.exe --ai-tokcheck <tests.txt>: compares C++ tokenizers with reference ids (tab separated)
 static int runTokCheck(const std::vector<std::string>& args) {
   attachParentConsole();
   ai::UnigramTokenizer mt;
@@ -2319,7 +2319,7 @@ static int runTokCheck(const std::vector<std::string>& args) {
   return bad ? 1 : 0;
 }
 
-// Darkroom.exe --ai-search <folder> "<query>" [--top N]
+// CircleRoom.exe --ai-search <folder> "<query>" [--top N]
 static int runAiSearch(const std::vector<std::string>& args) {
   attachParentConsole();
   if (args.size() < 4) return 2;
@@ -2363,7 +2363,7 @@ static int runAiSearch(const std::vector<std::string>& args) {
   return 0;
 }
 
-// Darkroom.exe --ai-recover <in> <out.jpg> [--strength S] [--no-regions]
+// CircleRoom.exe --ai-recover <in> <out.jpg> [--strength S] [--no-regions]
 static int runAiRecover(const std::vector<std::string>& args) {
   attachParentConsole();
   if (args.size() < 4) return 2;
@@ -2418,7 +2418,7 @@ static int runAiRecover(const std::vector<std::string>& args) {
   return 0;
 }
 
-// Darkroom.exe --ai-auto <in> <out.jpg> [--no-layers]
+// CircleRoom.exe --ai-auto <in> <out.jpg> [--no-layers]
 static int runAiAuto(const std::vector<std::string>& args) {
   attachParentConsole();
   if (args.size() < 4) return 2;
@@ -2488,7 +2488,7 @@ static int runAiAuto(const std::vector<std::string>& args) {
   return 0;
 }
 
-// Darkroom.exe --ai-mask <in> <region index> <out.png> [--invert] [--feather F]
+// CircleRoom.exe --ai-mask <in> <region index> <out.png> [--invert] [--feather F]
 static int runAiMask(const std::vector<std::string>& args) {
   attachParentConsole();
   if (args.size() < 5) return 2;
@@ -2523,7 +2523,7 @@ static int runAiMask(const std::vector<std::string>& args) {
   return 0;
 }
 
-// Darkroom.exe --make-style <name> <photosDir>: saves a reference set to styles\<name>.lrs
+// CircleRoom.exe --make-style <name> <photosDir>: saves a reference set to styles\<name>.lrs
 static int runMakeStyle(const std::vector<std::string>& args) {
   attachParentConsole();
   if (args.size() < 4) return 2;
@@ -2546,7 +2546,7 @@ static int runMakeStyle(const std::vector<std::string>& args) {
   return 0;
 }
 
-// Darkroom.exe --ai-style <refsDir> <in> <out.jpg> [--strength 0..100]
+// CircleRoom.exe --ai-style <refsDir> <in> <out.jpg> [--strength 0..100]
 static int runAiStyle(const std::vector<std::string>& args) {
   attachParentConsole();
   if (args.size() < 5) {
@@ -2609,7 +2609,7 @@ static int runAiStyle(const std::vector<std::string>& args) {
   return 0;
 }
 
-// Darkroom.exe --ai-rank <folder> [--top N] [--refs <dir>] [--cpu]
+// CircleRoom.exe --ai-rank <folder> [--top N] [--refs <dir>] [--cpu]
 static int runAiRank(const std::vector<std::string>& args) {
   attachParentConsole();
   if (args.size() < 3) {

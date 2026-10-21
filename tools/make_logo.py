@@ -1,48 +1,51 @@
-"""Draws the Darkroom mark and writes res/darkroom.ico + res/darkroom_256.png.
-The mark is a "D": a paper-white bar (the film strip / enlarger post) and a half disc in
-safelight red (the lamp). Run: python tools/make_logo.py"""
-import math, os
+"""Draws the Circle Room mark and writes res/circleroom.ico + res/circleroom_256.png.
+The mark is a circle inside a room: a graphite tile (the room), a paper-white ring (a lens /
+a porthole) and a safelight-red disc resting low inside it, like a sun setting in a window.
+Run from the project root: python tools/make_logo.py"""
+import os
 from PIL import Image, ImageDraw, ImageFilter
 
 S = 1024
-BG, PAPER, RED, RED_HI = (28, 27, 25), (234, 229, 219), (226, 82, 54), (255, 150, 110)
+BG, EDGE, PAPER, RED, RED_HI = (28, 27, 25), (60, 57, 52), (234, 229, 219), (226, 82, 54), (255, 150, 110)
+
 
 def mark():
     im = Image.new("RGBA", (S, S), (0, 0, 0, 0))
     d = ImageDraw.Draw(im)
     d.rounded_rectangle((0, 0, S - 1, S - 1), radius=int(S * 0.22), fill=BG)
-    d.rounded_rectangle((8, 8, S - 9, S - 9), radius=int(S * 0.21), outline=(60, 57, 52), width=6)
-    # glow behind the lamp
+    d.rounded_rectangle((8, 8, S - 9, S - 9), radius=int(S * 0.21), outline=EDGE, width=6)
+    cx = cy = S // 2
+    R = int(S * 0.31)       # ring outer radius
+    w = int(S * 0.075)      # ring width
+    # glow
     glow = Image.new("RGBA", (S, S), (0, 0, 0, 0))
-    g = ImageDraw.Draw(glow)
-    cx, cy, r = int(S * 0.47), int(S * 0.5), int(S * 0.25)
-    g.ellipse((cx - r * 1.5, cy - r * 1.5, cx + r * 1.5, cy + r * 1.5), fill=RED + (70,))
-    glow = glow.filter(ImageFilter.GaussianBlur(S * 0.05))
-    im.alpha_composite(glow)
+    ImageDraw.Draw(glow).ellipse((cx - R * 1.25, cy - R * 1.25, cx + R * 1.25, cy + R * 1.25), fill=RED + (60,))
+    im.alpha_composite(glow.filter(ImageFilter.GaussianBlur(S * 0.05)))
     d = ImageDraw.Draw(im)
-    # bar
-    bx0, bx1, by0, by1 = int(S * 0.27), int(S * 0.39), int(S * 0.25), int(S * 0.75)
-    d.rectangle((bx0, by0, bx1, by1), fill=PAPER)
-    # lamp: half disc to the right of the bar, with a radial gradient
-    lamp = Image.new("RGBA", (S, S), (0, 0, 0, 0))
-    ld = ImageDraw.Draw(lamp)
-    R = int(S * 0.25)
-    ccx = bx1 + int(S * 0.03)
-    ld.pieslice((ccx - R, cy - R, ccx + R, cy + R), -90, 90, fill=RED + (255,))
-    ld.rectangle((ccx, cy - R, ccx + int(S * 0.005), cy + R), fill=RED + (255,))
+    # red disc sitting low inside the ring, clipped by the ring's inner edge
+    disc = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    r = int(R * 0.62)
+    dx, dy = cx + int(R * 0.06), cy + int(R * 0.22)
+    ImageDraw.Draw(disc).ellipse((dx - r, dy - r, dx + r, dy + r), fill=RED + (255,))
     hi = Image.new("RGBA", (S, S), (0, 0, 0, 0))
-    hd = ImageDraw.Draw(hi)
-    hd.ellipse((ccx + R * 0.05, cy - R * 0.55, ccx + R * 0.65, cy + R * 0.05), fill=RED_HI + (170,))
-    hi = hi.filter(ImageFilter.GaussianBlur(S * 0.035))
-    mask = lamp.split()[3]
-    hi.putalpha(Image.composite(hi.split()[3], Image.new("L", (S, S), 0), mask))
-    lamp.alpha_composite(hi)
-    im.alpha_composite(lamp)
+    ImageDraw.Draw(hi).ellipse((dx - r * 0.55, dy - r * 0.75, dx + r * 0.25, dy - r * 0.05), fill=RED_HI + (190,))
+    hi = hi.filter(ImageFilter.GaussianBlur(S * 0.03))
+    disc_a = disc.split()[3]
+    hi.putalpha(Image.composite(hi.split()[3], Image.new("L", (S, S), 0), disc_a))
+    disc.alpha_composite(hi)
+    inner = Image.new("L", (S, S), 0)
+    ImageDraw.Draw(inner).ellipse((cx - (R - w), cy - (R - w), cx + (R - w), cy + (R - w)), fill=255)
+    disc.putalpha(Image.composite(disc.split()[3], Image.new("L", (S, S), 0), inner))
+    im.alpha_composite(disc)
+    d = ImageDraw.Draw(im)
+    # paper ring
+    d.ellipse((cx - R, cy - R, cx + R, cy + R), outline=PAPER, width=w)
     return im
 
-os.makedirs("res", exist_ok=True)
-m = mark()
-m.resize((256, 256), Image.LANCZOS).save("res/darkroom_256.png")
-sizes = [16, 24, 32, 48, 64, 128, 256]
-m.save("res/darkroom.ico", sizes=[(s, s) for s in sizes])
-print("ok")
+
+if __name__ == "__main__":
+    os.makedirs("res", exist_ok=True)
+    m = mark()
+    m.resize((256, 256), Image.LANCZOS).save("res/circleroom_256.png")
+    m.save("res/circleroom.ico", sizes=[(s, s) for s in (16, 24, 32, 48, 64, 128, 256)])
+    print("ok")

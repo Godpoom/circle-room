@@ -175,17 +175,13 @@ void drawIcon(ImDrawList* dl, int icon, ImVec2 c, float size, ImU32 col) {
       }
       break;
     }
-    case IC_LOGO: {  // the Darkroom mark: paper bar + safelight half disc on a graphite tile
+    case IC_LOGO: {  // the Circle Room mark: a paper ring with a safelight-red disc resting low inside, on a graphite tile
       float R = r;
       dl->AddRectFilled(P(c, R, -1, -1), P(c, R, 1, 1), pal::kRail, R * 0.44f);
       dl->AddRect(P(c, R, -1, -1), P(c, R, 1, 1), pal::kFrame, R * 0.44f, 0, 1.f);
-      dl->AddRectFilled(P(c, R, -0.46f, -0.5f), P(c, R, -0.22f, 0.5f), pal::kText);
-      ImVec2 lc = P(c, R, -0.16f, 0.f);
-      dl->PathLineTo(P(c, R, -0.16f, -0.5f));
-      dl->PathArcTo(lc, R * 0.5f, -kPi * 0.5f, kPi * 0.5f, 20);
-      dl->PathLineTo(P(c, R, -0.16f, 0.5f));
-      dl->PathFillConvex(pal::kAccent);
-      dl->AddCircleFilled(P(c, R, 0.12f, -0.12f), R * 0.08f, IM_COL32(255, 150, 110, 200));
+      dl->AddCircleFilled(P(c, R, 0.03f, 0.12f), R * 0.34f, pal::kAccent, 28);
+      dl->AddCircleFilled(P(c, R, -0.06f, -0.02f), R * 0.1f, IM_COL32(255, 150, 110, 170), 16);
+      dl->AddCircle(c, R * 0.545f, pal::kText, 36, std::max(1.5f, R * 0.15f));
       break;
     }
   }

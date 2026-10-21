@@ -1,18 +1,18 @@
-# Darkroom
+# Circle Room
 
 โปรแกรมแต่งภาพที่เบาเครื่อง เขียนด้วย C++ + OpenGL (ประมวลผลบน GPU) + Dear ImGui พร้อมระบบ AI ที่ทำงานในเครื่อง (ไม่ส่งรูปขึ้นเน็ต)
 
-> **ดาวน์โหลดไปใช้เลย:** https://godpoom.github.io/darkroom/ (หรือหน้า [Releases](../../releases)) โหลด `Darkroom_Portable.zip` (มี AI) หรือ `Darkroom_Lite.zip` (1.4 MB ไม่มี AI) แตกไฟล์แล้วเปิด `Darkroom.exe` (Windows 10/11 64 บิต)
+> **ดาวน์โหลดไปใช้เลย:** https://godpoom.github.io/circle-room/ (หรือหน้า [Releases](../../releases)) โหลด `CircleRoom_Portable.zip` (มี AI) หรือ `CircleRoom_Lite.zip` (1.4 MB ไม่มี AI) แตกไฟล์แล้วเปิด `CircleRoom.exe` (Windows 10/11 64 บิต)
 >
 > repo นี้เก็บเฉพาะซอร์สโค้ด ไฟล์โมเดล AI (~490 MB) อยู่ในไฟล์ zip ของ Release ถ้าจะ build เอง ให้คัดลอกโฟลเดอร์ `ai\` จาก zip มาไว้ที่ `ai\` ของโปรเจกต์
 > ดูสัญญาอนุญาตของไลบรารีและโมเดลได้ที่ [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) (ข้อความสัญญาฉบับเต็มอยู่ในโฟลเดอร์ [LICENSES](LICENSES))
 
-ได้ไฟล์ `bin\Darkroom.exe` ขนาดประมาณ 3 MB ไม่ต้องติดตั้งอะไรเพิ่ม
+ได้ไฟล์ `bin\CircleRoom.exe` ขนาดประมาณ 3 MB ไม่ต้องติดตั้งอะไรเพิ่ม
 ระบบ AI ใช้ไฟล์ในโฟลเดอร์ `bin\ai\` เพิ่มอีกประมาณ 466 MB (ถ้าไม่มีโฟลเดอร์นี้ ตัวแก้ไขภาพยังใช้ได้ตามปกติ)
 
 ## ชื่อและโลโก้
-**Darkroom** (ห้องมืดล้างฟิล์ม) โลโก้เป็นตัว D ที่ประกอบจากแท่งสีกระดาษ (แถบฟิล์ม) กับครึ่งวงกลมสีแดง (ไฟ safelight)
-ไฟล์ต้นฉบับสร้างด้วย `tools/make_logo.py` ได้ `res/darkroom.ico` ที่ถูกฝังใน exe ผ่าน `res/darkroom.rc` (ไอคอนในแถบงาน, ข้อมูลไฟล์)
+**Circle Room** โลโก้เป็น "วงกลมในห้อง": กรอบสี่เหลี่ยมมุมมนสีกราไฟต์ (ห้อง) มีวงแหวนสีกระดาษ (เลนส์/หน้าต่าง) และวงกลมสีแดงแบบไฟ safelight อยู่ต่ำข้างใน เหมือนพระอาทิตย์ตกในกรอบหน้าต่าง
+ไฟล์ต้นฉบับสร้างด้วย `tools/make_logo.py` ได้ `res/circleroom.ico` ที่ถูกฝังใน exe ผ่าน `res/circleroom.rc` (ไอคอนในแถบงาน, ข้อมูลไฟล์)
 
 ## สอนใช้งานในตัวโปรแกรม (Tutorial)
 - เปิดโปรแกรมครั้งแรกจะมีทัวร์ 12 ขั้นขึ้นมาเอง ไฮไลต์ส่วนที่กำลังอธิบายพร้อมการ์ดคำอธิบาย ไม่ต้องอ่านเอกสารนี้
@@ -22,7 +22,7 @@
 - ปุ่ม **AI Cull / คัดภาพ AI** ที่แถบบนเป็นปุ่มกรอบสีแดง หน้าเริ่มต้นมีลิงก์ "มีภาพเยอะ? ลองคัดภาพด้วย AI" และหน้าคัดภาพครั้งแรกมีคู่มือ 3 ขั้น
 
 ## วิธีใช้
-- เปิด `bin\Darkroom.exe` แล้วคลิกกรอบกลางจอ (หรือปุ่มโฟลเดอร์ด้านบน) หรือลากไฟล์ภาพมาวางในหน้าต่าง (JPEG / PNG / BMP / TGA / PSD / GIF รวมถึง PNG 16-bit)
+- เปิด `bin\CircleRoom.exe` แล้วคลิกกรอบกลางจอ (หรือปุ่มโฟลเดอร์ด้านบน) หรือลากไฟล์ภาพมาวางในหน้าต่าง (JPEG / PNG / BMP / TGA / PSD / GIF รวมถึง PNG 16-bit)
 - ปุ่ม **EN / ไทย** ที่มุมขวาบนใช้สลับภาษา
 - การแต่งไม่ทับไฟล์ต้นฉบับ ค่าที่ปรับจะบันทึกไว้ในไฟล์ `ชื่อภาพ.jpg.pedit` ข้างภาพ เปิดภาพเดิมอีกครั้งค่าจะกลับมาเอง
   (ไฟล์ `.pedit` จากเวอร์ชันก่อนยังอ่านได้ และจะถูกเปลี่ยนเป็น `.pedit` ในการบันทึกครั้งถัดไป)
@@ -30,7 +30,7 @@
 ### หน้าตาโปรแกรม
 ธีม "ห้องมืด / ตัวกล้อง": สีกราไฟต์อุ่น ตัวอักษรสีกระดาษ และสีแดงแบบไฟ safelight ในห้องล้างฟิล์ม ใช้เฉพาะจุดที่บอกสถานะ
 ตัวเลขและหัวข้อใช้ฟอนต์ Bahnschrift (ฟอนต์ DIN ที่มากับ Windows) ให้อ่านคล้ายตัวเลขที่พิมพ์บนกล้องและเลนส์
-- **แถบบน:** โลโก้และชื่อ Darkroom, แท็บ แต่งภาพ / คัดภาพ AI, ปุ่มเปิดภาพ เลิกทำ ทำซ้ำ รีเซ็ต และปุ่ม **ส่งออก** (สีกระดาษ)
+- **แถบบน:** โลโก้และชื่อ Circle Room, แท็บ แต่งภาพ / คัดภาพ AI, ปุ่มเปิดภาพ เลิกทำ ทำซ้ำ รีเซ็ต และปุ่ม **ส่งออก** (สีกระดาษ)
 - **สารบัญด้านซ้าย:** หน้าเครื่องมือมีเลขกำกับ 01–09 เหมือนสารบัญหนังสือ แสดงทีละหน้า กดเลข 1–9 บนคีย์บอร์ดเพื่อสลับได้
 - **หัวข้อ:** แต่ละหน้าแบ่งเป็นหัวข้อมีเลข (01, 02 …) คั่นด้วยเส้นบาง และมีลิงก์ "รีเซ็ต" ทางขวาสำหรับรีเซ็ตเฉพาะหัวข้อนั้น
 - **สไลเดอร์:** ทำเป็นสเกลแบบที่สลักบนวงแหวนเลนส์ มีขีดทุก 10% ขีดยาวที่ค่าเริ่มต้น และลิ่มชี้ค่าปัจจุบัน
@@ -159,16 +159,16 @@ powershell -ExecutionPolicy Bypass -File build.ps1
 
 คำสั่งสำหรับทดสอบ (ไม่เปิดหน้าต่าง):
 ```
-Darkroom.exe --export in.jpg settings.pedit out.jpg [--long 2048] [--quality 92]
-Darkroom.exe --bench in.jpg
-Darkroom.exe --ai-rank <โฟลเดอร์> [--top N] [--refs <โฟลเดอร์ Reference>] [--all] [--gpu]
-Darkroom.exe --ai-style <โฟลเดอร์ Reference> in.jpg out.jpg [--strength 0-100]
-Darkroom.exe --make-style <ชื่อ> <โฟลเดอร์ภาพ>
-Darkroom.exe --ai-search <โฟลเดอร์> "<ข้อความ>" [--top N]
-Darkroom.exe --ai-auto in.jpg out.jpg [--no-layers]
-Darkroom.exe --ai-recover in.jpg out.jpg [--strength 0-100] [--no-regions]
-Darkroom.exe --ai-mask in.jpg <หมายเลขส่วน 0=คน 1=ท้องฟ้า 2=ถนน ...> mask.png [--invert] [--feather F]
-Darkroom.exe --ai-tokcheck <ไฟล์ทดสอบ>   (ตรวจ tokenizer เทียบกับ Python)
+CircleRoom.exe --export in.jpg settings.pedit out.jpg [--long 2048] [--quality 92]
+CircleRoom.exe --bench in.jpg
+CircleRoom.exe --ai-rank <โฟลเดอร์> [--top N] [--refs <โฟลเดอร์ Reference>] [--all] [--gpu]
+CircleRoom.exe --ai-style <โฟลเดอร์ Reference> in.jpg out.jpg [--strength 0-100]
+CircleRoom.exe --make-style <ชื่อ> <โฟลเดอร์ภาพ>
+CircleRoom.exe --ai-search <โฟลเดอร์> "<ข้อความ>" [--top N]
+CircleRoom.exe --ai-auto in.jpg out.jpg [--no-layers]
+CircleRoom.exe --ai-recover in.jpg out.jpg [--strength 0-100] [--no-regions]
+CircleRoom.exe --ai-mask in.jpg <หมายเลขส่วน 0=คน 1=ท้องฟ้า 2=ถนน ...> mask.png [--invert] [--feather F]
+CircleRoom.exe --ai-tokcheck <ไฟล์ทดสอบ>   (ตรวจ tokenizer เทียบกับ Python)
 ```
 `tools/export_tokenizers.py` ใช้สร้าง `mt_vocab.bin` และ `clip_bpe.bin` ส่วน `tools/make_prompts.py` ใช้สร้าง prompt ของฉากใน `prompts.bin`
 
@@ -209,5 +209,5 @@ Darkroom.exe --ai-tokcheck <ไฟล์ทดสอบ>   (ตรวจ tokeniz
   - จุดสะท้อนแสงเล็กๆ (แสงในตา, ประกายบนน้ำ) ตั้งใจปล่อยไว้ขาว
   - สีมาจากขอบของบริเวณ ถ้าขอบเป็นสีอุ่น (เช่น ท้องฟ้าตอนเย็น) ส่วนที่กู้จะอุ่นตาม
   - ระหว่างกู้ใช้ RAM ชั่วคราวประมาณ 560 MB ไม่กี่วินาที แล้วคืนทั้งหมด
-- **Bitdefender:** ถ้า build แล้วขึ้น `Permission denied` แสดงว่า Bitdefender กำลังสแกนหรือกันการเขียนทับ `Darkroom.exe` ให้เพิ่มโฟลเดอร์โปรเจกต์ และ `%TEMP%\darkroom_build` ใน exclusion ของ Bitdefender หรือรอให้สแกนเสร็จ
+- **Bitdefender:** ถ้า build แล้วขึ้น `Permission denied` แสดงว่า Bitdefender กำลังสแกนหรือกันการเขียนทับ `CircleRoom.exe` ให้เพิ่มโฟลเดอร์โปรเจกต์ และ `%TEMP%\circleroom_build` ใน exclusion ของ Bitdefender หรือรอให้สแกนเสร็จ
 - ต้องมี Visual C++ Runtime (มีในเครื่อง Windows ส่วนใหญ่อยู่แล้ว) เพื่อใช้ ONNX Runtime ถ้าไม่มี ระบบคัดภาพจะใช้ได้เฉพาะคะแนนแบบไม่ใช้โมเดล

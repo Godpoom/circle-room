@@ -1,7 +1,7 @@
 # Build output and the portable bundle (published as a GitHub Release instead)
 bin/
 build/
-Darkroom_Portable/
+CircleRoom_Portable/
 *.zip
 
 # AI models and runtimes: large binaries, shipped in the Release zip

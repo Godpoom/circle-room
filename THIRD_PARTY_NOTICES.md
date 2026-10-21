@@ -1,9 +1,9 @@
 # Third-party components
 
-Darkroom bundles the components below. Each stays under its own license; the **full license
+Circle Room bundles the components below. Each stays under its own license; the **full license
 texts are in the [`LICENSES/`](LICENSES) folder**, which also ships inside every release zip.
 
-## Libraries (in `third_party/`, compiled into `Darkroom.exe` or shipped next to it)
+## Libraries (in `third_party/`, compiled into `CircleRoom.exe` or shipped next to it)
 | Component | License | Full text |
 |---|---|---|
 | [GLFW 3.4](https://www.glfw.org/) | zlib/libpng | `LICENSES/GLFW-zlib.md` |

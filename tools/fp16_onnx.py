@@ -1,5 +1,5 @@
 """Converts an fp32 ONNX graph to fp16 (weights and I/O), halving its size.
-Darkroom's ONNX wrapper converts fp16 inputs/outputs itself, so the app needs no change.
+Circle Room's ONNX wrapper converts fp16 inputs/outputs itself, so the app needs no change.
 
 Usage: python fp16_onnx.py in_fp32.onnx out_fp16.onnx   (needs onnx + onnxruntime)
 """

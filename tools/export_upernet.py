@@ -1,4 +1,4 @@
-"""Exports an ADE20K UperNet-ConvNeXt (MIT, openmmlab on Hugging Face) to ONNX for Darkroom's
+"""Exports an ADE20K UperNet-ConvNeXt (MIT, openmmlab on Hugging Face) to ONNX for Circle Room's
 region masks. It replaces SegFormer, whose licence allows research/evaluation use only.
 
 The graph returns the decode head's logits at 1/4 of the input size, [1, 150, H/4, W/4] like

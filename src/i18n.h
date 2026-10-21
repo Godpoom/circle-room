@@ -258,7 +258,7 @@
   X(T_TourSkip, "Skip", "ข้าม") \
   X(T_TourDone, "Start editing", "เริ่มใช้งาน") \
   X(T_TourReplay, "Tutorial (replay)", "สอนใช้งาน (ดูอีกครั้ง)") \
-  X(T_Tr0T, "Welcome to Darkroom", "ยินดีต้อนรับสู่ Darkroom") \
+  X(T_Tr0T, "Welcome to Circle Room", "ยินดีต้อนรับสู่ Circle Room") \
   X(T_Tr0B, "A one-minute tour of what matters. Skip any time, and replay it with the ? button at the top right.", "ทัวร์สั้นๆ 1 นาทีให้รู้จักส่วนสำคัญ ข้ามได้ทุกเมื่อ และเปิดดูอีกครั้งได้จากปุ่ม ? มุมขวาบน") \
   X(T_Tr1T, "Open a photo", "เปิดภาพ") \
   X(T_Tr1B, "Click here, press Ctrl+O, or drag a file into the window. Your original file is never changed.", "คลิกตรงนี้ กด Ctrl+O หรือลากไฟล์มาวางในหน้าต่าง ไฟล์ต้นฉบับจะไม่ถูกแก้ไข") \

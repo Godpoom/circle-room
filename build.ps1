@@ -1,4 +1,4 @@
-# Builds Darkroom.exe into .\bin
+# Builds CircleRoom.exe into .\bin
 # Ninja/MinGW cannot handle non-ASCII (Thai) folder names, so the build goes
 # through an ASCII-only junction in %TEMP% that points back at this folder.
 $ErrorActionPreference = 'Stop'
@@ -20,7 +20,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Build failed' }
 
 $bin = Join-Path $src 'bin'
 New-Item -ItemType Directory -Force $bin | Out-Null
-Copy-Item (Join-Path $build 'Darkroom.exe') $bin -Force
+Copy-Item (Join-Path $build 'CircleRoom.exe') $bin -Force
 # AI runtime + models (only copied when newer: ~120 MB)
 $aiSrc = Join-Path $src 'ai'
 if (Test-Path $aiSrc) {
@@ -28,4 +28,4 @@ if (Test-Path $aiSrc) {
   if ($LASTEXITCODE -ge 8) { throw 'Copying ai\ failed' }
   $global:LASTEXITCODE = 0
 }
-Write-Host "OK -> $bin\Darkroom.exe"
+Write-Host "OK -> $bin\CircleRoom.exe"
