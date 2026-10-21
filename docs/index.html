@@ -132,6 +132,32 @@ kbd{font-family:var(--f-mono);font-size:.82em;background:var(--panel);border:1px
 .dialog .btn{position:relative}
 .dialog .btn .pin{position:absolute;top:-15px;right:-12px}
 
+
+/* ---------- safety check ---------- */
+.safe{padding:var(--s7) 0;border-top:1px solid var(--line)}
+.safe .wrap{display:grid;grid-template-columns:4fr 8fr;gap:var(--s7);align-items:start}
+.score{display:flex;align-items:baseline;gap:10px;font-family:var(--f-display);line-height:.9;margin:var(--s3) 0 var(--s4)}
+.score b{font-size:clamp(72px,9vw,120px);font-weight:700;color:#7fc8a9}
+.score span{font-size:32px;color:var(--faint);font-weight:600}
+.safe h2{font-size:24px;line-height:1.4;margin:0 0 var(--s3)}
+.safe p{color:var(--muted);margin:0 0 var(--s3)}
+.vt{display:inline-flex;align-items:center;gap:8px;margin-top:var(--s2);padding:10px 16px;border:1px solid var(--line-2);border-radius:var(--r);
+  text-decoration:none;font-weight:600;font-size:15px;transition:border-color .18s var(--ease),background .18s var(--ease)}
+.vt:hover{border-color:var(--paper);background:var(--panel)}
+.checks{counter-reset:c;list-style:none;margin:0;padding:0}
+.checks>li{counter-increment:c;display:grid;grid-template-columns:44px 1fr;gap:0 var(--s3);padding:var(--s4) 0;border-bottom:1px solid var(--line)}
+.checks>li::before{content:counter(c,decimal-leading-zero);font-family:var(--f-mono);color:var(--red);font-size:14px;padding-top:3px}
+.checks h3{margin:0 0 4px;font-size:18px}
+.checks p{margin:0 0 var(--s2);color:var(--muted);font-size:15.5px}
+.hash{display:flex;align-items:center;gap:var(--s3);margin-top:6px;background:var(--bg-2);border:1px solid var(--line);border-radius:var(--r);padding:8px 10px}
+.hash .k{font-family:var(--f-mono);font-size:11.5px;letter-spacing:.12em;color:var(--faint);text-transform:uppercase;flex:none;width:118px}
+.hash code{font-family:var(--f-mono);font-size:12.5px;color:var(--paper);word-break:break-all;flex:1;min-width:0}
+.copy{all:unset;cursor:pointer;flex:none;font-family:var(--f-mono);font-size:12px;color:var(--muted);padding:4px 8px;border:1px solid var(--line-2);border-radius:2px}
+.copy:hover{color:var(--paper);border-color:var(--paper)}
+.copy.done{color:#7fc8a9;border-color:#7fc8a9}
+.copy:focus-visible{outline:2px solid var(--red);outline-offset:2px}
+.caution{margin-top:var(--s4);padding:12px 16px;border-left:2px solid var(--red);background:var(--red-soft);font-size:15px}
+
 /* ---------- before / after ---------- */
 .ba{padding:var(--s8) 0;border-top:1px solid var(--line)}
 .ba .wrap{display:grid;grid-template-columns:4fr 8fr;gap:var(--s7);align-items:end}
@@ -189,7 +215,7 @@ footer a{color:var(--muted)}
 
 /* ---------- responsive ---------- */
 @media (max-width:980px){
-  .hero .wrap,.warn .wrap,.ba .wrap,.info .wrap{grid-template-columns:1fr}
+  .hero .wrap,.warn .wrap,.ba .wrap,.info .wrap,.safe .wrap{grid-template-columns:1fr}
   .steps .wrap{grid-template-columns:1fr 1fr 1fr}
   .steps .head{grid-column:1/-1;padding-bottom:0}
   .step:first-of-type{border-left:0;padding-left:0}
@@ -210,6 +236,8 @@ footer a{color:var(--muted)}
   .step .n{font-size:48px;grid-row:span 2}
   .step h3{margin-top:0}
   .dialog{padding:20px}
+  .hash{flex-wrap:wrap}
+  .hash .k{width:auto}
   .dialog .h{font-size:20px}
   .alt{flex-direction:column;align-items:flex-start}
   .vf{display:none}
@@ -225,6 +253,7 @@ footer a{color:var(--muted)}
     <a class="brand" href="#" aria-label="Circle Room"><img src="assets/icon-180.png" alt="" width="30" height="30"><b style="font-weight:inherit">Circle <span>Room</span></b></a>
     <nav>
       <a class="hide-sm" href="#how"><span data-th>วิธีติดตั้ง</span><span data-en>How to install</span></a>
+      <a class="hide-sm" href="#safety"><span data-th>ความปลอดภัย</span><span data-en>Safety</span></a>
       <a class="hide-sm" href="#features"><span data-th>ทำอะไรได้</span><span data-en>Features</span></a>
       <a href="https://github.com/Godpoom/circle-room" rel="noopener">GitHub</a>
       <div class="lang" role="group" aria-label="Language">
@@ -318,6 +347,49 @@ footer a{color:var(--muted)}
   </div>
 </section>
 
+
+<section class="safe" id="safety">
+  <div class="wrap">
+    <div>
+      <p class="label"><b>✓</b> <span data-th>ตรวจความปลอดภัย</span><span data-en>Safety check</span></p>
+      <div class="score" aria-label="0 of 71 antivirus engines flagged the file"><b>0</b><span>/ 71</span></div>
+      <h2><span data-th>ไม่มีแอนตี้ไวรัสตัวไหนแจ้งว่าอันตราย</span><span data-en>No antivirus engine flagged it</span></h2>
+      <p><span data-th>เราส่ง <b>CircleRoom.exe</b> เวอร์ชัน 1.0.2 ให้ VirusTotal สแกนด้วยแอนตี้ไวรัส 71 ตัว ผลคือไม่พบอะไร (สแกนวันที่ 21 ต.ค. 2026)</span>
+         <span data-en>We sent <b>CircleRoom.exe</b> 1.0.2 to VirusTotal, which ran it past 71 antivirus engines. None flagged it (scanned 21 Oct 2026).</span></p>
+      <a class="vt" href="https://www.virustotal.com/gui/file/deae494e4c75c99a45aeaf4f380da7820ab683f253b708cf4629bac1ba6c3604" target="_blank" rel="noopener">
+        <span data-th>ดูรายงานบน VirusTotal</span><span data-en>Open the VirusTotal report</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg>
+      </a>
+    </div>
+    <div>
+      <p class="label"><span data-th>อย่าเชื่อเราอย่างเดียว ตรวจเองได้ใน 1 นาที</span><span data-en>Don't just take our word for it</span></p>
+      <ol class="checks">
+        <li><div>
+          <h3><span data-th>เช็คว่าไฟล์ที่โหลดมาเป็นไฟล์เดียวกับที่สแกน</span><span data-en>Check your file is the one we scanned</span></h3>
+          <p><span data-th>แตกไฟล์ zip แล้วคลิกขวาในโฟลเดอร์ เลือก "Open in Terminal" แล้ววางคำสั่งนี้ ตัวเลขที่ได้ต้องตรงกับ SHA-256 ด้านล่างทุกตัว</span>
+             <span data-en>Unzip, right-click inside the folder, choose "Open in Terminal" and paste this. The result must match the SHA-256 below exactly.</span></p>
+          <div class="hash"><span class="k">PowerShell</span><code>Get-FileHash .\CircleRoom.exe</code><button class="copy" type="button" data-copy="Get-FileHash .\CircleRoom.exe">copy</button></div>
+          <div class="hash"><span class="k">CircleRoom.exe</span><code>deae494e4c75c99a45aeaf4f380da7820ab683f253b708cf4629bac1ba6c3604</code><button class="copy" type="button" data-copy="deae494e4c75c99a45aeaf4f380da7820ab683f253b708cf4629bac1ba6c3604">copy</button></div>
+        </div></li>
+        <li><div>
+          <h3><span data-th>สแกนเองอีกรอบ</span><span data-en>Scan it yourself</span></h3>
+          <p><span data-th>อัปโหลด CircleRoom.exe ที่คุณโหลดมาเองที่ <a href="https://www.virustotal.com/" target="_blank" rel="noopener">virustotal.com</a> ผลอาจต่างจากของเราเล็กน้อยเพราะฐานข้อมูลแอนตี้ไวรัสอัปเดตทุกวัน ถ้ามีตัวเดียวสองตัวแจ้งแบบ "Generic" หรือ "ML" มักเป็นการเดาจากโปรแกรมที่ไม่มีลายเซ็นดิจิทัล</span>
+             <span data-en>Upload the CircleRoom.exe you downloaded at <a href="https://www.virustotal.com/" target="_blank" rel="noopener">virustotal.com</a>. Results can drift as engines update daily; a lone "Generic" or "ML" hit is usually a guess about unsigned software.</span></p>
+        </div></li>
+        <li><div>
+          <h3><span data-th>เช็คไฟล์ zip ก่อนแตกก็ได้</span><span data-en>Or check the zip before unzipping</span></h3>
+          <p><span data-th>ใช้คำสั่งเดียวกันกับไฟล์ zip ในโฟลเดอร์ Downloads เช่น <code>Get-FileHash .\CircleRoom_Portable.zip</code></span>
+             <span data-en>Same command on the zip in Downloads, e.g. <code>Get-FileHash .\CircleRoom_Portable.zip</code></span></p>
+          <div class="hash"><span class="k">Portable.zip</span><code>c5b2842d39094334938f51f5e9b95fd60ad52ed105e192ba7985bb1913f2ee79</code><button class="copy" type="button" data-copy="c5b2842d39094334938f51f5e9b95fd60ad52ed105e192ba7985bb1913f2ee79">copy</button></div>
+          <div class="hash"><span class="k">Lite.zip</span><code>b31750a0ef2406db1b02c4964ece8a318c331cacf10e40828fcd3f097bed958d</code><button class="copy" type="button" data-copy="b31750a0ef2406db1b02c4964ece8a318c331cacf10e40828fcd3f097bed958d">copy</button></div>
+        </div></li>
+      </ol>
+      <p class="caution"><span data-th>โหลดจากเว็บนี้หรือ <a href="https://github.com/Godpoom/circle-room/releases">GitHub ของเรา</a> เท่านั้น ถ้าได้ไฟล์มาจากที่อื่นและตัวเลขไม่ตรง อย่าเปิดไฟล์นั้น</span>
+         <span data-en>Only download from this page or <a href="https://github.com/Godpoom/circle-room/releases">our GitHub</a>. If a copy from anywhere else doesn't match these numbers, don't run it.</span></p>
+    </div>
+  </div>
+</section>
+
 <section class="ba">
   <div class="wrap">
     <div>
@@ -406,7 +478,7 @@ footer a{color:var(--muted)}
       </details>
       <details>
         <summary><span data-th>ปลอดภัยไหม ทำไมมีคำเตือน</span><span data-en>Is it safe? Why the warning?</span></summary>
-        <p><span data-th>คำเตือนขึ้นเพราะโปรแกรมยังไม่มีใบรับรอง code signing แบบเสียเงิน ซอร์สโค้ดเปิดให้ทุกคนตรวจบน GitHub และไม่มีการเชื่อมต่ออินเทอร์เน็ตตอนใช้งาน</span><span data-en>The warning appears because there's no paid code-signing certificate yet. All source is on GitHub, and the app makes no network connections while you work.</span></p>
+        <p><span data-th>คำเตือนขึ้นเพราะโปรแกรมยังไม่มีใบรับรอง code signing แบบเสียเงิน ซอร์สโค้ดเปิดให้ทุกคนตรวจบน GitHub ไม่มีการเชื่อมต่ออินเทอร์เน็ตตอนใช้งาน และผลสแกน VirusTotal เป็น 0/71 ดูวิธีตรวจเองได้ที่ <a href="#safety">ส่วนตรวจความปลอดภัย</a></span><span data-en>The warning appears because there's no paid code-signing certificate yet. All source is on GitHub, the app makes no network connections while you work, and VirusTotal reports 0/71. See <a href="#safety">how to check it yourself</a>.</span></p>
       </details>
       <details>
         <summary><span data-th>ต้องติดตั้งอะไรเพิ่มไหม</span><span data-en>Do I need to install anything else?</span></summary>
@@ -469,6 +541,13 @@ footer a{color:var(--muted)}
       if(/Lite/i.test(as.name)){document.querySelectorAll('.js-size-lite').forEach(function(e){e.textContent=txt})}
     });
   }).catch(function(){});
+
+
+  // copy buttons (hashes, command)
+  document.querySelectorAll('.copy').forEach(function(b){b.addEventListener('click',function(){
+    var t=b.getAttribute('data-copy'); function ok(){b.textContent='copied';b.classList.add('done');setTimeout(function(){b.textContent='copy';b.classList.remove('done')},1600)}
+    try{navigator.clipboard.writeText(t).then(ok,function(){})}catch(e){}
+  })});
 
   // before / after
   var cmp=document.getElementById('compare');
