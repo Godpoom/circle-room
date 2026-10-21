@@ -11,7 +11,7 @@ texts are in the [`LICENSES/`](LICENSES) folder**, which also ships inside every
 | [stb_image / stb_image_write](https://github.com/nothings/stb) | MIT or public domain | `LICENSES/stb-MIT-or-PublicDomain.txt` |
 | [ONNX Runtime](https://github.com/microsoft/onnxruntime) (`onnxruntime.dll`) | MIT, plus its own third-party notices | `LICENSES/ONNXRuntime-MIT.txt`, `LICENSES/ONNXRuntime-ThirdPartyNotices.txt` |
 | [DirectML](https://www.nuget.org/packages/Microsoft.AI.DirectML) (`DirectML.dll`) | Microsoft DirectML license (redistribution in Windows apps allowed, section 1a) | `LICENSES/DirectML-*.txt` |
-| Microsoft Visual C++ runtime DLLs (`ai/msvcp140*.dll`, `ai/vcruntime140*.dll`) | Microsoft Visual C++ Redistributable terms | see note below |
+| Microsoft Visual C++ runtime 14.44 (`ai/msvcp140.dll`, `ai/msvcp140_1.dll`, `ai/vcruntime140.dll`, `ai/vcruntime140_1.dll`) | Visual Studio 2022 Community licence, "Distributable Code" | see note below |
 
 ## AI models (folder `ai/` of the full release zip)
 | File | Source | License | Full text |
@@ -31,7 +31,9 @@ texts are in the [`LICENSES/`](LICENSES) folder**, which also ships inside every
   published under MIT; the images of the dataset itself carry their own terms and are not distributed here.
 - **Visual C++ runtime.** These DLLs are needed by `onnxruntime.dll` on PCs without the
   [Visual C++ Redistributable](https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist).
-  Microsoft permits app-local copies for licensees of Visual Studio (including the free Community edition).
+  Since 1.0.2 they are taken, unmodified, from the redist folder of a licensed Visual Studio 2022 Community
+  install (`VC\Redist\MSVC\14.44.35112\x64\Microsoft.VC143.CRT`), which its licence lists as Distributable Code
+  that may be shipped app-locally with an application.
 - Fonts are not distributed: the app uses fonts already installed with Windows (Segoe UI, Leelawadee UI,
   Bahnschrift). The download website loads Barlow Condensed, IBM Plex Sans Thai and IBM Plex Mono from
   Google Fonts (SIL Open Font License).
