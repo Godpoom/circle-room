@@ -26,3 +26,6 @@ styles/
 Thumbs.db
 desktop.ini
 __pycache__/
+
+# local tooling
+.claude/

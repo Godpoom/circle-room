@@ -2,7 +2,7 @@
 
 โปรแกรมแต่งภาพที่เบาเครื่อง เขียนด้วย C++ + OpenGL (ประมวลผลบน GPU) + Dear ImGui พร้อมระบบ AI ที่ทำงานในเครื่อง (ไม่ส่งรูปขึ้นเน็ต)
 
-> **ดาวน์โหลดไปใช้เลย:** ไปที่หน้า [Releases](../../releases) แล้วโหลด `Darkroom_Portable.zip` แตกไฟล์แล้วเปิด `Darkroom.exe` (Windows 10/11 64 บิต)
+> **ดาวน์โหลดไปใช้เลย:** https://godpoom.github.io/darkroom/ (หรือหน้า [Releases](../../releases)) โหลด `Darkroom_Portable.zip` (มี AI) หรือ `Darkroom_Lite.zip` (1.3 MB ไม่มี AI) แตกไฟล์แล้วเปิด `Darkroom.exe` (Windows 10/11 64 บิต)
 >
 > repo นี้เก็บเฉพาะซอร์สโค้ด ไฟล์โมเดล AI (~466 MB) อยู่ในไฟล์ zip ของ Release ถ้าจะ build เอง ให้คัดลอกโฟลเดอร์ `ai\` จาก zip มาไว้ที่ `ai\` ของโปรเจกต์
 > ดูสัญญาอนุญาตของไลบรารีและโมเดลได้ที่ [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) (โมเดล SegFormer ใช้ได้เฉพาะงานที่ไม่ใช่เชิงพาณิชย์)

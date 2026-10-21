@@ -1,0 +1,484 @@
+<!doctype html>
+<!-- Direction: Technical/Instrument meets darkroom print shop. Warm graphite, paper type, one safelight red.
+     Signature: the download button is printed like a frame on a contact sheet, with edge markings. -->
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Darkroom — โปรแกรมแต่งภาพพร้อม AI ในเครื่อง</title>
+<meta name="description" content="โปรแกรมแต่งภาพฟรีสำหรับ Windows เบาเครื่อง มี AI คัดภาพ แต่งอัตโนมัติ และกู้ส่วนที่สว่างเกิน ทำงานในเครื่องทั้งหมด">
+<meta property="og:title" content="Darkroom — แต่งภาพ + AI ในเครื่อง">
+<meta property="og:description" content="ฟรี สำหรับ Windows 10/11 ดาวน์โหลด แตกไฟล์ แล้วเปิดใช้ได้เลย">
+<meta property="og:image" content="assets/app_th.jpg">
+<meta name="theme-color" content="#121110">
+<link rel="icon" type="image/png" href="assets/favicon.png">
+<link rel="apple-touch-icon" href="assets/icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#121110; --bg-2:#1b1a18; --panel:#232120; --line:#3a3632; --line-2:#4e4943;
+  --paper:#ebe5da; --muted:#a39b8e; --faint:#6f685f;
+  --red:#e25236; --red-deep:#b83c25; --red-soft:rgba(226,82,54,.14);
+  --ink:#1a1816;
+  --f-display:"Barlow Condensed","Bahnschrift","IBM Plex Sans Thai","Leelawadee UI",sans-serif;
+  --f-text:"IBM Plex Sans Thai","Leelawadee UI","Noto Sans Thai",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono","Consolas",ui-monospace,monospace;
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px; --s7:48px; --s8:72px; --s9:112px;
+  --r:3px;
+  --ease:cubic-bezier(.2,.8,.2,1);
+  --wrap:1180px;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--paper);font-family:var(--f-text);font-size:17px;line-height:1.72;
+  -webkit-font-smoothing:antialiased;overflow-x:hidden}
+/* film grain */
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:50;opacity:.05;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+a{color:inherit}
+img{max-width:100%;display:block}
+.wrap{max-width:var(--wrap);margin:0 auto;padding:0 var(--s5)}
+.wrap>*,.row>*,.step>*{min-width:0}  /* let grid columns shrink instead of overflowing on phones */
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums;letter-spacing:.02em}
+.label{font-family:var(--f-mono);font-size:12.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint)}
+.label b{color:var(--red);font-weight:500}
+[data-en]{display:none}
+html[lang="en"] [data-th]{display:none}
+html[lang="en"] [data-en]{display:revert}
+:focus-visible{outline:2px solid var(--red);outline-offset:3px;border-radius:var(--r)}
+
+/* ---------- top bar ---------- */
+.top{position:sticky;top:0;z-index:20;background:rgba(18,17,16,.86);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.top .wrap{display:flex;align-items:center;gap:var(--s5);height:60px}
+.brand{display:flex;align-items:center;gap:10px;text-decoration:none;font-family:var(--f-display);font-weight:600;font-size:25px;letter-spacing:.01em}
+.brand img{width:30px;height:30px;border-radius:7px}
+.brand span{color:var(--red)}
+.top nav{margin-left:auto;display:flex;align-items:center;gap:var(--s5);font-size:15px}
+.top nav a{text-decoration:none;color:var(--muted)}
+.top nav a:hover{color:var(--paper)}
+.lang{display:flex;font-family:var(--f-mono);font-size:13px;border:1px solid var(--line);border-radius:var(--r)}
+.lang button{all:unset;cursor:pointer;padding:5px 10px;color:var(--faint)}
+.lang button[aria-pressed="true"]{color:var(--paper);box-shadow:inset 0 -2px 0 var(--red)}
+.top .mini-dl{display:none}
+
+/* ---------- hero ---------- */
+.hero{padding:var(--s8) 0 var(--s7);position:relative}
+.hero .wrap{display:grid;grid-template-columns:6fr 6fr;gap:var(--s7);align-items:start}
+.kicker{margin-bottom:var(--s5)}
+h1{font-family:var(--f-display);font-weight:700;font-size:clamp(46px,7.4vw,104px);line-height:.96;letter-spacing:-.025em;margin:0 0 var(--s5)}
+html[lang="th"] h1{font-family:var(--f-text);font-weight:700;letter-spacing:0;line-height:1.12;font-size:clamp(40px,6.2vw,84px)}
+h1 em{font-style:normal;color:var(--red)}
+.lede{font-size:19px;color:var(--muted);max-width:34em;margin:0 0 var(--s6)}
+
+/* the download "frame" */
+.frame{position:relative;border:1px solid var(--line-2);background:var(--bg-2);padding:var(--s5);max-width:560px;border-radius:var(--r)}
+.frame::before,.frame::after{content:"";position:absolute;left:0;right:0;height:9px;
+  background:repeating-linear-gradient(90deg,transparent 0 10px,var(--bg) 10px 22px);opacity:.9}
+.frame::before{top:-1px}.frame::after{bottom:-1px}
+.edge{display:flex;justify-content:space-between;font-family:var(--f-mono);font-size:11px;letter-spacing:.18em;color:var(--red);opacity:.85;margin:4px 2px var(--s4)}
+.dl{display:flex;align-items:center;gap:var(--s4);width:100%;text-decoration:none;background:var(--red);color:#fff7f0;border-radius:var(--r);
+  padding:18px 22px;min-height:76px;transition:transform .18s var(--ease),background .18s var(--ease),box-shadow .18s var(--ease);
+  box-shadow:0 1px 0 rgba(255,255,255,.18) inset,0 10px 30px -12px rgba(226,82,54,.7)}
+.dl:hover{background:#ec5d40;transform:translateY(-1px)}
+.dl:active{transform:translateY(1px);background:var(--red-deep)}
+.dl svg{flex:none}
+.dl .t{display:block;font-weight:700;font-size:21px;line-height:1.2}
+.dl .s{display:block;font-family:var(--f-mono);font-size:13px;opacity:.88;margin-top:2px}
+.dl.busy .t::after{content:" ✓"}
+.alt{display:flex;flex-wrap:wrap;min-width:0;gap:6px var(--s4);justify-content:space-between;align-items:baseline;margin-top:var(--s4);font-size:15px;color:var(--muted)}
+.alt a{color:var(--paper);text-underline-offset:4px;text-decoration-color:var(--line-2)}
+.alt a:hover{text-decoration-color:var(--red)}
+.osnote{display:none;margin-top:var(--s4);padding:10px 14px;border-left:2px solid var(--red);background:var(--red-soft);font-size:15px}
+.osnote.show{display:block}
+
+.shot{position:relative;margin:var(--s3) 0 0}
+.shot img{width:100%;height:auto;border:1px solid var(--line);border-radius:var(--r);box-shadow:0 30px 80px -30px rgba(0,0,0,.8)}
+.vf.tr{top:-10px;right:-10px;border-top-width:1px;border-right-width:1px}
+.shot .cap{margin-top:var(--s3)}
+.vf{position:absolute;width:18px;height:18px;border:0 solid var(--faint)}
+.vf.tl{top:-10px;left:-10px;border-top-width:1px;border-left-width:1px}
+.vf.bl{bottom:30px;left:-10px;border-bottom-width:1px;border-left-width:1px}
+
+/* ---------- steps ---------- */
+.steps{border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--bg-2)}
+.steps .wrap{display:grid;grid-template-columns:220px 1fr 1fr 1fr;gap:0}
+.steps .head{padding:var(--s6) var(--s5) var(--s6) 0}
+.steps h2{font-family:var(--f-display);font-size:34px;line-height:1.05;margin:6px 0 0;font-weight:600}
+html[lang="th"] .steps h2{font-family:var(--f-text);font-size:26px;line-height:1.35}
+.step{padding:var(--s6) var(--s5);border-left:1px solid var(--line)}
+.step .n{font-family:var(--f-display);font-size:64px;line-height:.9;color:var(--red);font-weight:600}
+.step h3{margin:var(--s3) 0 4px;font-size:19px}
+.step p{margin:0;color:var(--muted);font-size:15.5px}
+kbd{font-family:var(--f-mono);font-size:.82em;background:var(--panel);border:1px solid var(--line-2);border-bottom-width:2px;padding:1px 6px;border-radius:3px;color:var(--paper);white-space:nowrap}
+
+/* ---------- smartscreen ---------- */
+.warn{padding:var(--s7) 0}
+.warn .wrap{display:grid;grid-template-columns:5fr 7fr;gap:var(--s7);align-items:center}
+.warn h2{font-size:28px;line-height:1.35;margin:var(--s2) 0 var(--s3)}
+.warn p{color:var(--muted);margin:0 0 var(--s3)}
+.dialog{background:#1f5fa8;color:#fff;border-radius:2px;padding:26px 28px 20px;font-family:"Segoe UI",var(--f-text);max-width:520px;position:relative;box-shadow:0 20px 60px -25px #000}
+.dialog .h{font-size:24px;font-weight:600;line-height:1.25;margin-bottom:10px}
+.dialog .b{font-size:14px;opacity:.92;line-height:1.5}
+.dialog .more{display:inline-block;margin-top:12px;font-size:14px;text-decoration:underline;position:relative}
+.dialog .row{display:flex;justify-content:flex-end;gap:10px;margin-top:26px}
+.dialog .btn{border:1px solid rgba(255,255,255,.75);padding:6px 18px;font-size:14px}
+.dialog .btn.run{background:#fff;color:#1f5fa8}
+.pin{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:var(--red);color:#fff;
+  font-family:var(--f-mono);font-size:13px;font-weight:500;box-shadow:0 0 0 4px rgba(226,82,54,.3);vertical-align:middle;text-decoration:none}
+.dialog .more .pin{margin-left:10px}
+.dialog .btn{position:relative}
+.dialog .btn .pin{position:absolute;top:-15px;right:-12px}
+
+/* ---------- before / after ---------- */
+.ba{padding:var(--s8) 0;border-top:1px solid var(--line)}
+.ba .wrap{display:grid;grid-template-columns:4fr 8fr;gap:var(--s7);align-items:end}
+.ba h2{font-family:var(--f-display);font-weight:600;font-size:clamp(36px,4.6vw,60px);line-height:1;margin:var(--s3) 0 var(--s4);letter-spacing:-.01em}
+html[lang="th"] .ba h2{font-family:var(--f-text);font-size:clamp(30px,3.8vw,46px);line-height:1.25}
+.ba p{color:var(--muted)}
+.recipe{margin-top:var(--s5);border-top:1px solid var(--line);font-family:var(--f-mono);font-size:13.5px}
+.recipe div{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--line);color:var(--muted)}
+.recipe div span:last-child{color:var(--red)}
+.compare{position:relative;aspect-ratio:1400/933;border:1px solid var(--line);border-radius:var(--r);overflow:hidden;cursor:ew-resize;touch-action:pan-y;user-select:none;--x:52%}
+.compare img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.compare .after{clip-path:inset(0 0 0 var(--x))}
+.compare .bar{position:absolute;top:0;bottom:0;left:var(--x);width:1px;background:var(--paper)}
+.compare .knob{position:absolute;top:50%;left:var(--x);transform:translate(-50%,-50%);width:22px;height:46px;background:var(--paper);border-radius:2px;
+  display:flex;align-items:center;justify-content:center;color:var(--ink);box-shadow:0 4px 18px rgba(0,0,0,.5)}
+.compare .tag{position:absolute;bottom:14px;padding:3px 9px;background:var(--paper);color:var(--ink);font-family:var(--f-mono);font-size:12px;letter-spacing:.1em;border-radius:2px}
+.compare .tag.l{left:14px}.compare .tag.r{right:14px}
+.compare input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:ew-resize;margin:0}
+
+/* ---------- features: an index, not cards ---------- */
+.feat{padding:var(--s8) 0 var(--s7)}
+.feat .head{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid var(--line-2);padding-bottom:var(--s3);margin-bottom:0}
+.feat h2{font-family:var(--f-display);font-weight:600;font-size:34px;margin:0}
+html[lang="th"] .feat h2{font-family:var(--f-text);font-size:28px}
+.row{display:grid;grid-template-columns:70px 300px 1fr;gap:var(--s5);padding:var(--s5) 0;border-bottom:1px solid var(--line);align-items:baseline}
+.row .n{font-family:var(--f-mono);color:var(--red);font-size:14px}
+.row h3{margin:0;font-size:21px;line-height:1.35}
+.row p{margin:0;color:var(--muted)}
+.row.big h3{font-size:27px}
+
+/* ---------- specs + faq ---------- */
+.info{padding:var(--s7) 0 var(--s8)}
+.info .wrap{display:grid;grid-template-columns:5fr 7fr;gap:var(--s7)}
+.info h2{font-size:22px;margin:var(--s2) 0 var(--s4)}
+table{width:100%;border-collapse:collapse;font-size:15.5px}
+td{padding:10px 0;border-bottom:1px solid var(--line);vertical-align:top}
+td:first-child{color:var(--faint);width:44%;padding-right:var(--s4)}
+details{border-bottom:1px solid var(--line);padding:var(--s3) 0}
+summary{cursor:pointer;list-style:none;font-weight:600;display:flex;gap:var(--s3);align-items:baseline}
+summary::-webkit-details-marker{display:none}
+summary::before{content:"+";font-family:var(--f-mono);color:var(--red);width:14px;flex:none}
+details[open] summary::before{content:"–"}
+details p{margin:var(--s2) 0 0 26px;color:var(--muted);font-size:15.5px}
+
+footer{border-top:1px solid var(--line);padding:var(--s6) 0 var(--s7);color:var(--faint);font-size:14px}
+footer .wrap{display:flex;flex-wrap:wrap;gap:var(--s3) var(--s6);justify-content:space-between}
+footer a{color:var(--muted)}
+
+/* entrance */
+@media (prefers-reduced-motion:no-preference){
+  .rise{opacity:0;transform:translateY(10px);animation:rise .6s var(--ease) forwards}
+  .rise.d1{animation-delay:.06s}.rise.d2{animation-delay:.14s}.rise.d3{animation-delay:.22s}.rise.d4{animation-delay:.32s}
+  @keyframes rise{to{opacity:1;transform:none}}
+}
+
+/* ---------- responsive ---------- */
+@media (max-width:980px){
+  .hero .wrap,.warn .wrap,.ba .wrap,.info .wrap{grid-template-columns:1fr}
+  .steps .wrap{grid-template-columns:1fr 1fr 1fr}
+  .steps .head{grid-column:1/-1;padding-bottom:0}
+  .step:first-of-type{border-left:0;padding-left:0}
+  .row{grid-template-columns:50px 1fr}
+  .row p{grid-column:2}
+}
+@media (max-width:640px){
+  .wrap{padding:0 var(--s4)}
+  body{font-size:16px}
+  .top nav a.hide-sm{display:none}
+  .hero{padding-top:var(--s6)}
+  .lede{font-size:17px}
+  .frame{padding:var(--s4)}
+  .dl{padding:16px 18px}
+  .dl .t{font-size:19px}
+  .steps .wrap{grid-template-columns:1fr}
+  .step{border-left:0;border-top:1px solid var(--line);padding:var(--s5) 0;display:grid;grid-template-columns:64px 1fr;gap:0 var(--s3)}
+  .step .n{font-size:48px;grid-row:span 2}
+  .step h3{margin-top:0}
+  .dialog{padding:20px}
+  .dialog .h{font-size:20px}
+  .alt{flex-direction:column;align-items:flex-start}
+  .vf{display:none}
+  .feat .head{flex-direction:column;gap:4px}
+  .row.big h3{font-size:23px}
+}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#" aria-label="Darkroom"><img src="assets/icon-180.png" alt="" width="30" height="30"><b style="font-weight:inherit">Dark<span>room</span></b></a>
+    <nav>
+      <a class="hide-sm" href="#how"><span data-th>วิธีติดตั้ง</span><span data-en>How to install</span></a>
+      <a class="hide-sm" href="#features"><span data-th>ทำอะไรได้</span><span data-en>Features</span></a>
+      <a href="https://github.com/Godpoom/darkroom" rel="noopener">GitHub</a>
+      <div class="lang" role="group" aria-label="Language">
+        <button type="button" data-set="th" aria-pressed="true">TH</button>
+        <button type="button" data-set="en" aria-pressed="false">EN</button>
+      </div>
+    </nav>
+  </div>
+</header>
+
+<main>
+<section class="hero">
+  <div class="wrap">
+    <div>
+      <p class="label kicker rise"><b>●</b> Windows 10 / 11 · <span data-th>ฟรี</span><span data-en>Free</span> · <span class="js-ver">v1.0.0</span></p>
+      <h1 class="rise d1">
+        <span data-th>ห้องมืดล้างรูป<br><em>อยู่ในเครื่องคุณ</em></span>
+        <span data-en>Your darkroom,<br><em>on your own PC.</em></span>
+      </h1>
+      <p class="lede rise d2">
+        <span data-th>แต่งแสงและสีบนการ์ดจอ เร็วจนลากสไลเดอร์แล้วเห็นผลทันที มี AI ช่วยคัดรูปเด็ดจากทั้งโฟลเดอร์ และกู้ท้องฟ้าที่ขาวโพลน ทุกอย่างประมวลผลในเครื่อง รูปไม่ถูกส่งขึ้นเน็ต</span>
+        <span data-en>Light and colour edits run on your graphics card, fast enough to see every slider move live. AI picks the keepers from a whole folder and rebuilds blown-out skies. Everything runs locally; your photos never leave the machine.</span>
+      </p>
+
+      <div class="frame rise d3" id="download">
+        <div class="edge" aria-hidden="true"><span>DARKROOM ▸ 01A</span><span class="js-edge">356 MB</span></div>
+        <a class="dl" id="dl-full" href="https://github.com/Godpoom/darkroom/releases/latest/download/Darkroom_Portable.zip">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m6.5 10 5.5 5.5L17.5 10"/><path d="M4 20h16"/></svg>
+          <span>
+            <span class="t"><span data-th>ดาวน์โหลด Darkroom</span><span data-en>Download Darkroom</span></span>
+            <span class="s"><span data-th>ตัวเต็ม มี AI ครบ</span><span data-en>Full · all AI tools</span> · <span class="js-size-full">356 MB</span> · .zip</span>
+          </span>
+        </a>
+        <div class="alt">
+          <span><span data-th>เน็ตช้า หรืออยากแต่งรูปอย่างเดียว?</span><span data-en>Slow connection, or just want the editor?</span></span>
+          <a id="dl-lite" href="https://github.com/Godpoom/darkroom/releases/latest/download/Darkroom_Lite.zip"><span data-th>โหลดรุ่นเล็ก</span><span data-en>Get Lite</span> <span class="mono js-size-lite">1.3 MB</span> →</a>
+        </div>
+        <p class="osnote" id="osnote">
+          <span data-th>ดูเหมือนคุณเปิดจากมือถือหรือ Mac ตอนนี้ Darkroom ใช้ได้บน Windows เท่านั้น ส่งลิงก์นี้ไปเปิดในคอมพิวเตอร์ Windows ได้เลย</span>
+          <span data-en>Looks like you're on a phone or a Mac. Darkroom runs on Windows only for now; open this page on a Windows PC to download.</span>
+        </p>
+      </div>
+    </div>
+
+    <figure class="shot rise d4" style="margin-left:0">
+      <span class="vf tl" aria-hidden="true"></span><span class="vf tr" aria-hidden="true"></span><span class="vf bl" aria-hidden="true"></span>
+      <img class="js-shot" src="assets/app_th.jpg" width="1728" height="847" alt="หน้าจอ Darkroom ขณะแต่งภาพทะเลสาบยามเย็น" data-src-en="assets/app_en.jpg" data-alt-en="Darkroom editing a dusk lake photo">
+      <figcaption class="label cap"><span data-th>หน้าจอจริงของโปรแกรม · หน้า 02 แสง</span><span data-en>Actual app · page 02 Light</span></figcaption>
+    </figure>
+  </div>
+</section>
+
+<section class="steps" id="how">
+  <div class="wrap">
+    <div class="head">
+      <p class="label"><b>02</b> / <span data-th>ติดตั้ง</span><span data-en>Install</span></p>
+      <h2><span data-th>3 ขั้น<br>ไม่ถึงนาที</span><span data-en>Three steps.<br>Under a minute.</span></h2>
+    </div>
+    <div class="step">
+      <div class="n">1</div>
+      <h3><span data-th>กดปุ่มดาวน์โหลด</span><span data-en>Click download</span></h3>
+      <p><span data-th>ไฟล์ .zip จะไปอยู่ในโฟลเดอร์ Downloads ไม่ต้องสมัครหรือล็อกอินอะไร</span><span data-en>A .zip lands in your Downloads folder. No sign-up, no account.</span></p>
+    </div>
+    <div class="step">
+      <div class="n">2</div>
+      <h3><span data-th>คลิกขวา แล้วเลือก "Extract All"</span><span data-en>Right-click, "Extract All"</span></h3>
+      <p><span data-th>สำคัญ: ต้องแตกไฟล์ก่อน ถ้าเปิดจากใน zip ตรงๆ ระบบ AI จะหาไฟล์โมเดลไม่เจอ</span><span data-en>Important: unzip first. Run it from inside the zip and the AI tools can't find their models.</span></p>
+    </div>
+    <div class="step">
+      <div class="n">3</div>
+      <h3><span data-th>ดับเบิลคลิก Darkroom.exe</span><span data-en>Double-click Darkroom.exe</span></h3>
+      <p><span data-th>ครั้งแรกจะมีทัวร์สั้นๆ สอนการใช้งาน ข้ามได้ และเปิดดูใหม่ได้ด้วยปุ่ม <kbd>?</kbd> หรือ <kbd>F1</kbd></span><span data-en>A short tour runs the first time. Skip it, or replay it later with <kbd>?</kbd> or <kbd>F1</kbd>.</span></p>
+    </div>
+  </div>
+</section>
+
+<section class="warn" id="smartscreen">
+  <div class="wrap">
+    <div>
+      <p class="label"><b>!</b> <span data-th>ถ้าเจอหน้าจอสีฟ้านี้</span><span data-en>If you see this blue screen</span></p>
+      <h2><span data-th>ไม่ต้องตกใจ กด 2 ครั้งก็ผ่าน</span><span data-en>Don't panic. Two clicks and you're through.</span></h2>
+      <p><span data-th>Windows จะเตือนโปรแกรมใหม่ที่ยังไม่มีลายเซ็นดิจิทัลแบบเสียเงิน ไม่ได้แปลว่ามีไวรัส ซอร์สโค้ดทั้งหมดเปิดให้ตรวจได้บน GitHub</span><span data-en>Windows flags new apps that don't carry a paid code-signing certificate. It doesn't mean malware, and every line of source is open on GitHub.</span></p>
+      <p><span data-th>กด <b>More info</b> (①) แล้วกด <b>Run anyway</b> (②) ครั้งต่อไปจะไม่ถามอีก</span><span data-en>Click <b>More info</b> (①), then <b>Run anyway</b> (②). It won't ask again.</span></p>
+    </div>
+    <div class="dialog" role="img" aria-label="Windows SmartScreen: click More info, then Run anyway">
+      <div class="h">Windows protected your PC</div>
+      <div class="b">Microsoft Defender SmartScreen prevented an unrecognized app from starting. Running this app might put your PC at risk.</div>
+      <span class="more">More info<span class="pin">1</span></span>
+      <div class="row"><span class="btn run">Run anyway<span class="pin">2</span></span><span class="btn">Don't run</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="ba">
+  <div class="wrap">
+    <div>
+      <p class="label"><b>03</b> / <span data-th>ก่อน · หลัง</span><span data-en>Before · after</span></p>
+      <h2><span data-th>ลากดูความต่าง</span><span data-en>Drag to compare.</span></h2>
+      <p><span data-th>ภาพขวาส่งออกจาก Darkroom จริง ไม่ได้แต่งด้วยโปรแกรมอื่น ใช้แค่หน้า แสง สี และเอฟเฟกต์ ค่าที่ใช้คือ:</span><span data-en>The right half was exported by Darkroom itself, nothing else touched it. Just the Light, Colour and Effects pages:</span></p>
+      <div class="recipe">
+        <div><span>Exposure</span><span>+0.60</span></div>
+        <div><span>Contrast</span><span>+30</span></div>
+        <div><span>Shadows / Highlights</span><span>+35 / −25</span></div>
+        <div><span>Vibrance</span><span>+55</span></div>
+        <div><span>Temperature</span><span>+22</span></div>
+        <div><span>Vignette</span><span>−15</span></div>
+      </div>
+    </div>
+    <div class="compare" id="compare">
+      <img src="assets/before.jpg" width="1400" height="933" alt="ก่อนแต่ง: ภาพจืดและมีหมอก">
+      <img class="after" src="assets/after.jpg" width="1400" height="933" alt="หลังแต่งด้วย Darkroom">
+      <span class="bar" aria-hidden="true"></span>
+      <span class="knob" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><path d="M4 2 0 6l4 4zM8 2l4 4-4 4z"/></svg></span>
+      <span class="tag l">BEFORE</span><span class="tag r">AFTER</span>
+      <input type="range" min="0" max="100" value="52" aria-label="Before/after position">
+    </div>
+  </div>
+</section>
+
+<section class="feat" id="features">
+  <div class="wrap">
+    <div class="head">
+      <h2><span data-th>ทำอะไรได้บ้าง</span><span data-en>What it does</span></h2>
+      <span class="label"><span data-th>AI ทุกตัวทำงานในเครื่อง</span><span data-en>Every AI model runs on-device</span></span>
+    </div>
+    <div class="row big">
+      <span class="n">01</span>
+      <h3><span data-th>คัดภาพ AI</span><span data-en>AI Cull</span></h3>
+      <p><span data-th>โยนทั้งโฟลเดอร์เข้าไป AI ให้คะแนนความคม แสง องค์ประกอบ จับภาพถ่ายรัวที่ซ้ำกันไว้เป็นกลุ่ม แล้วโชว์เฉพาะ 10, 50 หรือ 100 ใบที่ดีที่สุด ค้นหาด้วยคำพูดก็ได้ เช่น "คนใส่แว่น" หรือ "ว่าวที่ชายหาด"</span><span data-en>Point it at a folder. AI scores sharpness, light and composition, groups burst shots, and shows only your best 10, 50 or 100. Search in plain words too, like "kite on the beach".</span></p>
+    </div>
+    <div class="row">
+      <span class="n">02</span>
+      <h3><span data-th>แต่งอัตโนมัติ</span><span data-en>Auto edit</span></h3>
+      <p><span data-th>ดูออกว่าเป็นภาพคน ทิวทัศน์ อาหาร หรือกลางคืน แล้วปรับให้เหมาะกับฉาก ผลที่ได้เป็นค่าสไลเดอร์ธรรมดา แก้ต่อเองได้ทุกค่า</span><span data-en>Tells a portrait from a landscape, food or a night shot and tunes for the scene. The result is plain slider values you can keep editing.</span></p>
+    </div>
+    <div class="row">
+      <span class="n">03</span>
+      <h3><span data-th>กู้ส่วนที่สว่างเกิน</span><span data-en>Rebuild blown highlights</span></h3>
+      <p><span data-th>ท้องฟ้าหรือหน้าที่ขาวจนไม่มีรายละเอียด ลดไฮไลต์ยังไงก็ได้แค่สีเทา ตัวนี้สร้างสีและพื้นผิวขึ้นมาใหม่ให้เข้ากับรอบข้าง</span><span data-en>When a sky or a face clips to pure white, sliders only turn it grey. This rebuilds colour and texture that match the surroundings.</span></p>
+    </div>
+    <div class="row">
+      <span class="n">04</span>
+      <h3><span data-th>ปรับเฉพาะส่วน</span><span data-en>Adjust one part</span></h3>
+      <p><span data-th>AI แยกคน ท้องฟ้า ถนน ต้นไม้ น้ำ ให้เอง คลิกเดียวแล้วปรับแสงเฉพาะท้องฟ้า หรือทำให้คนสว่างขึ้นโดยไม่กระทบพื้นหลัง</span><span data-en>AI separates people, sky, road, trees and water. One click to darken just the sky or lift just the people.</span></p>
+    </div>
+    <div class="row">
+      <span class="n">05</span>
+      <h3><span data-th>เบาจริง</span><span data-en>Actually light</span></h3>
+      <p><span data-th>ตัวโปรแกรม 3 MB เปิดภาพ 24 ล้านพิกเซลแล้วใช้ RAM ราว 20 MB พรีวิวทุกเครื่องมือเปิดพร้อมกันใช้แค่ประมาณ 1 มิลลิวินาทีต่อเฟรม</span><span data-en>A 3 MB program. About 20 MB of RAM with a 24-megapixel photo open, and about 1 ms per frame with every tool switched on.</span></p>
+    </div>
+    <div class="row">
+      <span class="n">06</span>
+      <h3><span data-th>ไม่ทับไฟล์ต้นฉบับ</span><span data-en>Your originals stay untouched</span></h3>
+      <p><span data-th>ค่าที่แต่งเก็บเป็นไฟล์เล็กๆ ข้างรูป เปิดรูปเดิมเมื่อไหร่ก็แต่งต่อได้ ย้อนกลับได้ทุกขั้นในหน้า ประวัติ</span><span data-en>Edits live in a tiny file beside the photo. Reopen any time and carry on, or step back through History.</span></p>
+    </div>
+  </div>
+</section>
+
+<section class="info">
+  <div class="wrap">
+    <div>
+      <p class="label"><b>04</b> / <span data-th>สเปก</span><span data-en>Specs</span></p>
+      <h2><span data-th>เครื่องที่ใช้ได้</span><span data-en>Will it run?</span></h2>
+      <table>
+        <tr><td><span data-th>ระบบ</span><span data-en>System</span></td><td>Windows 10 / 11 (64-bit)</td></tr>
+        <tr><td><span data-th>การ์ดจอ</span><span data-en>Graphics</span></td><td><span data-th>รองรับ OpenGL 3.3 (การ์ดจอเกือบทุกรุ่นตั้งแต่ปี 2010 รวมการ์ดจอในตัว)</span><span data-en>OpenGL 3.3 (almost anything since 2010, integrated GPUs included)</span></td></tr>
+        <tr><td>RAM</td><td><span data-th>ว่าง 1 GB ตอนใช้ AI</span><span data-en>1 GB free while AI runs</span></td></tr>
+        <tr><td><span data-th>พื้นที่</span><span data-en>Disk</span></td><td><span data-th>ตัวเต็ม ~500 MB · รุ่นเล็ก 3 MB</span><span data-en>Full ~500 MB · Lite 3 MB</span></td></tr>
+        <tr><td><span data-th>ไฟล์ภาพ</span><span data-en>Formats</span></td><td>JPEG · PNG · TIFF · BMP</td></tr>
+        <tr><td><span data-th>ภาษา</span><span data-en>Languages</span></td><td>ไทย · English</td></tr>
+      </table>
+    </div>
+    <div>
+      <p class="label"><b>05</b> / <span data-th>คำถามที่เจอบ่อย</span><span data-en>FAQ</span></p>
+      <h2><span data-th>ถามก่อนโหลด</span><span data-en>Before you download</span></h2>
+      <details open>
+        <summary><span data-th>ตัวเต็มกับรุ่นเล็กต่างกันยังไง</span><span data-en>Full or Lite?</span></summary>
+        <p><span data-th>รุ่นเล็ก (1.3 MB) มีเครื่องมือแต่งภาพครบทุกตัว แต่ไม่มี AI ส่วนตัวเต็ม (356 MB) มีโมเดล AI ทั้งหมด ถ้าไม่แน่ใจให้โหลดตัวเต็ม</span><span data-en>Lite (1.3 MB) has every editing tool but no AI. Full (356 MB) adds all the AI models. Not sure? Get Full.</span></p>
+      </details>
+      <details>
+        <summary><span data-th>ปลอดภัยไหม ทำไมมีคำเตือน</span><span data-en>Is it safe? Why the warning?</span></summary>
+        <p><span data-th>คำเตือนขึ้นเพราะโปรแกรมยังไม่มีใบรับรอง code signing แบบเสียเงิน ซอร์สโค้ดเปิดให้ทุกคนตรวจบน GitHub และไม่มีการเชื่อมต่ออินเทอร์เน็ตตอนใช้งาน</span><span data-en>The warning appears because there's no paid code-signing certificate yet. All source is on GitHub, and the app makes no network connections while you work.</span></p>
+      </details>
+      <details>
+        <summary><span data-th>ต้องติดตั้งอะไรเพิ่มไหม</span><span data-en>Do I need to install anything else?</span></summary>
+        <p><span data-th>ไม่ต้อง ทุกอย่างอยู่ในโฟลเดอร์เดียว จะย้ายไปไว้ที่ไหนหรือใส่แฟลชไดรฟ์ก็ได้ อย่าวางไว้ใน C:\Program Files เพราะโปรแกรมต้องเซฟการตั้งค่าข้างตัวเอง</span><span data-en>No. It's one self-contained folder; move it anywhere, even a USB stick. Just avoid C:\Program Files, since settings are saved next to the app.</span></p>
+      </details>
+      <details>
+        <summary><span data-th>ใช้บน Mac หรือมือถือได้ไหม</span><span data-en>Mac or phone?</span></summary>
+        <p><span data-th>ตอนนี้ยังไม่ได้ ใช้ได้เฉพาะ Windows</span><span data-en>Not yet. Windows only for now.</span></p>
+      </details>
+      <details>
+        <summary><span data-th>เสียเงินไหม</span><span data-en>Does it cost anything?</span></summary>
+        <p><span data-th>ฟรี ใช้ส่วนตัวได้เต็มที่ (โมเดลแยกส่วนภาพบางตัวห้ามใช้เชิงพาณิชย์ ดูรายละเอียดใน THIRD_PARTY_NOTICES)</span><span data-en>Free for personal use. (One segmentation model is non-commercial only; see THIRD_PARTY_NOTICES.)</span></p>
+      </details>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Darkroom <span class="js-ver">v1.0.0</span> · <a href="https://github.com/Godpoom/darkroom/releases">Releases</a> · <a href="https://github.com/Godpoom/darkroom/blob/main/THIRD_PARTY_NOTICES.md">Licenses</a></span>
+    <span><span data-th>ทำในประเทศไทย</span><span data-en>Made in Thailand</span> · <a href="https://github.com/Godpoom/darkroom">github.com/Godpoom/darkroom</a></span>
+  </div>
+</footer>
+
+<script>
+(function(){
+  var html=document.documentElement;
+  // language: remembered per visitor (best effort), Thai by default
+  function setLang(l){
+    html.lang=l;
+    document.querySelectorAll('.lang button').forEach(function(b){b.setAttribute('aria-pressed',b.dataset.set===l)});
+    var img=document.querySelector('.js-shot');
+    if(img){
+      if(!img.dataset.srcTh){img.dataset.srcTh=img.getAttribute('src');img.dataset.altTh=img.alt}
+      img.src=l==='en'?img.dataset.srcEn:img.dataset.srcTh; img.alt=l==='en'?img.dataset.altEn:img.dataset.altTh;
+    }
+    document.title=l==='en'?'Darkroom — photo editor with on-device AI':'Darkroom — โปรแกรมแต่งภาพพร้อม AI ในเครื่อง';
+    try{localStorage.setItem('dr-lang',l)}catch(e){}
+  }
+  var saved=null; try{saved=localStorage.getItem('dr-lang')}catch(e){}
+  if(!saved && navigator.language && !/^th/i.test(navigator.language)) saved='en';
+  setLang(saved||'th');
+  document.querySelectorAll('.lang button').forEach(function(b){b.addEventListener('click',function(){setLang(b.dataset.set)})});
+
+  // not on Windows? say so, kindly, under the button
+  var ua=navigator.userAgent||'';
+  if(!/Windows/i.test(ua)) document.getElementById('osnote').classList.add('show');
+
+  // small acknowledgement after clicking download
+  document.querySelectorAll('.dl').forEach(function(a){a.addEventListener('click',function(){a.classList.add('busy')})});
+
+  // live version and file sizes from the latest GitHub release (static fallback stays if this fails)
+  fetch('https://api.github.com/repos/Godpoom/darkroom/releases/latest').then(function(r){return r.ok?r.json():null}).then(function(rel){
+    if(!rel) return;
+    document.querySelectorAll('.js-ver').forEach(function(e){e.textContent=rel.tag_name});
+    (rel.assets||[]).forEach(function(as){
+      var mb=as.size/1048576, txt=mb>=10?Math.round(mb)+' MB':mb.toFixed(1)+' MB';
+      if(/Portable/i.test(as.name)){document.querySelectorAll('.js-size-full,.js-edge').forEach(function(e){e.textContent=txt})}
+      if(/Lite/i.test(as.name)){document.querySelectorAll('.js-size-lite').forEach(function(e){e.textContent=txt})}
+    });
+  }).catch(function(){});
+
+  // before / after
+  var cmp=document.getElementById('compare');
+  if(cmp){
+    var input=cmp.querySelector('input');
+    function set(v){cmp.style.setProperty('--x',v+'%')}
+    input.addEventListener('input',function(){set(input.value)});
+    set(input.value);
+  }
+})();
+</script>
+</body>
+</html>
