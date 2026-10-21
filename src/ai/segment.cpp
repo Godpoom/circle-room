@@ -6,7 +6,7 @@
 
 namespace ai {
 
-// ADE20K class ids per region (see segformer config id2label).
+// ADE20K class ids per region (standard 150-class ADE20K label order).
 static const std::vector<int> kRegionClasses[REG_COUNT] = {
     {12, 92},                             // person (+ apparel)
     {2},                                  // sky
@@ -23,7 +23,9 @@ static const std::vector<int> kRegionClasses[REG_COUNT] = {
     {120},                                // food
 };
 
-bool Segmenter::load(std::string& err) { return model_.load(aiDir() + "\\segformer_b3_ade_fp16.onnx", false, err); }
+// UperNet-ConvNeXt-T trained on ADE20K (MIT, openmmlab), exported by tools/export_upernet.py to return
+// logits at 1/4 resolution. It replaced SegFormer-B3, whose licence allows research/evaluation only.
+bool Segmenter::load(std::string& err) { return model_.load(aiDir() + "\\upernet_convnext_t_ade_fp16.onnx", false, err); }
 
 bool Segmenter::run(const SmallImage& img, SegResult& out, std::string& err) {
   out = SegResult();

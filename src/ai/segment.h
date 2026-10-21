@@ -1,4 +1,4 @@
-// Semantic regions (person, sky, road, ...) from SegFormer-B3 (ADE20K, fp16, CPU) and
+// Semantic regions (person, sky, road, ...) from UperNet-ConvNeXt-T (ADE20K, fp16, CPU) and
 // edge-aware layer masks for local adjustments.
 #pragma once
 #include <cstdint>
