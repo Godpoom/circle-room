@@ -285,9 +285,35 @@ h1 .ln>span{display:inline-block}
   @keyframes ping{0%{box-shadow:0 0 0 0 rgba(226,82,54,.7)}100%{box-shadow:0 0 0 14px rgba(226,82,54,0)}}
 }
 
+
+/* ---------- maker ---------- */
+.maker{padding:var(--s8) 0;border-top:1px solid var(--line);background:var(--bg-2)}
+.maker .wrap{display:grid;grid-template-columns:5fr 7fr;gap:var(--s7);align-items:start}
+.maker h2{font-family:var(--f-display);font-weight:600;font-size:clamp(34px,4.2vw,54px);line-height:1;margin:var(--s3) 0 var(--s4);letter-spacing:-.01em}
+html[lang="th"] .maker h2{font-family:var(--f-text);font-size:clamp(28px,3.4vw,42px);line-height:1.3}
+.maker h2 em{font-style:normal;color:var(--red)}
+.maker p{color:var(--muted)}
+.maker .who{display:inline-flex;align-items:center;gap:8px;margin-top:var(--s2);text-decoration:none;font-weight:600;font-size:15px;
+  padding:10px 16px;border:1px solid var(--line-2);border-radius:var(--r);transition:border-color .18s var(--ease),background .18s var(--ease)}
+.maker .who:hover{border-color:var(--paper);background:var(--panel)}
+.models{border-top:1px solid var(--line-2)}
+.model{display:grid;grid-template-columns:150px 1fr auto;gap:var(--s5);align-items:center;padding:var(--s5) 0;border-bottom:1px solid var(--line);
+  text-decoration:none;position:relative}
+.model::before{content:"";position:absolute;left:0;top:-1px;height:1px;width:0;background:var(--red);transition:width .5s var(--ease)}
+.model:hover::before{width:100%}
+.model .size{font-family:var(--f-display);font-weight:700;font-size:56px;line-height:.9;color:var(--paper)}
+.model .size small{font-size:20px;color:var(--faint);font-weight:600;margin-left:3px}
+.model h3{margin:0 0 4px;font-size:20px}
+.model p{margin:0;font-size:15px}
+.model .go{font-family:var(--f-mono);font-size:13px;color:var(--muted);white-space:nowrap;transition:transform .3s var(--ease),color .3s var(--ease)}
+.model:hover .go{color:var(--paper);transform:translateX(4px)}
+.model:hover h3{color:var(--paper)}
+.model .tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.model .tags span{font-family:var(--f-mono);font-size:11.5px;letter-spacing:.06em;color:var(--faint);border:1px solid var(--line);border-radius:2px;padding:1px 6px}
+
 /* ---------- responsive ---------- */
 @media (max-width:980px){
-  .hero .wrap,.warn .wrap,.ba .wrap,.info .wrap,.safe .wrap{grid-template-columns:1fr}
+  .hero .wrap,.warn .wrap,.ba .wrap,.info .wrap,.safe .wrap,.maker .wrap{grid-template-columns:1fr}
   .steps .wrap{grid-template-columns:1fr 1fr 1fr}
   .steps .head{grid-column:1/-1;padding-bottom:0}
   .step:first-of-type{border-left:0;padding-left:0}
@@ -308,6 +334,9 @@ h1 .ln>span{display:inline-block}
   .step .n{font-size:48px;grid-row:span 2}
   .step h3{margin-top:0}
   .dialog{padding:20px}
+  .model{grid-template-columns:96px 1fr;gap:var(--s3)}
+  .model .size{font-size:40px}
+  .model .go{grid-column:2}
   .hash{flex-wrap:wrap}
   .hash .k{width:auto}
   .dialog .h{font-size:20px}
@@ -327,6 +356,7 @@ h1 .ln>span{display:inline-block}
       <a class="hide-sm" href="#how"><span data-th>วิธีติดตั้ง</span><span data-en>How to install</span></a>
       <a class="hide-sm" href="#safety"><span data-th>ความปลอดภัย</span><span data-en>Safety</span></a>
       <a class="hide-sm" href="#features"><span data-th>ทำอะไรได้</span><span data-en>Features</span></a>
+      <a class="hide-sm" href="#maker"><span data-th>คนทำ</span><span data-en>Maker</span></a>
       <a href="https://github.com/Godpoom/circle-room" rel="noopener">GitHub</a>
       <div class="lang" role="group" aria-label="Language">
         <button type="button" data-set="th" aria-pressed="true">TH</button>
@@ -571,12 +601,51 @@ h1 .ln>span{display:inline-block}
     </div>
   </div>
 </section>
+
+<section class="maker" id="maker">
+  <div class="wrap">
+    <div>
+      <p class="label"><b>06</b> / <span data-th>คนทำ</span><span data-en>The maker</span></p>
+      <h2><span data-th>ทำโดยคนเดียวกับที่สร้าง <em>Circle Zone</em></span><span data-en>Made by the person behind <em>Circle Zone</em></span></h2>
+      <p><span data-th>Circle Room เป็นผลงานของ <b>IAMPOOM</b> ซึ่งก่อนหน้านี้สร้าง Circle Zone โมเดลภาษา AI ขนาดเล็กที่ออกแบบและเทรนเองตั้งแต่ศูนย์ คุยได้ทั้งภาษาไทยและอังกฤษ ไม่ได้ต่อยอดจากโมเดลของใคร</span>
+         <span data-en>Circle Room is by <b>IAMPOOM</b>, who also built Circle Zone: small Thai and English language models designed and trained from scratch, not fine-tuned from anyone else's model.</span></p>
+      <p><span data-th>ทั้งสองโปรเจกต์ทำบนโน้ตบุ๊กการ์ดจอ RTX 4060 เครื่องเดียว แนวคิดเดียวกันคือ AI ที่ดีไม่จำเป็นต้องอยู่บนเซิร์ฟเวอร์ใหญ่</span>
+         <span data-en>Both were made on a single RTX 4060 laptop, on the same idea: useful AI doesn't have to live in a data centre.</span></p>
+      <a class="who" href="https://huggingface.co/IAMPOOM" target="_blank" rel="noopener">
+        <span data-th>ผลงานทั้งหมดบน Hugging Face</span><span data-en>All work on Hugging Face</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg>
+      </a>
+    </div>
+    <div class="models">
+      <a class="model" href="https://huggingface.co/IAMPOOM/CircleZone-2.0-70M" target="_blank" rel="noopener">
+        <span class="size">70<small>M</small></span>
+        <div>
+          <h3>CircleZone 2.0</h3>
+          <p><span data-th>รุ่นล่าสุด 70.3 ล้านพารามิเตอร์ แชทแบบเป็นกันเองทั้งไทยและอังกฤษ ใช้กับ LM Studio, llama.cpp และ Ollama ได้ทันที</span>
+             <span data-en>The latest: 70.3M parameters, casual chat in Thai and English, runs in LM Studio, llama.cpp and Ollama.</span></p>
+          <span class="tags"><span>FROM SCRATCH</span><span>TH · EN</span><span>GGUF</span></span>
+        </div>
+        <span class="go">huggingface ↗</span>
+      </a>
+      <a class="model" href="https://huggingface.co/IAMPOOM/CircleZone-1.0-33M" target="_blank" rel="noopener">
+        <span class="size">33<small>M</small></span>
+        <div>
+          <h3>CircleZone 1.0</h3>
+          <p><span data-th>รุ่นแรก 33 ล้านพารามิเตอร์ จุดเริ่มต้นของการทดลองว่าโมเดลที่เทรนบนคอมส่วนตัวได้ จะเรียนรู้ภาษาได้แค่ไหน</span>
+             <span data-en>The first: 33M parameters, the start of finding out how much language a model small enough for a personal PC can learn.</span></p>
+          <span class="tags"><span>FROM SCRATCH</span><span>EN · TH</span><span>GGUF</span></span>
+        </div>
+        <span class="go">huggingface ↗</span>
+      </a>
+    </div>
+  </div>
+</section>
 </main>
 
 <footer>
   <div class="wrap">
     <span>Circle Room <span class="js-ver">v1.0.2</span> · <a href="https://github.com/Godpoom/circle-room/releases">Releases</a> · <a href="https://github.com/Godpoom/circle-room/blob/main/THIRD_PARTY_NOTICES.md">Licenses</a></span>
-    <span><span data-th>ทำในประเทศไทย</span><span data-en>Made in Thailand</span> · <a href="https://github.com/Godpoom/circle-room">github.com/Godpoom/circle-room</a></span>
+    <span><span data-th>ทำในประเทศไทยโดย</span><span data-en>Made in Thailand by</span> <a href="https://huggingface.co/IAMPOOM" target="_blank" rel="noopener">IAMPOOM</a> · <a href="https://github.com/Godpoom/circle-room">github.com/Godpoom/circle-room</a></span>
   </div>
 </footer>
 
@@ -647,6 +716,8 @@ h1 .ln>span{display:inline-block}
   group('.feat .head, .feat .row');
   group('.info .wrap > div');
   group('.info details', {index:function(el,i){return i+2}});
+  group('.maker .wrap > div:first-child', {left:true});
+  group('.maker .model');
   group('footer .wrap > span');
 
   var onShow = {};  // id -> callback when that element first appears
