@@ -346,3 +346,68 @@ void main() {
   fragColor = vec4(o, 1.0);
 }
 )GLSL";
+
+// Photo layers: composites up to four layers onto the source, in source pixels, before develop.
+// Blending happens on sRGB-encoded values like Photoshop; untouched pixels pass through exactly.
+static const char* kComposeShader = R"GLSL(
+#version 330 core
+in vec2 vO;
+out vec4 fragColor;
+
+uniform sampler2D uSrc;
+uniform mat3 uSO;                       // source uv -> oriented uv
+uniform int uN;
+uniform sampler2D uC0, uC1, uC2, uC3;   // layer colour (sRGB textures, sampled linear)
+uniform sampler2D uK0, uK1, uK2, uK3;   // layer alpha (R8)
+uniform mat3 uL0, uL1, uL2, uL3;        // oriented uv -> layer uv
+uniform vec4 uOp, uExp, uTemp, uSat, uBlend, uHasK;
+
+vec3 toS(vec3 c) {
+  c = clamp(c, 0.0, 1.0);
+  return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c));
+}
+vec3 toL(vec3 c) {
+  c = clamp(c, 0.0, 1.0);
+  return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c));
+}
+
+vec3 blendOp(vec3 b, vec3 l, int m) {
+  if (m == 1) return b * l;
+  if (m == 2) return 1.0 - (1.0 - b) * (1.0 - l);
+  if (m == 3) return mix(2.0 * b * l, 1.0 - 2.0 * (1.0 - b) * (1.0 - l), step(0.5, b));
+  if (m == 4) {
+    vec3 d = mix(((16.0 * b - 12.0) * b + 4.0) * b, sqrt(b), step(0.25, b));
+    return mix(b - (1.0 - 2.0 * l) * b * (1.0 - b), b + (2.0 * l - 1.0) * (d - b), step(0.5, l));
+  }
+  if (m == 5) return min(b, l);
+  if (m == 6) return max(b, l);
+  return l;
+}
+
+vec3 over(vec3 base, sampler2D C, sampler2D K, mat3 L, int i, vec2 ou) {
+  vec2 lu = (L * vec3(ou, 1.0)).xy;
+  vec2 fw = max(fwidth(lu), vec2(1.0e-7));
+  vec2 e = min(lu, 1.0 - lu) / fw;
+  float edge = clamp(min(e.x, e.y) + 0.5, 0.0, 1.0);  // antialiased layer border
+  vec2 cu = clamp(lu, 0.0, 1.0);
+  vec3 c = texture(C, cu).rgb * uExp[i];
+  float t = uTemp[i];
+  c *= vec3(1.0 + 0.25 * t, 1.0 + 0.02 * t, 1.0 - 0.25 * t);
+  float Y = dot(c, vec3(0.2126, 0.7152, 0.0722));
+  c = max(vec3(Y) + (c - vec3(Y)) * (1.0 + uSat[i]), vec3(0.0));
+  float a = uOp[i] * edge * (uHasK[i] > 0.5 ? texture(K, cu).r : 1.0);
+  if (a <= 0.0) return base;
+  vec3 bs = toS(base);
+  return toL(mix(bs, blendOp(bs, toS(c), int(uBlend[i] + 0.5)), a));
+}
+
+void main() {
+  vec3 c = textureLod(uSrc, vO, 0.0).rgb;
+  vec2 ou = (uSO * vec3(vO, 1.0)).xy;
+  if (uN > 0) c = over(c, uC0, uK0, uL0, 0, ou);
+  if (uN > 1) c = over(c, uC1, uK1, uL1, 1, ou);
+  if (uN > 2) c = over(c, uC2, uK2, uL2, 2, ou);
+  if (uN > 3) c = over(c, uC3, uK3, uL3, 3, ou);
+  fragColor = vec4(c, 1.0);
+}
+)GLSL";

@@ -247,7 +247,7 @@
   X(T_FoundRegions, "Found in this photo", "ส่วนที่พบในภาพ") \
   X(T_ActOnShown, "With the shown photos", "ทำกับภาพที่แสดง") \
   X(T_ResetShort, "reset", "รีเซ็ต") \
-  X(T_RailHint, "keys 1-9", "กด 1-9 เพื่อสลับ") \
+  X(T_RailHint, "keys 1-9, 0", "กด 1-9, 0 เพื่อสลับ") \
   X(T_TbOriginal, "Original", "ต้นฉบับ") \
   X(T_TbSplit, "Split", "แบ่งจอ") \
   X(T_TbFit, "Fit", "พอดีจอ") \
@@ -285,6 +285,54 @@
   X(T_Tr10B, "The best photos get red badges. Click for details, double-click to open one in the editor. You can also search with words, in Thai or English.", "ภาพที่ดีที่สุดมีป้ายสีแดง คลิกดูรายละเอียด ดับเบิลคลิกเพื่อเปิดแต่ง และค้นหาด้วยคำพูดได้ ทั้งไทยและอังกฤษ") \
   X(T_Tr11T, "You are ready", "พร้อมแล้ว") \
   X(T_Tr11B, "That is the tour. Press the ? button any time to see it again.", "จบทัวร์แล้ว กดปุ่ม ? ได้ทุกเมื่อเพื่อดูอีกครั้ง") \
+  X(T_Reg_Face, "Faces", "ใบหน้า") \
+  X(T_PgLayers, "Layers", "ตัดต่อ") \
+  X(T_TitleLayers, "Photo layers", "ตัดต่อภาพ / เลเยอร์") \
+  X(T_PhotoLayers, "Layers", "เลเยอร์") \
+  X(T_AddPhotoLayer, "+ Add a photo on top", "+ เพิ่มภาพซ้อน") \
+  X(T_LayersHint, "Or drop photo files onto the canvas. Drag a layer to move it, a corner to resize, the round handle to rotate.", "หรือลากไฟล์ภาพมาวางบนภาพ ลากเลเยอร์เพื่อย้าย ลากมุมเพื่อย่อ/ขยาย ลากจุดกลมด้านบนเพื่อหมุน") \
+  X(T_BasePhoto, "Base photo", "ภาพหลัก") \
+  X(T_LayerLoading, "loading", "กำลังโหลด") \
+  X(T_LayerAi, "AI finding parts", "AI กำลังแยกส่วน") \
+  X(T_LayerFailed, "cannot open", "เปิดไม่ได้") \
+  X(T_SelectedLayer, "Selected layer", "เลเยอร์ที่เลือก") \
+  X(T_ToolMove, "Move", "ย้าย/ย่อขยาย") \
+  X(T_ToolErase, "Eraser", "ยางลบ") \
+  X(T_ToolRestore, "Restore", "แปรงคืน") \
+  X(T_BrushSize, "Brush size", "ขนาดแปรง") \
+  X(T_BrushHard, "Hardness", "ความคมของแปรง") \
+  X(T_BrushHint, "Paint over the layer to hide parts of it; Restore paints them back. [ and ] change the size.", "ระบายบนเลเยอร์เพื่อลบส่วนที่ไม่ต้องการ แปรงคืนใช้ระบายให้กลับมา กด [ และ ] เพื่อปรับขนาดแปรง") \
+  X(T_MoveHint, "Drag to move. Corners resize, the round handle rotates (hold Shift for 15 degree steps).", "ลากเพื่อย้าย ลากมุมเพื่อย่อ/ขยาย ลากจุดกลมเพื่อหมุน (กด Shift ค้างเพื่อหมุนทีละ 15 องศา)") \
+  X(T_LayerUp, "Up", "ขึ้น") \
+  X(T_LayerDown, "Down", "ลง") \
+  X(T_ResetPlace, "Re-centre", "จัดกลางใหม่") \
+  X(T_Hide, "Hide", "ซ่อน") \
+  X(T_Show, "Show", "แสดง") \
+  X(T_CutOut, "Remove background (AI)", "ตัดพื้นหลัง (AI)") \
+  X(T_CutAuto, "Keep only the subject", "เก็บแค่ตัวหลักอัตโนมัติ") \
+  X(T_CutWhole, "Whole photo", "ทั้งภาพ") \
+  X(T_CutHint, "Tap what to keep (several can be combined), then tidy the edge with the eraser.", "กดเลือกส่วนที่จะเก็บ (เลือกได้หลายส่วน) แล้วเก็บขอบด้วยยางลบ") \
+  X(T_CutBusy, "AI is finding the parts of this photo...", "AI กำลังแยกส่วนต่างๆ ของภาพ...") \
+  X(T_CutNone, "AI could not find any parts in this photo", "AI หาส่วนต่างๆ ในภาพนี้ไม่เจอ") \
+  X(T_EdgeSoft, "Edge softness", "ขอบนุ่ม") \
+  X(T_Opacity, "Opacity", "ความทึบ") \
+  X(T_BlendMode, "Blend mode", "โหมดผสม") \
+  X(T_BlNormal, "Normal", "ปกติ") \
+  X(T_BlMultiply, "Multiply (darker)", "คูณ (เข้มขึ้น)") \
+  X(T_BlScreen, "Screen (lighter)", "สกรีน (สว่างขึ้น)") \
+  X(T_BlOverlay, "Overlay", "โอเวอร์เลย์") \
+  X(T_BlSoft, "Soft light", "แสงนุ่ม") \
+  X(T_BlDarken, "Darken", "เลือกส่วนที่มืดกว่า") \
+  X(T_BlLighten, "Lighten", "เลือกส่วนที่สว่างกว่า") \
+  X(T_MatchLook, "Match to the photo", "ปรับสีให้เข้ากับภาพหลัก") \
+  X(T_MatchAuto, "Match automatically", "ปรับให้เข้ากันอัตโนมัติ") \
+  X(T_AddLayer, "Add layer", "เพิ่มเลเยอร์") \
+  X(T_LayerEdit, "Move layer", "ย้ายเลเยอร์") \
+  X(T_LayerBrush, "Paint layer", "ระบายเลเยอร์") \
+  X(T_RemoveLayer, "Remove layer", "ลบเลเยอร์") \
+  X(T_MaxImgLayers, "Up to 4 photo layers", "เพิ่มได้สูงสุด 4 เลเยอร์") \
+  X(T_NoLayers, "No layers yet. Add a photo to cut out and place on this one.", "ยังไม่มีเลเยอร์ เพิ่มภาพที่ต้องการตัดมาวางซ้อนบนภาพนี้") \
+  X(T_PathTooLong, "File path is too long", "ชื่อไฟล์/โฟลเดอร์ยาวเกินไป") \
   X(T_EditToCull, "Many photos? Try AI Cull", "มีภาพเยอะ? ลองคัดภาพด้วย AI") \
   X(T_CullGuideT, "Find your best shots", "หาภาพที่ดีที่สุดของคุณ") \
   X(T_CullGuide1, "Choose a folder of photos", "เลือกโฟลเดอร์ที่มีภาพ") \

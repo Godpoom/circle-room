@@ -26,6 +26,7 @@
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 #include "imgui_internal.h"
+#include "layers.h"
 #include "params.h"
 #include "platform_win.h"
 #include "renderer.h"
@@ -105,6 +106,7 @@ struct RenderKey {  // everything the preview depends on; compared with memcmp
   int crop, clip, before;
   int maskShow, maskVer;
 };
+
 
 struct LoadJob {
   std::thread th;
@@ -221,6 +223,14 @@ struct App {
   bool autoValid = false;
   float autoStrength = 100.f, autoConf = 0.f;
   int autoScene = -1;
+  // Photo layers (compositing)
+  LayerStore layers;
+  int selLayer = -1;    // slot in params.img
+  int layerTool = 0;    // 0 move / resize / rotate, 1 eraser, 2 restore brush
+  float brushPx = 60.f, brushHard = 50.f;  // brush diameter on screen, hardness 0..100
+  int layerDrag = 0;    // 0 none, 1 move, 2 resize, 3 rotate, 4 brush
+  ImageLayer layerStart;
+  float dragX = 0, dragY = 0;  // drag start, oriented pixels of the base photo
 };
 
 static App* g_app = nullptr;
@@ -255,7 +265,8 @@ static void frameOf(App& a, const EditParams& p, int& w, int& h) {
 
 static void saveSidecar(App& a) {
   if (!a.hasImage) return;
-  writeSidecar(a.path, isDefault(a.params) ? std::string() : serializeParams(a.params, true));
+  writeSidecar(a.path, isDefault(a.params) ? std::string()
+                                           : serializeParams(a.params, true) + a.layers.serializeStrokes(a.params));
 }
 
 static void paramsReplaced(App& a) {
@@ -301,6 +312,10 @@ static void finishLoad(App& a) {
   EditParams p;
   std::string sc;
   if (readSidecar(a.path, sc)) deserializeParams(sc, p, true);
+  a.layers.clear(a.R);
+  a.layers.parseStrokes(sc);
+  a.selLayer = -1;
+  a.layerDrag = 0;
   a.params = p;
   a.hist.reset(p, T_Import);
   storeCropUser(a);
@@ -502,7 +517,7 @@ static void drawAiStylePanel(App& a) {
 
 static const int kRegionKeys[ai::REG_COUNT] = {T_Reg_Person, T_Reg_Sky,      T_Reg_Road,    T_Reg_Building, T_Reg_Trees,
                                                T_Reg_Grass,  T_Reg_Water,    T_Reg_Mountain, T_Reg_Ground,  T_Reg_Vehicle,
-                                               T_Reg_Animal, T_Reg_Walls,    T_Reg_Food};
+                                               T_Reg_Animal, T_Reg_Walls,    T_Reg_Food,    T_Reg_Face};
 
 static void resetMaskKeys(App& a) {
   for (int i = 0; i < kMaxLayers; i++) {
@@ -618,8 +633,16 @@ static void drawLocalPanel(App& a) {
       lineW += w;
       return uiPill(label, false);
     };
+    if (!a.seg.faces.empty()) {  // faces first: often under 1% of the frame, but the most wanted
+      char label[96];
+      snprintf(label, sizeof(label), "%s %d", tr(T_Reg_Face), (int)a.seg.faces.size());
+      ImGui::PushID("face");
+      if (chip(label)) addLayer(a, ai::REG_FACE, false);
+      ImGui::PopID();
+    }
     for (int k = 0; k < ai::REG_COUNT; k++) {
       int r = order[k];
+      if (r == ai::REG_FACE) continue;
       if (a.seg.area[r] < 0.005f) break;
       char label[96];
       snprintf(label, sizeof(label), "%s %.0f%%", tr(kRegionKeys[r]), a.seg.area[r] * 100.f);
@@ -671,6 +694,469 @@ static void drawLocalPanel(App& a) {
     ImGui::PopID();
   }
   if (any) uiHint(tr(T_MaskHint));
+}
+
+// ---------------------------------------------------------------- photo layers (compositing)
+static void addImageLayer(App& a, const std::string& path) {
+  if (!a.hasImage || path.empty()) return;
+  if (path.size() >= (size_t)kLayerPathMax) {
+    showToast(a, tr(T_PathTooLong));
+    return;
+  }
+  int slot = -1;
+  for (int i = 0; i < kMaxImgLayers && slot < 0; i++)
+    if (!a.params.img[i].enabled) slot = i;
+  if (slot < 0) {
+    showToast(a, tr(T_MaxImgLayers));
+    return;
+  }
+  // Fit inside 70% of the frame, whatever the two aspect ratios are.
+  float scale = 0.7f;
+  ai::SmallImage probe;
+  ai::DecodeInfo info;
+  std::string err;
+  if (ai::decodeScaled(path, 64, probe, &info, err) && info.origW > 0) {
+    float la = (float)info.origH / info.origW, ba = (float)a.R.orientedH() / std::max(1, a.R.orientedW());
+    scale = std::min(0.7f, 0.7f * ba / la);
+  } else if (!err.empty()) {
+    showToast(a, std::string(tr(T_LoadFailed)) + ": " + fileName(path));
+    return;
+  }
+  // Keep the stack compact: the new layer goes on top of the existing ones.
+  ImageLayer l;
+  std::memset((void*)&l, 0, sizeof(l));
+  l.enabled = 1;
+  l.id = a.layers.nextId(a.params);
+  l.cx = l.cy = 0.5f;
+  l.scale = scale;
+  l.opacity = 100.f;
+  l.feather = 5.f;
+  std::memcpy(l.path, path.data(), path.size());
+  int n = 0;
+  ImageLayer tmp[kMaxImgLayers];
+  std::memset((void*)tmp, 0, sizeof(tmp));
+  for (const ImageLayer& e : a.params.img)
+    if (e.enabled) tmp[n++] = e;
+  tmp[n] = l;
+  std::memcpy(a.params.img, tmp, sizeof(tmp));
+  a.selLayer = n;
+  a.layerTool = 0;
+  a.er.changed = true;
+  a.er.commit = T_AddLayer;
+  a.er.extra = fileName(path);
+}
+
+// Layer uv <-> output uv (0..1 of the shown image) for the current geometry.
+static bool layerMaps(App& a, const Geometry& g, const ImageLayer& l, M3& layerToOut, M3& outToLayer) {
+  int lw, lh;
+  a.R.layerSize(l.id, lw, lh);
+  if (lw <= 0) return false;
+  M3 lo = layerToOriented(l, a.R.orientedW(), a.R.orientedH(), lw, lh);
+  layerToOut = invertM3(g.outToOriented);
+  float m[9];
+  for (int i = 0; i < 3; i++)
+    for (int j = 0; j < 3; j++) {
+      float s = 0;
+      for (int k = 0; k < 3; k++) s += layerToOut.m[i * 3 + k] * lo.m[k * 3 + j];
+      m[i * 3 + j] = s;
+    }
+  std::memcpy(layerToOut.m, m, sizeof(m));
+  outToLayer = invertM3(layerToOut);
+  return true;
+}
+
+// Visible at layer uv (u, v)? Uses the cut-out / brush mask, so clicks pass through empty parts.
+static bool layerHit(App& a, const ImageLayer& l, float u, float v) {
+  if (u < 0 || v < 0 || u > 1 || v > 1) return false;
+  LayerAsset* A = a.layers.asset(l.id);
+  if (!A || !A->maskOn || A->mw <= 0) return true;
+  int x = std::min(A->mw - 1, (int)(u * A->mw)), y = std::min(A->mh - 1, (int)(v * A->mh));
+  return A->alpha[(size_t)y * A->mw + x] > 0.15f;
+}
+
+// Handles, outline and mouse work for the selected layer. Returns true while it owns the mouse.
+static void layerCanvas(App& a, const Geometry& g, ImVec2 tl, float dW, float dH, bool hovered, bool active) {
+  ImGuiIO& io = ImGui::GetIO();
+  ImDrawList* dl = ImGui::GetWindowDrawList();
+  float s = a.scale;
+  EditParams& p = a.params;
+  auto toScreen = [&](const M3& lo, float u, float v) {
+    float x, y;
+    applyM3(lo, u, v, x, y);
+    return ImVec2(tl.x + x * dW, tl.y + y * dH);
+  };
+  auto mouseOut = [&](float& x, float& y) {
+    x = (io.MousePos.x - tl.x) / dW;
+    y = (io.MousePos.y - tl.y) / dH;
+  };
+  // Mouse in oriented pixels of the base photo: moves and angles are measured there.
+  auto mouseOriented = [&](float& x, float& y) {
+    float ox, oy;
+    mouseOut(ox, oy);
+    applyM3(g.outToOriented, ox, oy, x, y);
+    x *= a.R.orientedW();
+    y *= a.R.orientedH();
+  };
+  if (a.selLayer >= 0 && (a.selLayer >= kMaxImgLayers || !p.img[a.selLayer].enabled)) a.selLayer = -1;
+
+  // Outlines of every layer, the selected one with handles.
+  int hoverHandle = 0;  // 1 inside, 2 corner, 3 rotate
+  for (int i = 0; i < kMaxImgLayers; i++) {
+    ImageLayer& l = p.img[i];
+    M3 lo, ol;
+    if (!l.enabled || l.hidden || !layerMaps(a, g, l, lo, ol)) continue;
+    ImVec2 c[4] = {toScreen(lo, 0, 0), toScreen(lo, 1, 0), toScreen(lo, 1, 1), toScreen(lo, 0, 1)};
+    bool sel = i == a.selLayer;
+    if (!sel) {
+      dl->AddPolyline(c, 4, IM_COL32(240, 235, 225, 70), ImDrawFlags_Closed, 1.f);
+      continue;
+    }
+    dl->AddPolyline(c, 4, IM_COL32(0, 0, 0, 120), ImDrawFlags_Closed, 3.f);
+    dl->AddPolyline(c, 4, pal::kAccent, ImDrawFlags_Closed, 1.5f);
+    if (a.layerTool != 0) continue;
+    ImVec2 top((c[0].x + c[1].x) * 0.5f, (c[0].y + c[1].y) * 0.5f), mid((c[0].x + c[2].x) * 0.5f, (c[0].y + c[2].y) * 0.5f);
+    float ux = top.x - mid.x, uy = top.y - mid.y, ul = std::max(1e-3f, std::sqrt(ux * ux + uy * uy));
+    ImVec2 rot(top.x + ux / ul * 26.f * s, top.y + uy / ul * 26.f * s);
+    dl->AddLine(top, rot, pal::kAccent, 1.5f);
+    dl->AddCircleFilled(rot, 6.f * s, pal::kText);
+    dl->AddCircle(rot, 6.f * s, pal::kAccent, 0, 1.5f);
+    float hs = 5.f * s;
+    for (const ImVec2& q : c) {
+      dl->AddRectFilled(ImVec2(q.x - hs, q.y - hs), ImVec2(q.x + hs, q.y + hs), pal::kText);
+      dl->AddRect(ImVec2(q.x - hs, q.y - hs), ImVec2(q.x + hs, q.y + hs), pal::kAccent, 0, 0, 1.5f);
+    }
+    if (hovered && a.layerDrag == 0) {
+      auto near = [&](ImVec2 q, float r) {
+        float dx = io.MousePos.x - q.x, dy = io.MousePos.y - q.y;
+        return dx * dx + dy * dy <= r * r;
+      };
+      float ox, oy, u, v;
+      mouseOut(ox, oy);
+      applyM3(ol, ox, oy, u, v);
+      if (near(rot, 10.f * s)) hoverHandle = 3;
+      else if (near(c[0], 10.f * s) || near(c[1], 10.f * s) || near(c[2], 10.f * s) || near(c[3], 10.f * s)) hoverHandle = 2;
+      else if (u >= 0 && v >= 0 && u <= 1 && v <= 1) hoverHandle = 1;
+    }
+  }
+
+  // Brush cursor
+  bool brush = a.layerTool != 0 && a.selLayer >= 0;
+  if (brush && (hovered || a.layerDrag == 4)) {
+    dl->AddCircle(io.MousePos, a.brushPx * 0.5f, IM_COL32(0, 0, 0, 160), 0, 3.f);
+    dl->AddCircle(io.MousePos, a.brushPx * 0.5f, a.layerTool == 1 ? pal::kText : pal::kAccent, 0, 1.5f);
+    ImGui::SetMouseCursor(ImGuiMouseCursor_None);
+  } else if (a.layerDrag == 1 || hoverHandle == 1) {
+    ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
+  } else if (a.layerDrag == 2 || hoverHandle == 2) {
+    ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNWSE);
+  } else if (a.layerDrag == 3 || hoverHandle == 3) {
+    ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+  }
+
+  // Press: grab a handle, start a stroke, or pick the layer under the mouse.
+  if (ImGui::IsItemActivated() && ImGui::IsMouseClicked(0)) {
+    mouseOriented(a.dragX, a.dragY);
+    if (brush) {
+      ImageLayer& l = p.img[a.selLayer];
+      M3 lo, ol;
+      if (layerMaps(a, g, l, lo, ol)) {
+        float ox, oy, u, v;
+        mouseOut(ox, oy);
+        applyM3(ol, ox, oy, u, v);
+        ImVec2 e0 = toScreen(lo, 0, 0), e1 = toScreen(lo, 1, 0);
+        float lwScreen = std::max(1.f, std::sqrt((e1.x - e0.x) * (e1.x - e0.x) + (e1.y - e0.y) * (e1.y - e0.y)));
+        a.layers.beginStroke(l, a.layerTool == 1 ? 1 : 0, a.brushPx * 0.5f / lwScreen, a.brushHard / 100.f, u, v);
+        a.layerDrag = 4;
+        a.er.changed = true;
+      }
+    } else if (hoverHandle >= 2 && a.selLayer >= 0) {
+      a.layerDrag = hoverHandle;
+      a.layerStart = p.img[a.selLayer];
+    } else {
+      int hit = -1;
+      for (int i = kMaxImgLayers - 1; i >= 0 && hit < 0; i--) {
+        const ImageLayer& l = p.img[i];
+        M3 lo, ol;
+        if (!l.enabled || l.hidden || !layerMaps(a, g, l, lo, ol)) continue;
+        float ox, oy, u, v;
+        mouseOut(ox, oy);
+        applyM3(ol, ox, oy, u, v);
+        if (layerHit(a, l, u, v) || (i == a.selLayer && hoverHandle == 1)) hit = i;
+      }
+      if (hit >= 0) {
+        a.selLayer = hit;
+        a.layerDrag = 1;
+        a.layerStart = p.img[hit];
+      }
+    }
+  }
+
+  // Drag
+  if (a.layerDrag && active && a.selLayer >= 0) {
+    ImageLayer& l = p.img[a.selLayer];
+    float mx, my;
+    mouseOriented(mx, my);
+    float Wo = (float)a.R.orientedW(), Ho = (float)a.R.orientedH();
+    float cx = a.layerStart.cx * Wo, cy = a.layerStart.cy * Ho;
+    if (a.layerDrag == 1) {
+      l.cx = a.layerStart.cx + (mx - a.dragX) / Wo;
+      l.cy = a.layerStart.cy + (my - a.dragY) / Ho;
+    } else if (a.layerDrag == 2) {
+      float d0 = std::hypot(a.dragX - cx, a.dragY - cy), d1 = std::hypot(mx - cx, my - cy);
+      if (d0 > 1.f) l.scale = std::clamp(a.layerStart.scale * d1 / d0, 0.01f, 20.f);
+    } else if (a.layerDrag == 3) {
+      float a0 = std::atan2(a.dragY - cy, a.dragX - cx), a1 = std::atan2(my - cy, mx - cx);
+      float deg = a.layerStart.rotate + (a1 - a0) * 180.f / 3.14159265f;
+      deg = std::fmod(deg + 540.f, 360.f) - 180.f;
+      if (io.KeyShift) deg = std::round(deg / 15.f) * 15.f;
+      l.rotate = deg;
+    } else if (a.layerDrag == 4) {
+      M3 lo, ol;
+      if (layerMaps(a, g, l, lo, ol)) {
+        float ox, oy, u, v;
+        mouseOut(ox, oy);
+        applyM3(ol, ox, oy, u, v);
+        a.layers.extendStroke(l, u, v);
+      }
+    }
+    a.er.changed = true;
+  }
+  if (a.layerDrag && !active) {
+    a.er.commit = a.layerDrag == 4 ? T_LayerBrush : T_LayerEdit;
+    a.layerDrag = 0;
+  }
+}
+
+static const char* layerStatus(App& a, const ImageLayer& l) {
+  LayerAsset* A = a.layers.asset(l.id);
+  if (!A) return tr(T_LayerLoading);
+  int st = A->stage;
+  if (st == -1) return tr(T_LayerFailed);
+  if (st < 2) return tr(T_LayerLoading);
+  if (st < 4) return tr(T_LayerAi);
+  return nullptr;
+}
+
+static void drawLayersPanel(App& a) {
+  EditParams& p = a.params;
+  float s = a.scale;
+  if (a.selLayer >= 0 && (a.selLayer >= kMaxImgLayers || !p.img[a.selLayer].enabled)) a.selLayer = -1;
+  uiCardBegin("##imglayers", tr(T_PhotoLayers), false);
+  if (uiPrimaryButton(trId(T_AddPhotoLayer, "addlayer"))) {
+    for (const std::string& f : openImagesDialog(glfwGetWin32Window(a.win), a.S.lastDir)) addImageLayer(a, f);
+  }
+  uiHint(tr(T_LayersHint));
+  ImGui::Dummy(ImVec2(0, 4.f * s));
+  int count = 0;
+  for (const ImageLayer& l : p.img) count += l.enabled ? 1 : 0;
+  if (!count) uiHint(tr(T_NoLayers));
+  // Top of the stack first, like every layers panel.
+  float rowH = 44.f * s, w = ImGui::GetContentRegionAvail().x;
+  ImDrawList* dl = ImGui::GetWindowDrawList();
+  int removeAt = -1;
+  for (int i = kMaxImgLayers - 1; i >= 0; i--) {
+    ImageLayer& l = p.img[i];
+    if (!l.enabled) continue;
+    ImGui::PushID(2000 + l.id);
+    ImVec2 p0 = ImGui::GetCursorScreenPos();
+    bool sel = i == a.selLayer;
+    if (ImGui::InvisibleButton("##row", ImVec2(w - 56.f * s, rowH))) a.selLayer = i;
+    bool hov = ImGui::IsItemHovered();
+    if (sel || hov) dl->AddRectFilled(p0, ImVec2(p0.x + w, p0.y + rowH), sel ? pal::kPanel : IM_COL32(255, 255, 255, 10));
+    if (sel) dl->AddRectFilled(p0, ImVec2(p0.x + 2.f * s, p0.y + rowH), pal::kAccent);
+    LayerAsset* A = a.layers.asset(l.id);
+    float th = rowH - 8.f * s, tw = th;
+    if (A && A->thumbTex && A->th2 > 0) {
+      tw = std::min(th * 1.5f, th * A->tw / A->th2);
+      dl->AddImage((ImTextureID)(intptr_t)A->thumbTex, ImVec2(p0.x + 8.f * s, p0.y + 4.f * s),
+                   ImVec2(p0.x + 8.f * s + tw, p0.y + 4.f * s + th));
+    } else {
+      dl->AddRect(ImVec2(p0.x + 8.f * s, p0.y + 4.f * s), ImVec2(p0.x + 8.f * s + tw, p0.y + 4.f * s + th), pal::kFrame);
+    }
+    float tx = p0.x + 16.f * s + std::max(tw, th);
+    std::string name = fileName(l.path);
+    dl->PushClipRect(ImVec2(tx, p0.y), ImVec2(p0.x + w - 60.f * s, p0.y + rowH), true);
+    dl->AddText(ImVec2(tx, p0.y + 5.f * s), l.hidden ? pal::kFaint : pal::kText, name.c_str());
+    const char* st = layerStatus(a, l);
+    char sub[96];
+    if (st) snprintf(sub, sizeof(sub), "%s", st);
+    else snprintf(sub, sizeof(sub), "%.0f%%%s", l.opacity, l.keep ? "  \xc2\xb7  AI" : "");
+    ImGui::PushFont(g_fontSmall);
+    dl->AddText(ImVec2(tx, p0.y + rowH - ImGui::GetFontSize() - 6.f * s), st ? pal::kAccent : pal::kMuted, sub);
+    ImGui::PopFont();
+    dl->PopClipRect();
+    ImGui::SameLine(0, 0);
+    ImGui::SetCursorScreenPos(ImVec2(p0.x + w - 54.f * s, p0.y + (rowH - ImGui::GetFrameHeight()) * 0.5f));
+    if (uiPill(l.hidden ? trId(T_Show, "vis") : trId(T_Hide, "vis"), false)) {
+      l.hidden ^= 1;
+      a.er.changed = true;
+      a.er.commit = l.hidden ? T_Hide : T_Show;
+    }
+    ImGui::SetCursorScreenPos(ImVec2(p0.x, p0.y + rowH + 2.f * s));
+    ImGui::PopID();
+  }
+  if (count) {  // the base photo sits under every layer
+    ImVec2 p0 = ImGui::GetCursorScreenPos();
+    if (ImGui::InvisibleButton("##baserow", ImVec2(w, rowH * 0.7f))) a.selLayer = -1;
+    dl->AddText(ImVec2(p0.x + 8.f * s, p0.y + (rowH * 0.7f - ImGui::GetFontSize()) * 0.5f), pal::kMuted, tr(T_BasePhoto));
+  }
+  uiCardEnd();
+  if (a.selLayer < 0) return;
+
+  int i = a.selLayer;
+  ImageLayer& l = p.img[i];
+  LayerAsset* A = a.layers.asset(l.id);
+  uiCardBegin("##layertools", tr(T_SelectedLayer), false);
+  const char* tools[3] = {tr(T_ToolMove), tr(T_ToolErase), tr(T_ToolRestore)};
+  int t = uiSegmented("ltool", tools, 3, a.layerTool);
+  if (t >= 0) a.layerTool = t;
+  ImGui::Dummy(ImVec2(0, 2.f * s));
+  if (a.layerTool == 0) {
+    uiHint(tr(T_MoveHint));
+  } else {
+    EditResult dummy;
+    uiSlider(dummy, T_BrushSize, "bsz", &a.brushPx, 4, 800, 60, "%.0f px");
+    uiSlider(dummy, T_BrushHard, "bhd", &a.brushHard, 0, 100, 50, "%.0f");
+    uiHint(tr(T_BrushHint));
+  }
+  ImGui::Dummy(ImVec2(0, 2.f * s));
+  auto swapWith = [&](int j) {
+    std::swap(p.img[i], p.img[j]);
+    a.selLayer = j;
+    a.er.changed = true;
+    a.er.commit = T_LayerEdit;
+  };
+  int above = -1, below = -1;
+  for (int j = i + 1; j < kMaxImgLayers && above < 0; j++)
+    if (p.img[j].enabled) above = j;
+  for (int j = i - 1; j >= 0 && below < 0; j--)
+    if (p.img[j].enabled) below = j;
+  ImGui::BeginDisabled(above < 0);
+  if (uiPill(trId(T_LayerUp, "lup"), false)) swapWith(above);
+  ImGui::EndDisabled();
+  ImGui::SameLine();
+  ImGui::BeginDisabled(below < 0);
+  if (uiPill(trId(T_LayerDown, "ldn"), false)) swapWith(below);
+  ImGui::EndDisabled();
+  ImGui::SameLine();
+  if (uiPill(trId(T_Flip, "lflip"), l.flipH != 0)) {
+    l.flipH ^= 1;
+    a.er.changed = true;
+    a.er.commit = T_Flip;
+  }
+  ImGui::SameLine();
+  if (uiPill(trId(T_ResetPlace, "lctr"), false)) {
+    l.cx = l.cy = 0.5f;
+    l.rotate = 0.f;
+    a.er.changed = true;
+    a.er.commit = T_LayerEdit;
+  }
+  if (uiPill(trId(T_RemoveLayer, "lrm"), false, IM_COL32(255, 140, 120, 255))) removeAt = i;
+  uiCardEnd();
+
+  uiCardBegin("##cutout", tr(T_CutOut), false);
+  if (!A || A->stage == -1) {
+    uiHint(tr(T_LayerFailed));
+  } else if (A->stage != 4) {
+    uiHint(tr(T_CutBusy));
+  } else if (!A->segOk) {
+    uiHint(tr(T_CutNone));
+  } else {
+    const ai::SegResult& sg = A->seg;
+    if (uiPrimaryButton(trId(T_CutAuto, "cutauto"))) {
+      // The subject: people (with their faces), else the largest animal / vehicle / food.
+      int keep = 0;
+      if (sg.area[ai::REG_PERSON] >= 0.02f) keep = 1 << ai::REG_PERSON;
+      else {
+        int best = -1;
+        for (int r : {ai::REG_ANIMAL, ai::REG_VEHICLE, ai::REG_FOOD})
+          if (sg.area[r] >= 0.02f && (best < 0 || sg.area[r] > sg.area[best])) best = r;
+        if (best >= 0) keep = 1 << best;
+      }
+      if (!keep) keep = 1 << ai::REG_PERSON;
+      l.keep = keep;
+      a.er.changed = true;
+      a.er.commit = T_CutOut;
+    }
+    uiHint(tr(T_CutHint));
+    ImGui::Dummy(ImVec2(0, 2.f * s));
+    float lineW = 0, avail = ImGui::GetContentRegionAvail().x;
+    auto chip = [&](const char* label, bool on) {
+      float cw = ImGui::CalcTextSize(label).x + ImGui::GetStyle().FramePadding.x * 2 + 6;
+      if (lineW > 0 && lineW + cw < avail) ImGui::SameLine();
+      else lineW = 0;
+      lineW += cw;
+      return uiPill(label, on);
+    };
+    ImGui::PushID("cw");
+    if (chip(tr(T_CutWhole), l.keep == 0)) {
+      l.keep = 0;
+      a.er.changed = true;
+      a.er.commit = T_CutOut;
+    }
+    ImGui::PopID();
+    int order[ai::REG_COUNT];
+    for (int r = 0; r < ai::REG_COUNT; r++) order[r] = r;
+    std::sort(order, order + ai::REG_COUNT, [&](int x, int y) { return sg.area[x] > sg.area[y]; });
+    for (int k = 0; k < ai::REG_COUNT; k++) {
+      int r = order[k];
+      if (r == ai::REG_FACE || sg.area[r] < 0.005f) continue;
+      char label[96];
+      snprintf(label, sizeof(label), "%s %.0f%%", tr(kRegionKeys[r]), sg.area[r] * 100.f);
+      ImGui::PushID(r);
+      if (chip(label, (l.keep >> r) & 1)) {
+        l.keep ^= 1 << r;
+        a.er.changed = true;
+        a.er.commit = T_CutOut;
+      }
+      ImGui::PopID();
+    }
+    ImGui::Dummy(ImVec2(0, 2.f * s));
+    uiSlider(a.er, T_EdgeSoft, "lfe", &l.feather, 0, 100, 5, "%.0f");
+  }
+  uiCardEnd();
+
+  uiCardBegin("##lblend", tr(T_Blending), false);
+  uiSlider(a.er, T_Opacity, "lop", &l.opacity, 0, 100, 100, "%.0f%%");
+  static const int kBlendKeys[BLEND_COUNT] = {T_BlNormal, T_BlMultiply, T_BlScreen, T_BlOverlay,
+                                              T_BlSoft,   T_BlDarken,   T_BlLighten};
+  ImGui::TextUnformatted(tr(T_BlendMode));
+  ImGui::SetNextItemWidth(-FLT_MIN);
+  if (ImGui::BeginCombo("##blend", tr(kBlendKeys[std::clamp(l.blend, 0, BLEND_COUNT - 1)]))) {
+    for (int m = 0; m < BLEND_COUNT; m++)
+      if (ImGui::Selectable(tr(kBlendKeys[m]), m == l.blend)) {
+        l.blend = m;
+        a.er.changed = true;
+        a.er.commit = T_BlendMode;
+      }
+    ImGui::EndCombo();
+  }
+  uiCardEnd();
+
+  uiCardBegin("##lmatch", tr(T_MatchLook), false);
+  ImGui::BeginDisabled(!A || !A->uploaded);
+  if (uiPrimaryButton(trId(T_MatchAuto, "lmauto"))) {
+    if (a.layers.matchColours(a.path, l)) {
+      a.er.changed = true;
+      a.er.commit = T_MatchLook;
+    }
+  }
+  ImGui::EndDisabled();
+  uiSlider(a.er, T_Exposure, "lex", &l.exposure, -3, 3, 0, "%+.2f");
+  uiSlider(a.er, T_Temp, "ltp", &l.temp, -100, 100, 0, "%.0f", IM_COL32(70, 120, 235, 255), IM_COL32(235, 200, 60, 255));
+  uiSlider(a.er, T_Saturation, "lsat", &l.saturation, -100, 100, 0, "%.0f", IM_COL32(128, 128, 128, 255),
+           IM_COL32(230, 60, 60, 255));
+  uiCardEnd();
+
+  if (removeAt >= 0) {
+    std::string nm = fileName(p.img[removeAt].path);
+    for (int j = removeAt; j + 1 < kMaxImgLayers; j++) p.img[j] = p.img[j + 1];
+    std::memset((void*)&p.img[kMaxImgLayers - 1], 0, sizeof(ImageLayer));
+    a.selLayer = -1;
+    a.er.changed = true;
+    a.er.commit = T_RemoveLayer;
+    a.er.extra = nm;
+  }
 }
 
 static void clearRecover(App& a) {
@@ -981,7 +1467,7 @@ static void cropOverlay(App& a, ImVec2 tl, float dW, float dH, bool active) {
 }
 
 // ---------------------------------------------------------------- UI pieces
-enum Page { PG_AI, PG_LIGHT, PG_COLOR, PG_DETAIL, PG_EFFECTS, PG_LOCAL, PG_CROP, PG_LOOKS, PG_HISTORY, PG_COUNT };
+enum Page { PG_AI, PG_LIGHT, PG_COLOR, PG_DETAIL, PG_EFFECTS, PG_LOCAL, PG_LAYERS, PG_CROP, PG_LOOKS, PG_HISTORY, PG_COUNT };
 
 static void setPage(App& a, int pg) {
   if (pg == a.page) return;
@@ -1215,7 +1701,7 @@ static void drawTopBar(App& a, float barH) {
 }
 
 static const int kPageLabels[PG_COUNT] = {T_PgAI,    T_PgLight, T_PgColor, T_PgDetail, T_PgEffects,
-                                          T_PgLocal, T_PgCrop,  T_PgLooks, T_PgHistory};
+                                          T_PgLocal, T_PgLayers, T_PgCrop, T_PgLooks, T_PgHistory};
 
 static void drawRail(App& a) {
   float s = a.scale;
@@ -1434,7 +1920,7 @@ static void updateHistogram(App& a) {
 
 static void drawToolPanel(App& a) {
   static const int titles[PG_COUNT] = {T_TitleAI,    T_TitleLight, T_TitleColor, T_TitleDetail,  T_TitleEffects,
-                                       T_TitleLocal, T_TitleCrop,  T_TitleLooks, T_TitleHistory};
+                                       T_TitleLocal, T_TitleLayers, T_TitleCrop, T_TitleLooks, T_TitleHistory};
   float s = a.scale;
   tourSetWindow(TR_TOOLS);
   a.hoverLayer = -1;
@@ -1517,6 +2003,7 @@ static void drawToolPanel(App& a) {
       break;
     }
     case PG_LOCAL: drawLocalPanel(a); break;
+    case PG_LAYERS: drawLayersPanel(a); break;
     case PG_CROP:
       uiCardBegin("##crop", nullptr, false);
       drawCropPanel(a);
@@ -1627,12 +2114,14 @@ static void drawCanvas(App& a) {
   };
   if (hovered && io.MouseWheel != 0.f)
     zoomAt(std::clamp(z * std::pow(1.2f, io.MouseWheel), std::min(fitZ, 1.f) * 0.25f, 16.f), io.MousePos);
-  if (!crop && hovered && ImGui::IsMouseDoubleClicked(0)) {
+  bool layerMode = a.page == PG_LAYERS && !crop;
+  bool layerOwns = layerMode && (a.layerDrag != 0 || (a.layerTool != 0 && a.selLayer >= 0));
+  if (!crop && !layerMode && hovered && ImGui::IsMouseDoubleClicked(0)) {
     if (a.view.fit) zoomAt(1.f, io.MousePos);
     else a.view.fit = true;
   }
   bool panning = active && !a.splitDrag &&
-                 ((!crop && ImGui::IsMouseDragging(0)) || ImGui::IsMouseDragging(1));
+                 ((!crop && !layerOwns && ImGui::IsMouseDragging(0)) || ImGui::IsMouseDragging(1));
   if (panning) {
     a.view.cx -= io.MouseDelta.x / dW;
     a.view.cy -= io.MouseDelta.y / dH;
@@ -1735,6 +2224,7 @@ static void drawCanvas(App& a) {
   } else {
     dl->AddImage(ta, ImVec2(vx0, vy0), ImVec2(vx1, vy1), ImVec2(0, 0), ImVec2(a.uA, a.vA));
   }
+  if (layerMode && !needBefore) layerCanvas(a, g, tl, dW, dH, hovered, active);
   if (crop) cropOverlay(a, tl, dW, dH, active);
   if (a.load.active) centerText(tr(T_Loading));
 }
@@ -2108,8 +2598,13 @@ static void handleShortcuts(App& a) {
     if (!a.view.fit) a.view.zoom = 1.f;
   }
   // 1-9 jump to a tool page
-  for (int i = 0; i < PG_COUNT && !ctrl; i++)
+  for (int i = 0; i < std::min(9, (int)PG_COUNT) && !ctrl; i++)
     if (ImGui::IsKeyPressed((ImGuiKey)(ImGuiKey_1 + i), false)) setPage(a, i);
+  if (!ctrl && PG_COUNT > 9 && ImGui::IsKeyPressed(ImGuiKey_0, false)) setPage(a, 9);
+  if (a.page == PG_LAYERS && a.layerTool != 0) {  // brush size
+    if (ImGui::IsKeyPressed(ImGuiKey_LeftBracket)) a.brushPx = std::max(4.f, a.brushPx / 1.15f);
+    if (ImGui::IsKeyPressed(ImGuiKey_RightBracket)) a.brushPx = std::min(800.f, a.brushPx * 1.15f);
+  }
 }
 
 static void buildUI(App& a) {
@@ -2335,8 +2830,8 @@ static int runHeadless(const std::vector<std::string>& args) {
     for (int i = 0; i < 20; i++) R.histogram(p, h);
     printf("histogram: %.2f ms\nRAM %.1f MB\n", ms(tb) / 20, processPrivateBytes() / 1048576.0);
   } else {
+    std::string t;
     if (args[3] != "-") {
-      std::string t;
       if (!readTextFile(args[3], t)) {
         fprintf(stderr, "cannot read params %s\n", args[3].c_str());
         return 6;
@@ -2362,6 +2857,14 @@ static int runHeadless(const std::vector<std::string>& args) {
       ai::buildMasks(seg, guide, mw, mh, p.layers, mask);
       R.setMask(mask.data(), mw, mh);
       printf("regions + masks: %.0f ms\n", ms(ts));
+    }
+    LayerStore layerStore;
+    if (anyImageLayer(p)) {
+      auto tl0 = Clock::now();
+      layerStore.parseStrokes(t);
+      layerStore.sync(p, R, true);
+      layerStore.sync(p, R, false);  // masks need the finished segmentation
+      printf("photo layers: %.0f ms\n", ms(tl0));
     }
     Geometry g = computeGeometry(p, R.srcW(), R.srcH(), R.orientation(), false);
     int w = g.outW, h = g.outH;
@@ -2808,6 +3311,7 @@ int main(int, char**) {
   if (a.S.maximized) glfwMaximizeWindow(a.win);
   glfwShowWindow(a.win);
   glfwSwapInterval(1);
+  g_layerWake = []() { glfwPostEmptyEvent(); };
   glfwSetDropCallback(a.win, [](GLFWwindow*, int n, const char** paths) {
     if (g_app)
       for (int i = 0; i < n; i++) g_app->drops.push_back(paths[i]);
@@ -2866,8 +3370,11 @@ int main(int, char**) {
     if (a.segJob.active && a.segJob.done) finishSegmentation(a);
     if (a.recJob.active && a.recJob.done) finishRecover(a);
     updateMasks(a);
+    if (a.hasImage && a.layers.sync(a.params, a.R)) a.maskVer++;
     if (!a.drops.empty()) {
       if (a.mode == 1) a.cull.onDrop(a.drops);
+      else if (a.page == PG_LAYERS && a.hasImage)
+        for (const std::string& d : a.drops) addImageLayer(a, d);
       else openImage(a, a.drops.front());
       a.drops.clear();
     }

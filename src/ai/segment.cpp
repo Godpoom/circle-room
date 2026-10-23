@@ -4,6 +4,8 @@
 #include <cmath>
 #include <cstring>
 
+#include "ai/clip_model.h"
+
 namespace ai {
 
 // ADE20K class ids per region (standard 150-class ADE20K label order).
@@ -21,6 +23,7 @@ static const std::vector<int> kRegionClasses[REG_COUNT] = {
     {126},                                // animal
     {0, 5},                               // wall, ceiling
     {120},                                // food
+    {},                                   // faces (YuNet, not ADE20K)
 };
 
 // UperNet-ConvNeXt-T trained on ADE20K (MIT, openmmlab), exported by tools/export_upernet.py to return
@@ -112,58 +115,134 @@ void boxMean(const std::vector<float>& in, int w, int h, int r, std::vector<floa
   }
 }
 
+void addFaces(const SmallImage& img, SegResult& seg) {
+  seg.faces.clear();
+  seg.area[REG_FACE] = 0.f;
+  FaceDetector fd;
+  std::string err;
+  std::vector<Face> faces;
+  if (!fd.load(err) || !fd.detect(img, faces, err)) return;
+  fd.release();
+  for (const Face& f : faces) {
+    FaceBox b{f.x / img.w, f.y / img.h, f.w / img.w, f.h / img.h};
+    seg.faces.push_back(b);
+    seg.area[REG_FACE] += 3.14159f * 0.55f * 0.62f * b.w * b.h;  // the ellipse drawn below
+  }
+  seg.area[REG_FACE] = std::min(seg.area[REG_FACE], 1.f);
+}
+
+// Soft ellipse per face box (forehead to chin, ear to ear), cut by the person map so a face
+// that touches a wall or the sky does not bleed into it; the guided filter then snaps the edge.
+static void faceMap(const SegResult& seg, const std::vector<float>& person, int W, int H, std::vector<float>& p) {
+  for (const FaceBox& b : seg.faces) {
+    float cx = (b.x + b.w * 0.5f) * W, cy = (b.y + b.h * 0.48f) * H;
+    float rx = std::max(1.f, b.w * W * 0.55f), ry = std::max(1.f, b.h * H * 0.62f);
+    int x0 = std::max(0, (int)(cx - rx * 1.1f)), x1 = std::min(W - 1, (int)(cx + rx * 1.1f));
+    int y0 = std::max(0, (int)(cy - ry * 1.1f)), y1 = std::min(H - 1, (int)(cy + ry * 1.1f));
+    for (int y = y0; y <= y1; y++)
+      for (int x = x0; x <= x1; x++) {
+        float dx = (x + 0.5f - cx) / rx, dy = (y + 0.5f - cy) / ry, d = std::sqrt(dx * dx + dy * dy);
+        float t = std::clamp((1.05f - d) / 0.25f, 0.f, 1.f);
+        float v = t * t * (3 - 2 * t) * std::clamp(person[(size_t)y * W + x] * 1.4f, 0.f, 1.f);
+        float& o = p[(size_t)y * W + x];
+        o = std::max(o, v);
+      }
+  }
+}
+
+// Region probability upsampled (bilinear) to W*H; faces drawn from their boxes.
+static void regionProb(const SegResult& seg, int region, int W, int H, std::vector<float>& p) {
+  size_t n = (size_t)W * H;
+  p.assign(n, 0.f);
+  if (!seg.valid() || region < 0 || region >= REG_COUNT) return;
+  bool face = region == REG_FACE;
+  const uint8_t* src = &seg.prob[(size_t)(face ? REG_PERSON : region) * seg.w * seg.h];
+  for (int y = 0; y < H; y++) {
+    float fy = std::clamp((y + 0.5f) * seg.h / H - 0.5f, 0.f, (float)seg.h - 1);
+    int y0 = (int)fy, y1 = std::min(y0 + 1, seg.h - 1);
+    float ty = fy - y0;
+    for (int x = 0; x < W; x++) {
+      float fx = std::clamp((x + 0.5f) * seg.w / W - 0.5f, 0.f, (float)seg.w - 1);
+      int x0 = (int)fx, x1 = std::min(x0 + 1, seg.w - 1);
+      float tx = fx - x0;
+      float a = src[y0 * seg.w + x0] * (1 - tx) + src[y0 * seg.w + x1] * tx;
+      float b = src[y1 * seg.w + x0] * (1 - tx) + src[y1 * seg.w + x1] * tx;
+      p[(size_t)y * W + x] = (a * (1 - ty) + b * ty) / 255.f;
+    }
+  }
+  if (face) {
+    std::vector<float> person;
+    person.swap(p);
+    p.assign(n, 0.f);
+    faceMap(seg, person, W, H, p);
+  }
+}
+
+// Guided filter (He et al.): snaps a coarse mask to the photo's real edges.
+static void guidedRefine(std::vector<float>& p, const std::vector<float>& I, int W, int H) {
+  size_t n = (size_t)W * H;
+  if (I.size() != n) return;
+  int r = std::max(2, std::max(W, H) / 256);
+  const float eps = 1e-3f;
+  std::vector<float> mI, mP, mIP, mII, tmp(n);
+  boxMean(I, W, H, r, mI);
+  boxMean(p, W, H, r, mP);
+  for (size_t i = 0; i < n; i++) tmp[i] = I[i] * p[i];
+  boxMean(tmp, W, H, r, mIP);
+  for (size_t i = 0; i < n; i++) tmp[i] = I[i] * I[i];
+  boxMean(tmp, W, H, r, mII);
+  std::vector<float> a(n), b(n);
+  for (size_t i = 0; i < n; i++) {
+    float var = mII[i] - mI[i] * mI[i], cov = mIP[i] - mI[i] * mP[i];
+    a[i] = cov / (var + eps);
+    b[i] = mP[i] - a[i] * mI[i];
+  }
+  std::vector<float> ma, mb;
+  boxMean(a, W, H, r, ma);
+  boxMean(b, W, H, r, mb);
+  for (size_t i = 0; i < n; i++) p[i] = std::clamp(ma[i] * I[i] + mb[i], 0.f, 1.f);
+}
+
+static void featherMask(std::vector<float>& p, int W, int H, float feather, float maxDiv) {
+  if (feather <= 0.5f) return;
+  int fr = std::max(1, (int)(feather / 100.f * std::max(W, H) / maxDiv));
+  std::vector<float> q;
+  boxMean(p, W, H, fr, q);
+  boxMean(q, W, H, fr, p);
+}
+
 void buildLayerMask(const SegResult& seg, int region, bool invert, float feather, const std::vector<float>& I, int W,
                     int H, uint8_t* rgba, int channel) {
   size_t n = (size_t)W * H;
-  std::vector<float> p(n, 0.f);
+  std::vector<float> p;
+  regionProb(seg, region, W, H, p);
   if (seg.valid() && region >= 0 && region < REG_COUNT) {
-    const uint8_t* src = &seg.prob[(size_t)region * seg.w * seg.h];
-    for (int y = 0; y < H; y++) {
-      float fy = std::clamp((y + 0.5f) * seg.h / H - 0.5f, 0.f, (float)seg.h - 1);
-      int y0 = (int)fy, y1 = std::min(y0 + 1, seg.h - 1);
-      float ty = fy - y0;
-      for (int x = 0; x < W; x++) {
-        float fx = std::clamp((x + 0.5f) * seg.w / W - 0.5f, 0.f, (float)seg.w - 1);
-        int x0 = (int)fx, x1 = std::min(x0 + 1, seg.w - 1);
-        float tx = fx - x0;
-        float a = src[y0 * seg.w + x0] * (1 - tx) + src[y0 * seg.w + x1] * tx;
-        float b = src[y1 * seg.w + x0] * (1 - tx) + src[y1 * seg.w + x1] * tx;
-        p[(size_t)y * W + x] = (a * (1 - ty) + b * ty) / 255.f;
-      }
-    }
-    // Guided filter (He et al.): snaps the coarse mask to the photo's real edges.
-    if (I.size() == n) {
-      int r = std::max(2, std::max(W, H) / 256);
-      const float eps = 1e-3f;
-      std::vector<float> mI, mP, mIP, mII, tmp(n);
-      boxMean(I, W, H, r, mI);
-      boxMean(p, W, H, r, mP);
-      for (size_t i = 0; i < n; i++) tmp[i] = I[i] * p[i];
-      boxMean(tmp, W, H, r, mIP);
-      for (size_t i = 0; i < n; i++) tmp[i] = I[i] * I[i];
-      boxMean(tmp, W, H, r, mII);
-      std::vector<float> a(n), b(n);
-      for (size_t i = 0; i < n; i++) {
-        float var = mII[i] - mI[i] * mI[i], cov = mIP[i] - mI[i] * mP[i];
-        a[i] = cov / (var + eps);
-        b[i] = mP[i] - a[i] * mI[i];
-      }
-      std::vector<float> ma, mb;
-      boxMean(a, W, H, r, ma);
-      boxMean(b, W, H, r, mb);
-      for (size_t i = 0; i < n; i++) p[i] = std::clamp(ma[i] * I[i] + mb[i], 0.f, 1.f);
-    }
-    if (feather > 0.5f) {
-      int fr = std::max(1, (int)(feather / 100.f * std::max(W, H) / 60.f));
-      std::vector<float> q;
-      boxMean(p, W, H, fr, q);
-      boxMean(q, W, H, fr, p);
-    }
+    guidedRefine(p, I, W, H);
+    featherMask(p, W, H, feather, 60.f);
   }
   for (size_t i = 0; i < n; i++) {
     float v = invert ? 1.f - p[i] : p[i];
     rgba[i * 4 + channel] = (uint8_t)std::lround(std::clamp(v, 0.f, 1.f) * 255.f);
   }
+}
+
+void buildKeepMask(const SegResult& seg, int keepBits, float feather, const std::vector<float>& I, int W, int H,
+                   std::vector<float>& out) {
+  size_t n = (size_t)W * H;
+  out.assign(n, 0.f);
+  std::vector<float> p;
+  for (int r = 0; r < REG_COUNT; r++) {
+    if (!(keepBits & (1 << r))) continue;
+    regionProb(seg, r, W, H, p);
+    for (size_t i = 0; i < n; i++) out[i] = std::min(1.f, out[i] + p[i]);
+  }
+  guidedRefine(out, I, W, H);
+  // A cut-out wants a clean edge, not the classifier's soft fringe.
+  for (float& v : out) {
+    float t = std::clamp((v - 0.3f) / 0.4f, 0.f, 1.f);
+    v = t * t * (3 - 2 * t);
+  }
+  featherMask(out, W, H, feather, 150.f);
 }
 
 bool segmentFile(const std::string& path, SegResult& seg, std::vector<float>& guide, int& W, int& H, std::string& err) {
@@ -172,6 +251,7 @@ bool segmentFile(const std::string& path, SegResult& seg, std::vector<float>& gu
   Segmenter s;
   bool ok = s.load(err) && s.run(img, seg, err);
   s.release();
+  if (ok) addFaces(img, seg);
   ortUnload();
   if (!ok) return false;
   makeGuide(img, guide);

@@ -19,6 +19,25 @@ struct LocalLayer {
   float exposure, contrast, highlights, shadows, temp, tint, saturation, clarity;
 };
 
+// Another photo composited on top of this one (index 0 = bottom). Placed in EXIF-oriented
+// coordinates of the base photo, so crop / rotate / straighten keep it where it was put.
+constexpr int kMaxImgLayers = 4;
+constexpr int kLayerPathMax = 520;  // UTF-8 bytes
+enum { BLEND_NORMAL, BLEND_MULTIPLY, BLEND_SCREEN, BLEND_OVERLAY, BLEND_SOFTLIGHT, BLEND_DARKEN, BLEND_LIGHTEN, BLEND_COUNT };
+struct ImageLayer {
+  int enabled, id, hidden;
+  float cx, cy;     // centre, 0..1 of the base photo
+  float scale;      // layer width as a share of the base width
+  float rotate;     // degrees, clockwise
+  int flipH, blend;
+  float opacity;    // 0..100
+  int keep;         // AI cut-out: bitmask of ai::Region to keep (0 = whole photo)
+  float feather;    // cut-out edge softness 0..100
+  int strokes;      // eraser / restore strokes in use (the list lives in LayerStore)
+  float exposure, temp, saturation;  // EV, -100..100, -100..100: match the layer to the scene
+  char path[kLayerPathMax];
+};
+
 enum { GRADE_SHADOWS, GRADE_MIDTONES, GRADE_HIGHLIGHTS, GRADE_GLOBAL, GRADE_COUNT };
 enum { CURVE_MASTER, CURVE_R, CURVE_G, CURVE_B, CURVE_COUNT };
 
@@ -49,6 +68,7 @@ struct EditParams {
   // AI local adjustments (image specific: kept like geometry when presets/styles apply)
   LocalLayer layers[kMaxLayers];
   float recover;  // AI highlight recovery 0..100 (image specific)
+  ImageLayer img[kMaxImgLayers];  // photo layers (image specific)
 
   EditParams();
 };
@@ -60,6 +80,8 @@ void copyGeometry(EditParams& dst, const EditParams& src);
 void resetGeometry(EditParams& p);
 void copyLayers(EditParams& dst, const EditParams& src);
 bool anyLayer(const EditParams& p);
+bool anyImageLayer(const EditParams& p);  // enabled and not hidden
+bool sameImageLayers(const EditParams& a, const EditParams& b);
 
 // Sidecar next to each photo ("photo.jpg.pedit"). Files from older builds (".lre") are still
 // read, and replaced by the new name on the next save.

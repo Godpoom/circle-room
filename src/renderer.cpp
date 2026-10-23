@@ -29,6 +29,27 @@ static void apply(const M3& M, float x, float y, float& ox, float& oy) {
   oy = M.m[3] * x + M.m[4] * y + M.m[5];
 }
 
+M3 invertM3(const M3& M) {
+  const float* m = M.m;
+  float det = m[0] * m[4] - m[1] * m[3];
+  if (std::fabs(det) < 1e-12f) return identity();
+  float id = 1.f / det;
+  float a = m[4] * id, b = -m[1] * id, d = -m[3] * id, e = m[0] * id;
+  return affine(a, b, -(a * m[2] + b * m[5]), d, e, -(d * m[2] + e * m[5]));
+}
+
+void applyM3(const M3& M, float x, float y, float& ox, float& oy) { apply(M, x, y, ox, oy); }
+
+M3 layerToOriented(const ImageLayer& l, int Wo, int Ho, int lw, int lh) {
+  float dw = std::max(1e-4f, l.scale) * Wo, dh = dw * lh / std::max(1, lw);
+  float a = l.rotate * 3.14159265f / 180.f, cs = std::cos(a), sn = std::sin(a);
+  M3 C = affine(1, 0, -0.5f, 0, 1, -0.5f);
+  M3 S = affine(l.flipH ? -dw : dw, 0, 0, 0, dh, 0);
+  M3 R = affine(cs, -sn, l.cx * Wo, sn, cs, l.cy * Ho);
+  M3 N = affine(1.f / Wo, 0, 0, 0, 1.f / Ho, 0);
+  return mul(N, mul(R, mul(S, C)));
+}
+
 static M3 orientMatrix(int o) {
   switch (o) {
     case 2: return affine(-1, 0, 1, 0, 1, 0);
@@ -228,7 +249,8 @@ static void setTexParams(bool mip) {
 bool Renderer::init(std::string& err) {
   progA_ = link(kVertexShader, kDevelopShader, err);
   progB_ = link(kVertexShader, kFinishShader, err);
-  if (!progA_ || !progB_) return false;
+  progC_ = link(kVertexShader, kComposeShader, err);
+  if (!progA_ || !progB_ || !progC_) return false;
   glGenVertexArrays(1, &vao_);
   glGenTextures(1, &curveTex_);
   glBindTexture(GL_TEXTURE_2D, curveTex_);
@@ -253,6 +275,12 @@ void Renderer::shutdown() {
   freeTarget(exp_);
   clearMask();
   clearRecover();
+  dropAllLayers();
+  if (compTex_) glDeleteTextures(1, &compTex_);
+  if (compFbo_) glDeleteFramebuffers(1, &compFbo_);
+  compTex_ = compFbo_ = 0;
+  if (progC_) glDeleteProgram(progC_);
+  progC_ = 0;
   if (srcTex_) glDeleteTextures(1, &srcTex_);
   if (curveTex_) glDeleteTextures(1, &curveTex_);
   if (vao_) glDeleteVertexArrays(1, &vao_);
@@ -362,6 +390,10 @@ bool Renderer::upload(ImageData& img, std::string& err) {
   srcW_ = img.w;
   srcH_ = img.h;
   orient_ = img.orientation;
+  src16_ = img.is16;
+  if (compTex_) glDeleteTextures(1, &compTex_);  // the composite follows the new source's size
+  compTex_ = 0;
+  compValid_ = false;
   img.release();  // the pixels now live only in VRAM
   if (glGetError() != 0) { err = "GPU upload failed (out of video memory?)"; return false; }
   return true;
@@ -425,8 +457,13 @@ void Renderer::runPasses(const EditParams& p, const Geometry& g, float o0x, floa
   auto U = [&](const char* n) { return glGetUniformLocation(P, n); };
   glBindFramebuffer(GL_FRAMEBUFFER, t.fboA);
   glViewport(0, 0, aw, ah);
+  unsigned src = compose(p);
+  glUseProgram(P);
+  glBindVertexArray(vao_);
+  glBindFramebuffer(GL_FRAMEBUFFER, t.fboA);
+  glViewport(0, 0, aw, ah);
   glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, srcTex_);
+  glBindTexture(GL_TEXTURE_2D, src);
   glActiveTexture(GL_TEXTURE0 + 1);
   glBindTexture(GL_TEXTURE_2D, curveTex_);
   glUniform1i(U("uSrc"), 0);
@@ -620,6 +657,132 @@ void Renderer::clearRecover() {
 void Renderer::clearMask() {
   if (maskTex_) glDeleteTextures(1, &maskTex_);
   maskTex_ = 0;
+}
+
+// ---------- photo layers ----------
+void Renderer::setLayerImage(int id, const uint8_t* rgb, int w, int h) {
+  LayerTex& L = lay_[id];
+  if (L.col) glDeleteTextures(1, &L.col);
+  glGenTextures(1, &L.col);
+  glBindTexture(GL_TEXTURE_2D, L.col);
+  glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+  glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+  uploadPyramid(rgb, w, h, false, downsample8);
+  setTexParams(true);
+  L.w = w;
+  L.h = h;
+  layerVer_++;
+}
+
+void Renderer::setLayerMask(int id, const uint8_t* a, int w, int h) {
+  LayerTex& L = lay_[id];
+  if (!a) {
+    if (L.mask) glDeleteTextures(1, &L.mask);
+    L.mask = 0;
+  } else {
+    if (!L.mask) glGenTextures(1, &L.mask);
+    glBindTexture(GL_TEXTURE_2D, L.mask);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, w, h, 0, GL_RED, GL_UNSIGNED_BYTE, a);
+    glGenerateMipmap(GL_TEXTURE_2D);
+    setTexParams(true);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+  }
+  layerVer_++;
+}
+
+void Renderer::dropLayer(int id) {
+  auto it = lay_.find(id);
+  if (it == lay_.end()) return;
+  if (it->second.col) glDeleteTextures(1, &it->second.col);
+  if (it->second.mask) glDeleteTextures(1, &it->second.mask);
+  lay_.erase(it);
+  layerVer_++;
+}
+
+void Renderer::dropAllLayers() {
+  while (!lay_.empty()) dropLayer(lay_.begin()->first);
+}
+
+void Renderer::layerSize(int id, int& w, int& h) const {
+  auto it = lay_.find(id);
+  w = it == lay_.end() ? 0 : it->second.w;
+  h = it == lay_.end() ? 0 : it->second.h;
+}
+
+unsigned Renderer::compose(const EditParams& p) {
+  const ImageLayer* use[kMaxImgLayers];
+  int n = 0;
+  for (const ImageLayer& l : p.img)
+    if (l.enabled && !l.hidden && layerReady(l.id)) use[n++] = &l;
+  if (!n) return srcTex_;
+  if (compValid_ && compVer_ == layerVer_ && std::memcmp(compKey_, p.img, sizeof(compKey_)) == 0) return compTex_;
+  if (!compTex_) {
+    glGenTextures(1, &compTex_);
+    glBindTexture(GL_TEXTURE_2D, compTex_);
+    GLenum fmt = src16_ ? GL_RGBA16 : GL_SRGB8_ALPHA8;
+    int levels = 1;
+    for (int m = std::max(srcW_, srcH_); m > 1; m >>= 1) levels++;
+    if (glpTexStorage2D) glpTexStorage2D(GL_TEXTURE_2D, levels, fmt, srcW_, srcH_);
+    else glTexImage2D(GL_TEXTURE_2D, 0, fmt, srcW_, srcH_, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+    setTexParams(true);
+    if (!compFbo_) glGenFramebuffers(1, &compFbo_);
+  }
+  glBindFramebuffer(GL_FRAMEBUFFER, compFbo_);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, compTex_, 0);
+  glViewport(0, 0, srcW_, srcH_);
+  unsigned P = progC_;
+  glUseProgram(P);
+  glBindVertexArray(vao_);
+  auto U = [&](const char* nm) { return glGetUniformLocation(P, nm); };
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, srcTex_);
+  glUniform1i(U("uSrc"), 0);
+  glUniform2f(U("uO0"), 0.f, 0.f);
+  glUniform2f(U("uO1"), 1.f, 1.f);
+  M3 so = invertM3(orientMatrix(orient_));
+  glUniformMatrix3fv(U("uSO"), 1, GL_TRUE, so.m);
+  glUniform1i(U("uN"), n);
+  float op[4] = {}, ex[4] = {}, tp[4] = {}, sa[4] = {}, bl[4] = {}, hk[4] = {};
+  int Wo = orientedW(), Ho = orientedH();
+  for (int i = 0; i < kMaxImgLayers; i++) {
+    char cn[8], kn[8], ln[8];
+    snprintf(cn, sizeof(cn), "uC%d", i);
+    snprintf(kn, sizeof(kn), "uK%d", i);
+    snprintf(ln, sizeof(ln), "uL%d", i);
+    const LayerTex* L = i < n ? &lay_[use[i]->id] : nullptr;
+    glActiveTexture(GL_TEXTURE0 + 1 + i);
+    glBindTexture(GL_TEXTURE_2D, L ? L->col : curveTex_);
+    glUniform1i(U(cn), 1 + i);
+    glActiveTexture(GL_TEXTURE0 + 5 + i);
+    glBindTexture(GL_TEXTURE_2D, L && L->mask ? L->mask : curveTex_);
+    glUniform1i(U(kn), 5 + i);
+    M3 m = L ? invertM3(layerToOriented(*use[i], Wo, Ho, L->w, L->h)) : identity();
+    glUniformMatrix3fv(U(ln), 1, GL_TRUE, m.m);
+    if (!L) continue;
+    op[i] = std::clamp(use[i]->opacity / 100.f, 0.f, 1.f);
+    ex[i] = std::exp2(use[i]->exposure);
+    tp[i] = use[i]->temp / 100.f;
+    sa[i] = use[i]->saturation / 100.f;
+    bl[i] = (float)use[i]->blend;
+    hk[i] = L->mask ? 1.f : 0.f;
+  }
+  glUniform4f(U("uOp"), op[0], op[1], op[2], op[3]);
+  glUniform4f(U("uExp"), ex[0], ex[1], ex[2], ex[3]);
+  glUniform4f(U("uTemp"), tp[0], tp[1], tp[2], tp[3]);
+  glUniform4f(U("uSat"), sa[0], sa[1], sa[2], sa[3]);
+  glUniform4f(U("uBlend"), bl[0], bl[1], bl[2], bl[3]);
+  glUniform4f(U("uHasK"), hk[0], hk[1], hk[2], hk[3]);
+  if (!src16_) glEnable(GL_FRAMEBUFFER_SRGB);
+  glDrawArrays(GL_TRIANGLES, 0, 3);
+  glDisable(GL_FRAMEBUFFER_SRGB);
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, compTex_);
+  glGenerateMipmap(GL_TEXTURE_2D);
+  std::memcpy(compKey_, p.img, sizeof(compKey_));
+  compVer_ = layerVer_;
+  compValid_ = true;
+  return compTex_;
 }
 
 void Renderer::renderSmall(const EditParams& p, int w, int h, std::vector<uint8_t>& rgba) {

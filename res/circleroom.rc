@@ -3,8 +3,8 @@ GLFW_ICON ICON "circleroom.ico"
 MAINICON ICON "circleroom.ico"
 
 1 VERSIONINFO
-FILEVERSION 1,0,3,0
-PRODUCTVERSION 1,0,3,0
+FILEVERSION 1,1,0,0
+PRODUCTVERSION 1,1,0,0
 BEGIN
   BLOCK "StringFileInfo"
   BEGIN
@@ -13,7 +13,7 @@ BEGIN
       VALUE "ProductName", "Circle Room"
       VALUE "FileDescription", "Circle Room photo editor"
       VALUE "OriginalFilename", "CircleRoom.exe"
-      VALUE "FileVersion", "1.0.3"
+      VALUE "FileVersion", "1.1.0"
     END
   END
   BLOCK "VarFileInfo"

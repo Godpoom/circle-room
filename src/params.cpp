@@ -43,7 +43,16 @@ void resetGeometry(EditParams& p) { copyGeometry(p, EditParams()); }
 void copyLayers(EditParams& dst, const EditParams& src) {
   std::memcpy(dst.layers, src.layers, sizeof(dst.layers));
   dst.recover = src.recover;
+  std::memcpy(dst.img, src.img, sizeof(dst.img));
 }
+
+bool anyImageLayer(const EditParams& p) {
+  for (const ImageLayer& l : p.img)
+    if (l.enabled && !l.hidden) return true;
+  return false;
+}
+
+bool sameImageLayers(const EditParams& a, const EditParams& b) { return std::memcmp(a.img, b.img, sizeof(a.img)) == 0; }
 
 bool anyLayer(const EditParams& p) {
   for (const LocalLayer& l : p.layers)
@@ -89,6 +98,15 @@ static void visitScalars(EditParams& p, bool geom, F f) {
         f(key, *vals[k]);
       }
     }
+    for (int i = 0; i < kMaxImgLayers; i++) {
+      ImageLayer& l = p.img[i];
+      const char* names[9] = {"Cx", "Cy", "Scale", "Rotate", "Opacity", "Feather", "Exposure", "Temp", "Saturation"};
+      float* vals[9] = {&l.cx, &l.cy, &l.scale, &l.rotate, &l.opacity, &l.feather, &l.exposure, &l.temp, &l.saturation};
+      for (int k = 0; k < 9; k++) {
+        snprintf(key, sizeof(key), "img%d%s", i, names[k]);
+        f(key, *vals[k]);
+      }
+    }
   }
 }
 
@@ -97,6 +115,7 @@ std::string serializeParams(const EditParams& pin, bool includeGeometry) {
   std::string out;
   char line[128];
   visitScalars(p, includeGeometry, [&](const char* k, float& v) {
+    if (k[0] == 'i' && k[1] == 'm' && k[2] == 'g' && !p.img[k[3] - '0'].enabled) return;  // unused photo-layer slot
     snprintf(line, sizeof(line), "%s=%.6g\n", k, v);
     out += line;
   });
@@ -107,6 +126,16 @@ std::string serializeParams(const EditParams& pin, bool includeGeometry) {
       snprintf(line, sizeof(line), "layer%dEnabled=%d\nlayer%dRegion=%d\nlayer%dInvert=%d\n", i, p.layers[i].enabled, i,
                p.layers[i].region, i, p.layers[i].invert);
       out += line;
+    }
+    for (int i = 0; i < kMaxImgLayers; i++) {
+      const ImageLayer& l = p.img[i];
+      if (!l.enabled) continue;
+      snprintf(line, sizeof(line), "img%dEnabled=1\nimg%dId=%d\nimg%dHidden=%d\nimg%dFlipH=%d\n", i, i, l.id, i, l.hidden, i,
+               l.flipH);
+      out += line;
+      snprintf(line, sizeof(line), "img%dBlend=%d\nimg%dKeep=%d\nimg%dStrokes=%d\n", i, l.blend, i, l.keep, i, l.strokes);
+      out += line;
+      out += "img" + std::to_string(i) + "Path=" + l.path + "\n";
     }
   }
   for (int c = 0; c < CURVE_COUNT; c++) {
@@ -158,6 +187,23 @@ void deserializeParams(const std::string& text, EditParams& p, bool includeGeome
         if (field == "Enabled") { l.enabled = atoi(v.c_str()) ? 1 : 0; continue; }
         if (field == "Region") { l.region = atoi(v.c_str()); continue; }
         if (field == "Invert") { l.invert = atoi(v.c_str()) ? 1 : 0; continue; }
+      }
+      if (k.size() > 4 && k.compare(0, 3, "img") == 0 && k[3] >= '0' && k[3] < '0' + kMaxImgLayers) {
+        ImageLayer& l = p.img[k[3] - '0'];
+        std::string field = k.substr(4);
+        int iv = atoi(v.c_str());
+        if (field == "Enabled") { l.enabled = iv ? 1 : 0; continue; }
+        if (field == "Id") { l.id = iv; continue; }
+        if (field == "Hidden") { l.hidden = iv ? 1 : 0; continue; }
+        if (field == "FlipH") { l.flipH = iv ? 1 : 0; continue; }
+        if (field == "Blend") { l.blend = iv >= 0 && iv < BLEND_COUNT ? iv : 0; continue; }
+        if (field == "Keep") { l.keep = iv; continue; }
+        if (field == "Strokes") { l.strokes = iv > 0 ? iv : 0; continue; }
+        if (field == "Path") {
+          std::memset(l.path, 0, sizeof(l.path));
+          std::memcpy(l.path, v.data(), std::min(v.size(), sizeof(l.path) - 1));
+          continue;
+        }
       }
     }
     visitScalars(p, includeGeometry, [&](const char* key, float& f) {

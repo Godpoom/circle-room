@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -18,6 +19,11 @@ struct Geometry {
   int frameW, frameH;  // after EXIF orientation + rotate90 (before crop)
   int outW, outH;      // crop size in pixels (or the frame when fullFrame)
 };
+
+M3 invertM3(const M3& m);
+void applyM3(const M3& m, float x, float y, float& ox, float& oy);
+// Photo layer placement: layer uv (0..1) -> base photo's oriented uv. Wo/Ho = oriented base size.
+M3 layerToOriented(const ImageLayer& l, int Wo, int Ho, int lw, int lh);
 
 Geometry computeGeometry(const EditParams& p, int srcW, int srcH, int orient, bool fullFrame);
 void frameDims(const EditParams& p, int srcW, int srcH, int orient, int& w, int& h);
@@ -50,6 +56,16 @@ class Renderer {
   void setRecover(const uint8_t* rgba, int w, int h);
   void clearRecover();
   bool hasRecover() const { return recTex_ != 0; }
+  // Photo layers, keyed by ImageLayer::id: colour is EXIF-oriented sRGB, alpha one byte per
+  // pixel (nullptr = opaque). The source is re-composited only when the layers change.
+  void setLayerImage(int id, const uint8_t* rgb, int w, int h);
+  void setLayerMask(int id, const uint8_t* a, int w, int h);
+  void dropLayer(int id);
+  void dropAllLayers();
+  bool layerReady(int id) const { return lay_.count(id) && lay_.at(id).col; }
+  void layerSize(int id, int& w, int& h) const;
+  int orientedW() const { return orient_ >= 5 ? srcH_ : srcW_; }
+  int orientedH() const { return orient_ >= 5 ? srcW_ : srcH_; }
   // Whole output image rendered at w*h and read back as RGBA (AI style matching).
   void renderSmall(const EditParams& p, int w, int h, std::vector<uint8_t>& rgba);
 
@@ -76,6 +92,17 @@ class Renderer {
   int srcW_ = 0, srcH_ = 0, orient_ = 1, maxTex_ = 8192;
   unsigned maskTex_ = 0, recTex_ = 0;
   int maskShow_ = -1;
+
+  struct LayerTex {
+    unsigned col = 0, mask = 0;
+    int w = 0, h = 0;
+  };
+  unsigned compose(const EditParams& p);  // texture to develop from: the source, or the composite
+  std::map<int, LayerTex> lay_;
+  unsigned progC_ = 0, compTex_ = 0, compFbo_ = 0;
+  bool src16_ = false, compValid_ = false;
+  int layerVer_ = 0, compVer_ = -1;
+  ImageLayer compKey_[kMaxImgLayers] = {};
 
   EditParams expP_;
   int expW_ = 0, expH_ = 0, expTile_ = 0, expTilesX_ = 0, expTilesY_ = 0;
