@@ -49,6 +49,7 @@ struct Settings {
   std::string lastDir;
   int expPng = 0, expQuality = 92, expResize = 0, expLong = 2048;
   int tutorialDone = 0;
+  int textPct = 100;  // text size, % of the system DPI scale
 };
 
 static std::string settingsPath() { return exeDir() + "\\settings.ini"; }
@@ -77,13 +78,15 @@ static void loadSettings(Settings& s) {
     else if (k == "expResize") s.expResize = iv;
     else if (k == "expLong") s.expLong = std::max(64, iv);
     else if (k == "tutorialDone") s.tutorialDone = iv;
+    else if (k == "textPct") s.textPct = iv;
   }
 }
 
 static void saveSettings(const Settings& s) {
   char buf[256];
-  snprintf(buf, sizeof(buf), "lang=%d\nwinW=%d\nwinH=%d\nmaximized=%d\nexpPng=%d\nexpQuality=%d\nexpResize=%d\nexpLong=%d\ntutorialDone=%d\n",
-           s.lang, s.winW, s.winH, s.maximized, s.expPng, s.expQuality, s.expResize, s.expLong, s.tutorialDone);
+  snprintf(buf, sizeof(buf), "lang=%d\nwinW=%d\nwinH=%d\nmaximized=%d\nexpPng=%d\nexpQuality=%d\nexpResize=%d\nexpLong=%d\ntutorialDone=%d\ntextPct=%d\n",
+           s.lang, s.winW, s.winH, s.maximized, s.expPng, s.expQuality, s.expResize, s.expLong, s.tutorialDone,
+           s.textPct);
   writeTextFile(settingsPath(), std::string(buf) + "lastDir=" + s.lastDir + "\n");
 }
 
@@ -123,7 +126,9 @@ struct ExportJob {
 
 struct App {
   GLFWwindow* win = nullptr;
-  float scale = 1.f;
+  float scale = 1.f;     // dpiScale * text size; every UI size is multiplied by this
+  float dpiScale = 1.f;
+  int pendingTextPct = 0;  // text size to apply before the next frame
   Renderer R;
   Settings S;
   std::string gpuName;
@@ -993,6 +998,50 @@ static void setLanguage(App& a, int lang) {
   a.S.lang = lang;
 }
 
+// ---------------------------------------------------------------- text size
+static const int kTextSizes[] = {85, 100, 115, 130, 150};
+static const int kTextSizeCount = (int)(sizeof(kTextSizes) / sizeof(kTextSizes[0]));
+
+static int clampTextPct(int p) {
+  int best = 100, bd = 1 << 30;
+  for (int v : kTextSizes)
+    if (std::abs(v - p) < bd) bd = std::abs(v - p), best = v;
+  return best;
+}
+
+static void requestTextSize(App& a, int pct) {
+  pct = clampTextPct(pct);
+  if (pct != a.S.textPct) a.pendingTextPct = pct;
+}
+
+static void stepTextSize(App& a, int dir) {
+  int i = 0;
+  while (i < kTextSizeCount && kTextSizes[i] != a.S.textPct) i++;
+  i = std::clamp(i + dir, 0, kTextSizeCount - 1);
+  requestTextSize(a, kTextSizes[i]);
+}
+
+static void setupFonts(float scale);
+
+// Rebuilds the font atlas and the style for the new size. Must run outside NewFrame/Render.
+static void applyTextSize(App& a) {
+  if (!a.pendingTextPct) return;
+  a.S.textPct = a.pendingTextPct;
+  a.pendingTextPct = 0;
+  a.scale = a.dpiScale * a.S.textPct / 100.f;
+  ImGuiIO& io = ImGui::GetIO();
+  io.Fonts->Clear();
+  setupFonts(a.scale);
+  ImGui_ImplOpenGL3_DestroyFontsTexture();
+  ImGui_ImplOpenGL3_CreateFontsTexture();
+  ImGui::GetStyle() = ImGuiStyle();  // applyTheme scales from the defaults, so start from them
+  applyTheme(a.scale);
+  char msg[64];
+  snprintf(msg, sizeof(msg), "%s %d%%", tr(T_TextSize), a.S.textPct);
+  showToast(a, msg);
+  saveSettings(a.S);
+}
+
 static void tourGo(App& a, int step);
 
 // Vertically centres the next widget of height h inside a bar of height barH.
@@ -1103,9 +1152,52 @@ static void drawTopBar(App& a, float barH) {
     if (hov) ImGui::SetTooltip("%s", tr(T_TourReplay));
     if (clicked) tourGo(a, 0);
   }
+  // Text size: "Aa" opens a small panel with the sizes
+  float ax = hx - 8.f * s - hb;
+  ImGui::SetCursorPos(ImVec2(ax, std::floor((barH - fh) * 0.5f)));
+  {
+    ImVec2 p0 = ImGui::GetCursorScreenPos();
+    bool clicked = ImGui::InvisibleButton("##textsize", ImVec2(hb, hb));
+    bool hov = ImGui::IsItemHovered(), open = ImGui::IsPopupOpen("##textsizepop");
+    ImU32 col = hov || open ? pal::kText : pal::kMuted;
+    ImGui::PushFont(g_fontBold);
+    ImVec2 q = ImGui::CalcTextSize("Aa");
+    dl->AddText(ImVec2(p0.x + (hb - q.x) * 0.5f, p0.y + (hb - q.y) * 0.5f - 1.f * s), col, "Aa");
+    ImGui::PopFont();
+    if (open) dl->AddRectFilled(ImVec2(p0.x + 4.f * s, p0.y + hb - 2.f * s), ImVec2(p0.x + hb - 4.f * s, p0.y + hb), pal::kAccent);
+    if (hov && !open) ImGui::SetTooltip("%s  (Ctrl +/-)", tr(T_TextSize));
+    if (clicked) ImGui::OpenPopup("##textsizepop");
+    ImGui::SetNextWindowPos(ImVec2(p0.x + hb, p0.y + hb + 8.f * s), ImGuiCond_Always, ImVec2(1.f, 0.f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.f * s, 14.f * s));
+    if (ImGui::BeginPopup("##textsizepop")) {
+      ImGui::PushFont(g_fontBold);
+      ImGui::TextUnformatted(tr(T_TextSize));
+      ImGui::PopFont();
+      ImGui::Dummy(ImVec2(0, 2.f * s));
+      const char* labels[kTextSizeCount];
+      char buf[kTextSizeCount][8];
+      int sel = 1;
+      for (int i = 0; i < kTextSizeCount; i++) {
+        snprintf(buf[i], sizeof(buf[i]), "%d%%", kTextSizes[i]);
+        labels[i] = buf[i];
+        if (kTextSizes[i] == (a.pendingTextPct ? a.pendingTextPct : a.S.textPct)) sel = i;
+      }
+      ImGui::PushFont(g_fontMono);
+      ImGui::SetNextItemWidth(320.f * s);
+      ImGui::Dummy(ImVec2(320.f * s, 0));
+      int k = uiSegmented("sizes", labels, kTextSizeCount, sel);
+      ImGui::PopFont();
+      if (k >= 0) requestTextSize(a, kTextSizes[k]);
+      ImGui::Dummy(ImVec2(0, 4.f * s));
+      ImGui::TextUnformatted(tr(T_TextSizePreview));
+      uiHint(tr(T_TextSizeHint));
+      ImGui::EndPopup();
+    }
+    ImGui::PopStyleVar();
+  }
   if (a.mode == 0) {
     float expW = std::max(104.f * s, ImGui::CalcTextSize(tr(T_Export)).x + 52.f * s);
-    float ex = hx - 18.f * s - expW;
+    float ex = ax - 18.f * s - expW;
     ImGui::SetCursorPos(ImVec2(ex, std::floor((barH - fh) * 0.5f)));
     if (a.exp.stage != 0) {
       float prog = a.exp.stage == 1 ? a.R.exportProgress() * 0.8f : 0.9f;
@@ -1128,7 +1220,13 @@ static const int kPageLabels[PG_COUNT] = {T_PgAI,    T_PgLight, T_PgColor, T_PgD
 static void drawRail(App& a) {
   float s = a.scale;
   tourSetWindow(TR_RAIL);
-  float w = ImGui::GetContentRegionAvail().x, h = 36.f * s;
+  // Rows shrink (down to the text height) when large text sizes on a short window would push
+  // the last pages off the bottom.
+  float sp = ImGui::GetStyle().ItemSpacing.y;
+  float fixedH = 14.f * s + sp + 2 * (12.f * s + sp);  // top gap + the two group breaks
+  float w = ImGui::GetContentRegionAvail().x;
+  float h = std::clamp((ImGui::GetWindowHeight() - fixedH - 8.f * s) / PG_COUNT - sp, ImGui::GetTextLineHeight() + 6.f * s,
+                       36.f * s);
   ImDrawList* dl = ImGui::GetWindowDrawList();
   ImGui::Dummy(ImVec2(0, 14.f * s));
   for (int i = 0; i < PG_COUNT; i++) {
@@ -1157,11 +1255,14 @@ static void drawRail(App& a) {
     dl->AddText(ImVec2(p0.x + 18.f * s + ns.x + 10.f * s, p0.y + (h - ls.y) * 0.5f - 1.f * s),
                 sel ? pal::kText : (hov ? pal::kText : pal::kMuted), label);
   }
-  // Shortcut hint at the foot of the index.
+  // Shortcut hint at the foot of the index, only when it doesn't collide with the last entry
+  // (large text sizes on short windows leave no room).
   float y = ImGui::GetWindowPos().y + ImGui::GetWindowHeight() - 30.f * s;
-  ImGui::PushFont(g_fontSmall);
-  dl->AddText(ImVec2(ImGui::GetWindowPos().x + 18.f * s, y), pal::kFaint, tr(T_RailHint));
-  ImGui::PopFont();
+  if (y > ImGui::GetCursorScreenPos().y + 8.f * s) {
+    ImGui::PushFont(g_fontSmall);
+    dl->AddText(ImVec2(ImGui::GetWindowPos().x + 18.f * s, y), pal::kFaint, tr(T_RailHint));
+    ImGui::PopFont();
+  }
 }
 
 static void drawLooksPage(App& a) {
@@ -1978,6 +2079,9 @@ static void handleShortcuts(App& a) {
   ImGuiIO& io = ImGui::GetIO();
   if (io.WantTextInput || a.tourStep >= 0) return;
   if (ImGui::IsKeyPressed(ImGuiKey_F1, false)) tourGo(a, 0);
+  if (io.KeyCtrl && (ImGui::IsKeyPressed(ImGuiKey_Equal, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadAdd, false))) stepTextSize(a, +1);
+  if (io.KeyCtrl && (ImGui::IsKeyPressed(ImGuiKey_Minus, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadSubtract, false))) stepTextSize(a, -1);
+  if (io.KeyCtrl && (ImGui::IsKeyPressed(ImGuiKey_0, false) || ImGui::IsKeyPressed(ImGuiKey_Keypad0, false))) requestTextSize(a, 100);
   bool ctrl = io.KeyCtrl;
   if (ctrl && ImGui::IsKeyPressed(ImGuiKey_O, false)) doOpenDialog(a);
   if (!a.hasImage || a.mode != 0) return;
@@ -2710,7 +2814,9 @@ int main(int, char**) {
   });
   float sx = 1.f, sy = 1.f;
   glfwGetWindowContentScale(a.win, &sx, &sy);
-  a.scale = std::max(1.f, sx);
+  a.dpiScale = std::max(1.f, sx);
+  a.S.textPct = clampTextPct(a.S.textPct);
+  a.scale = a.dpiScale * a.S.textPct / 100.f;
 
   if (!a.R.init(err)) {
     attachParentConsole();
@@ -2775,6 +2881,10 @@ int main(int, char**) {
     pumpExport(a);
     if (a.exp.stage == 1) framesLeft = std::max(framesLeft, 1);
 
+    if (a.pendingTextPct) {
+      applyTextSize(a);
+      framesLeft = std::max(framesLeft, 2);
+    }
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();

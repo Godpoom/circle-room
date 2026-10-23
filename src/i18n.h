@@ -253,6 +253,9 @@
   X(T_TbFit, "Fit", "พอดีจอ") \
   X(T_TbClip, "Clipping", "เตือนแสง") \
   X(T_TbHisto, "Histogram", "ฮิสโตแกรม") \
+  X(T_TextSize, "Text size", "ขนาดตัวอักษร") \
+  X(T_TextSizeHint, "Ctrl + bigger, Ctrl - smaller, Ctrl 0 back to 100%", "Ctrl + ขยาย, Ctrl - ย่อ, Ctrl 0 กลับเป็น 100%") \
+  X(T_TextSizePreview, "The quick brown fox · ห้องมืดล้างรูป", "ตัวอย่างข้อความ · The quick brown fox") \
   X(T_TourNext, "Next", "ถัดไป") \
   X(T_TourBack, "Back", "ย้อนกลับ") \
   X(T_TourSkip, "Skip", "ข้าม") \
