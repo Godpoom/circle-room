@@ -159,6 +159,7 @@ kbd{font-family:var(--f-mono);font-size:.82em;background:var(--panel);border:1px
 .copy:focus-visible{outline:2px solid var(--red);outline-offset:2px}
 .caution{margin-top:var(--s4);padding:12px 16px;border-left:2px solid var(--red);background:var(--red-soft);font-size:15px}
 
+.pending{display:inline-block;margin:0 0 var(--s3);padding:4px 10px;border:1px solid var(--red);border-radius:2px;font-family:var(--f-mono);font-size:12.5px;letter-spacing:.08em;color:var(--red)}
 /* ---------- before / after ---------- */
 .ba{padding:var(--s8) 0;border-top:1px solid var(--line)}
 .ba .wrap{display:grid;grid-template-columns:4fr 8fr;gap:var(--s7);align-items:end}
@@ -370,7 +371,7 @@ html[lang="th"] .maker h2{font-family:var(--f-text);font-size:clamp(28px,3.4vw,4
 <section class="hero">
   <div class="wrap">
     <div>
-      <p class="label kicker rise"><b>●</b> Windows 10 / 11 · <span data-th>ฟรี</span><span data-en>Free</span> · <span class="js-ver">v1.0.2</span></p>
+      <p class="label kicker rise"><b>●</b> Windows 10 / 11 · <span data-th>ฟรี</span><span data-en>Free</span> · <span class="js-ver">v1.0.3</span></p>
       <h1>
         <span data-th><span class="ln"><span>ห้องมืดล้างรูป</span></span><span class="ln"><span><em>อยู่ในเครื่องคุณ</em></span></span></span>
         <span data-en><span class="ln"><span>Your darkroom,</span></span><span class="ln"><span><em>on your own PC.</em></span></span></span>
@@ -459,11 +460,12 @@ html[lang="th"] .maker h2{font-family:var(--f-text);font-size:clamp(28px,3.4vw,4
         <b>0</b><span>/ 71</span>
       </div>
       <p class="scan mono" aria-hidden="true"><span data-th>ตรวจแล้ว</span><span data-en>checked</span> <span class="js-checked">71</span>/71 · <span data-th>พบ</span><span data-en>flagged</span> 0</p>
-      <h2><span data-th>ไม่มีแอนตี้ไวรัสตัวไหนแจ้งว่าอันตราย</span><span data-en>No antivirus engine flagged it</span></h2>
-      <p><span data-th>เราส่ง <b>CircleRoom.exe</b> เวอร์ชัน 1.0.2 ให้ VirusTotal สแกนด้วยแอนตี้ไวรัส 71 ตัว ผลคือไม่พบอะไร (สแกนวันที่ 21 ต.ค. 2026)</span>
-         <span data-en>We sent <b>CircleRoom.exe</b> 1.0.2 to VirusTotal, which ran it past 71 antivirus engines. None flagged it (scanned 21 Oct 2026).</span></p>
+      <p class="pending"><span data-th>เวอร์ชัน 1.0.3 · กำลังรอผลสแกน</span><span data-en>Version 1.0.3 · scan pending</span></p>
+      <h2><span data-th>เวอร์ชันก่อนหน้า ไม่มีแอนตี้ไวรัสตัวไหนแจ้ง</span><span data-en>The previous version: nothing flagged</span></h2>
+      <p><span data-th>ผล 0/71 นี้เป็นของ <b>CircleRoom.exe 1.0.2</b> (สแกนวันที่ 21 ต.ค. 2026) ส่วนเวอร์ชันล่าสุด 1.0.3 เพิ่งออก กำลังรอผลสแกน ระหว่างนี้แนะนำให้สแกนไฟล์ที่คุณโหลดมาเองตามขั้นตอนด้านขวา</span>
+         <span data-en>This 0/71 is for <b>CircleRoom.exe 1.0.2</b> (scanned 21 Oct 2026). Version 1.0.3 has just shipped and its scan is pending; until then, please scan your download yourself using the steps on the right.</span></p>
       <a class="vt" href="https://www.virustotal.com/gui/file/deae494e4c75c99a45aeaf4f380da7820ab683f253b708cf4629bac1ba6c3604" target="_blank" rel="noopener">
-        <span data-th>ดูรายงานบน VirusTotal</span><span data-en>Open the VirusTotal report</span>
+        <span data-th>ดูรายงานของ 1.0.2 บน VirusTotal</span><span data-en>Open the 1.0.2 report on VirusTotal</span>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg>
       </a>
     </div>
@@ -471,11 +473,11 @@ html[lang="th"] .maker h2{font-family:var(--f-text);font-size:clamp(28px,3.4vw,4
       <p class="label"><span data-th>อย่าเชื่อเราอย่างเดียว ตรวจเองได้ใน 1 นาที</span><span data-en>Don't just take our word for it</span></p>
       <ol class="checks">
         <li><div>
-          <h3><span data-th>เช็คว่าไฟล์ที่โหลดมาเป็นไฟล์เดียวกับที่สแกน</span><span data-en>Check your file is the one we scanned</span></h3>
+          <h3><span data-th>เช็คว่าไฟล์ที่โหลดมาตรงกับที่เราปล่อย</span><span data-en>Check your file matches our release</span></h3>
           <p><span data-th>แตกไฟล์ zip แล้วคลิกขวาในโฟลเดอร์ เลือก "Open in Terminal" แล้ววางคำสั่งนี้ ตัวเลขที่ได้ต้องตรงกับ SHA-256 ด้านล่างทุกตัว</span>
              <span data-en>Unzip, right-click inside the folder, choose "Open in Terminal" and paste this. The result must match the SHA-256 below exactly.</span></p>
           <div class="hash"><span class="k">PowerShell</span><code>Get-FileHash .\CircleRoom.exe</code><button class="copy" type="button" data-copy="Get-FileHash .\CircleRoom.exe">copy</button></div>
-          <div class="hash"><span class="k">CircleRoom.exe</span><code>deae494e4c75c99a45aeaf4f380da7820ab683f253b708cf4629bac1ba6c3604</code><button class="copy" type="button" data-copy="deae494e4c75c99a45aeaf4f380da7820ab683f253b708cf4629bac1ba6c3604">copy</button></div>
+          <div class="hash"><span class="k">CircleRoom.exe</span><code>f5d17cb9d56b820b947581f8b0935c31c941d303b4bba37be5dc1e5ab1bb9abc</code><button class="copy" type="button" data-copy="f5d17cb9d56b820b947581f8b0935c31c941d303b4bba37be5dc1e5ab1bb9abc">copy</button></div>
         </div></li>
         <li><div>
           <h3><span data-th>สแกนเองอีกรอบ</span><span data-en>Scan it yourself</span></h3>
@@ -486,8 +488,8 @@ html[lang="th"] .maker h2{font-family:var(--f-text);font-size:clamp(28px,3.4vw,4
           <h3><span data-th>เช็คไฟล์ zip ก่อนแตกก็ได้</span><span data-en>Or check the zip before unzipping</span></h3>
           <p><span data-th>ใช้คำสั่งเดียวกันกับไฟล์ zip ในโฟลเดอร์ Downloads เช่น <code>Get-FileHash .\CircleRoom_Portable.zip</code></span>
              <span data-en>Same command on the zip in Downloads, e.g. <code>Get-FileHash .\CircleRoom_Portable.zip</code></span></p>
-          <div class="hash"><span class="k">Portable.zip</span><code>c5b2842d39094334938f51f5e9b95fd60ad52ed105e192ba7985bb1913f2ee79</code><button class="copy" type="button" data-copy="c5b2842d39094334938f51f5e9b95fd60ad52ed105e192ba7985bb1913f2ee79">copy</button></div>
-          <div class="hash"><span class="k">Lite.zip</span><code>b31750a0ef2406db1b02c4964ece8a318c331cacf10e40828fcd3f097bed958d</code><button class="copy" type="button" data-copy="b31750a0ef2406db1b02c4964ece8a318c331cacf10e40828fcd3f097bed958d">copy</button></div>
+          <div class="hash"><span class="k">Portable.zip</span><code>749a47269999d99fa47221736e5d3f7bf03de7b8b32f8417ae5ff5e384974632</code><button class="copy" type="button" data-copy="749a47269999d99fa47221736e5d3f7bf03de7b8b32f8417ae5ff5e384974632">copy</button></div>
+          <div class="hash"><span class="k">Lite.zip</span><code>a6bef07e6d47cb5611d1871ecf64bbcdf3c61e434f6205eafde164c3656869a0</code><button class="copy" type="button" data-copy="a6bef07e6d47cb5611d1871ecf64bbcdf3c61e434f6205eafde164c3656869a0">copy</button></div>
         </div></li>
       </ol>
       <p class="caution"><span data-th>โหลดจากเว็บนี้หรือ <a href="https://github.com/Godpoom/circle-room/releases">GitHub ของเรา</a> เท่านั้น ถ้าได้ไฟล์มาจากที่อื่นและตัวเลขไม่ตรง อย่าเปิดไฟล์นั้น</span>
@@ -644,7 +646,7 @@ html[lang="th"] .maker h2{font-family:var(--f-text);font-size:clamp(28px,3.4vw,4
 
 <footer>
   <div class="wrap">
-    <span>Circle Room <span class="js-ver">v1.0.2</span> · <a href="https://github.com/Godpoom/circle-room/releases">Releases</a> · <a href="https://github.com/Godpoom/circle-room/blob/main/THIRD_PARTY_NOTICES.md">Licenses</a></span>
+    <span>Circle Room <span class="js-ver">v1.0.3</span> · <a href="https://github.com/Godpoom/circle-room/releases">Releases</a> · <a href="https://github.com/Godpoom/circle-room/blob/main/THIRD_PARTY_NOTICES.md">Licenses</a></span>
     <span><span data-th>ทำในประเทศไทยโดย</span><span data-en>Made in Thailand by</span> <a href="https://huggingface.co/IAMPOOM" target="_blank" rel="noopener">IAMPOOM</a> · <a href="https://github.com/Godpoom/circle-room">github.com/Godpoom/circle-room</a></span>
   </div>
 </footer>
