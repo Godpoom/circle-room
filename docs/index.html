@@ -224,6 +224,9 @@ h1 .ln>span{display:inline-block}
 .score .ring{position:absolute;inset:0;width:100%;height:100%;transform:rotate(-90deg)}
 .score .ring line{stroke:var(--line-2);stroke-width:2;stroke-linecap:round;transition:stroke .25s var(--ease)}
 .score .ring line.on{stroke:#7fc8a9}
+.score .ring line.on.bad{stroke:var(--red)}
+.score.flagged b{color:var(--red)}
+.scannote{margin:var(--s3) 0;padding:10px 14px;border-left:2px solid var(--red);background:rgba(226,82,54,.07);color:var(--muted);font-size:14.5px;line-height:1.6}
 .score b{font-size:84px;position:relative}
 .score span{font-size:20px;position:relative;margin-top:-6px}
 .scan{font-size:12.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);margin:0 0 var(--s4)}
@@ -455,17 +458,17 @@ html[lang="th"] .maker h2{font-family:var(--f-text);font-size:clamp(28px,3.4vw,4
   <div class="wrap">
     <div>
       <p class="label"><b>✓</b> <span data-th>ตรวจความปลอดภัย</span><span data-en>Safety check</span></p>
-      <div class="score" id="score" aria-label="0 of 71 antivirus engines flagged the file">
-        <svg class="ring" viewBox="0 0 200 200" aria-hidden="true"></svg>
-        <b>0</b><span>/ 71</span>
+      <div class="score" id="score" aria-label="1 of 71 antivirus engines flagged the file">
+        <svg class="ring" viewBox="0 0 200 200" aria-hidden="true" data-flagged="1"></svg>
+        <b>1</b><span>/ 71</span>
       </div>
-      <p class="scan mono" aria-hidden="true"><span data-th>ตรวจแล้ว</span><span data-en>checked</span> <span class="js-checked">71</span>/71 · <span data-th>พบ</span><span data-en>flagged</span> 0</p>
-      <p class="pending"><span data-th>เวอร์ชัน 1.2.0 · กำลังรอผลสแกน</span><span data-en>Version 1.2.0 · scan pending</span></p>
-      <h2><span data-th>เวอร์ชันก่อนหน้า ไม่มีแอนตี้ไวรัสตัวไหนแจ้ง</span><span data-en>The previous version: nothing flagged</span></h2>
-      <p><span data-th>ผล 0/71 นี้เป็นของ <b>CircleRoom.exe 1.0.2</b> (สแกนวันที่ 21 ต.ค. 2026) ส่วนเวอร์ชันล่าสุด 1.2.0 เพิ่งออก กำลังรอผลสแกน ระหว่างนี้แนะนำให้สแกนไฟล์ที่คุณโหลดมาเองตามขั้นตอนด้านขวา</span>
-         <span data-en>This 0/71 is for <b>CircleRoom.exe 1.0.2</b> (scanned 21 Oct 2026). Version 1.2.0 has just shipped and its scan is pending; until then, please scan your download yourself using the steps on the right.</span></p>
-      <a class="vt" href="https://www.virustotal.com/gui/file/deae494e4c75c99a45aeaf4f380da7820ab683f253b708cf4629bac1ba6c3604" target="_blank" rel="noopener">
-        <span data-th>ดูรายงานของ 1.0.2 บน VirusTotal</span><span data-en>Open the 1.0.2 report on VirusTotal</span>
+      <p class="scan mono" aria-hidden="true"><span data-th>ตรวจแล้ว</span><span data-en>checked</span> <span class="js-checked">71</span>/71 · <span data-th>พบ</span><span data-en>flagged</span> 1</p>
+      <h2><span data-th>แอนตี้ไวรัส 1 ตัวแจ้งเตือน</span><span data-en>1 engine flagged it</span></h2>
+      <p><span data-th>เราส่ง <b>CircleRoom.exe</b> เวอร์ชัน 1.2.0 ให้ VirusTotal สแกนด้วยแอนตี้ไวรัส 71 ตัว ผลคือพบ 1 (สแกนวันที่ 23 ต.ค. 2026)</span>
+         <span data-en>We sent <b>CircleRoom.exe</b> 1.2.0 to VirusTotal, which ran it past 71 antivirus engines: 1 flagged it (scanned 23 Oct 2026).</span></p>
+      <p class="scannote"><span data-th>ตัวที่แจ้งคือ Microsoft (Trojan:Win32/Wacatac.C!ml) คำว่า !ml หมายถึงการคาดเดาด้วย machine learning ไม่ได้พบโค้ดอันตรายจริง มักเกิดกับโปรแกรมใหม่ที่ยังไม่มีลายเซ็นดิจิทัล ส่วนอีก 70 ตัวไม่พบอะไร เรากำลังแจ้ง Microsoft ให้ตรวจสอบว่าเป็นการแจ้งเตือนผิด (false positive) ถ้ากังวล แนะนำให้สแกนไฟล์ที่โหลดมาเองตามขั้นตอนด้านขวา</span><span data-en>The one engine is Microsoft (Trojan:Win32/Wacatac.C!ml). The !ml suffix means a machine-learning guess, not a match for known malicious code; it often hits new programs without a code-signing certificate. The other 70 found nothing. We are reporting it to Microsoft as a false positive. If in doubt, scan your own download using the steps on the right.</span></p>
+      <a class="vt" href="https://www.virustotal.com/gui/file/e6e413f77f933d7a62a10dc9a06d22baa551fabf13ed629426d7d609d04906e5" target="_blank" rel="noopener">
+        <span data-th>ดูรายงานบน VirusTotal</span><span data-en>Open the VirusTotal report</span>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg>
       </a>
     </div>
@@ -473,7 +476,7 @@ html[lang="th"] .maker h2{font-family:var(--f-text);font-size:clamp(28px,3.4vw,4
       <p class="label"><span data-th>อย่าเชื่อเราอย่างเดียว ตรวจเองได้ใน 1 นาที</span><span data-en>Don't just take our word for it</span></p>
       <ol class="checks">
         <li><div>
-          <h3><span data-th>เช็คว่าไฟล์ที่โหลดมาตรงกับที่เราปล่อย</span><span data-en>Check your file matches our release</span></h3>
+          <h3><span data-th>เช็คว่าไฟล์ที่โหลดมาเป็นไฟล์เดียวกับที่สแกน</span><span data-en>Check your file is the one we scanned</span></h3>
           <p><span data-th>แตกไฟล์ zip แล้วคลิกขวาในโฟลเดอร์ เลือก "Open in Terminal" แล้ววางคำสั่งนี้ ตัวเลขที่ได้ต้องตรงกับ SHA-256 ด้านล่างทุกตัว</span>
              <span data-en>Unzip, right-click inside the folder, choose "Open in Terminal" and paste this. The result must match the SHA-256 below exactly.</span></p>
           <div class="hash"><span class="k">PowerShell</span><code>Get-FileHash .\CircleRoom.exe</code><button class="copy" type="button" data-copy="Get-FileHash .\CircleRoom.exe">copy</button></div>
@@ -767,6 +770,9 @@ html[lang="th"] .maker h2{font-family:var(--f-text);font-size:clamp(28px,3.4vw,4
       l.setAttribute('x2', 100 + Math.cos(a) * 95); l.setAttribute('y2', 100 + Math.sin(a) * 95);
       ring.appendChild(l); ticks.push(l);
     }
+    var nbad = parseInt(ring.getAttribute('data-flagged') || '0', 10);  // flagged engines show red
+    for(var j = 0; j < nbad && j < ticks.length; j++) ticks[ticks.length - 1 - j].classList.add('bad');
+    if(nbad) ring.parentNode.classList.add('flagged');
     var checked = document.querySelector('.js-checked');
     var score = document.getElementById('score');
     function light(){

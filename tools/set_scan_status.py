@@ -3,7 +3,8 @@
 Pending (just released, not scanned yet):
   python tools/set_scan_status.py pending <ver> <exe_sha> <portable_sha> <lite_sha> <prev_ver> <prev_exe_sha> <prev_date_th> <prev_date_en>
 Scanned (after the VirusTotal result is in):
-  python tools/set_scan_status.py scanned <ver> <exe_sha> <portable_sha> <lite_sha> <flagged> <engines> <date_th> <date_en>
+  python tools/set_scan_status.py scanned <ver> <exe_sha> <portable_sha> <lite_sha> <flagged> <engines> <date_th> <date_en> [<note_th> <note_en>]
+  The optional note explains a detection (e.g. a machine-learning false positive).
 """
 import re
 import sys
@@ -43,19 +44,24 @@ if mode == "pending":
               f"> SHA-256 ของ `CircleRoom.exe` {ver}: `{exe}` ตรวจเองได้ด้วย `Get-FileHash .\\CircleRoom.exe` "
               f"และแนะนำให้สแกนไฟล์ที่โหลดมาอีกครั้งเพื่อความปลอดภัย\n")
 else:
-    flagged, engines, date_th, date_en = rest
-    head = f'''      <h2><span data-th>{"ไม่มีแอนตี้ไวรัสตัวไหนแจ้งว่าอันตราย" if flagged == "0" else f"แอนตี้ไวรัส {flagged} ตัวแจ้งเตือน"}</span><span data-en>{"No antivirus engine flagged it" if flagged == "0" else f"{flagged} engines flagged it"}</span></h2>
+    flagged, engines, date_th, date_en = rest[:4]
+    note_th, note_en = (rest[4], rest[5]) if len(rest) >= 6 else ("", "")
+    note = (f'''
+      <p class="scannote"><span data-th>{note_th}</span><span data-en>{note_en}</span></p>''' if note_th else "")
+    head = f'''      <h2><span data-th>{"ไม่มีแอนตี้ไวรัสตัวไหนแจ้งว่าอันตราย" if flagged == "0" else f"แอนตี้ไวรัส {flagged} ตัวแจ้งเตือน"}</span><span data-en>{"No antivirus engine flagged it" if flagged == "0" else (f"{flagged} engine flagged it" if flagged == "1" else f"{flagged} engines flagged it")}</span></h2>
       <p><span data-th>เราส่ง <b>CircleRoom.exe</b> เวอร์ชัน {ver} ให้ VirusTotal สแกนด้วยแอนตี้ไวรัส {engines} ตัว ผลคือพบ {flagged} (สแกนวันที่ {date_th})</span>
-         <span data-en>We sent <b>CircleRoom.exe</b> {ver} to VirusTotal, which ran it past {engines} antivirus engines: {flagged} flagged it (scanned {date_en}).</span></p>
+         <span data-en>We sent <b>CircleRoom.exe</b> {ver} to VirusTotal, which ran it past {engines} antivirus engines: {flagged} flagged it (scanned {date_en}).</span></p>{note}
       <a class="vt" href="https://www.virustotal.com/gui/file/{exe}" target="_blank" rel="noopener">
         <span data-th>ดูรายงานบน VirusTotal</span><span data-en>Open the VirusTotal report</span>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg>
       </a>'''
     sec = re.sub(r'<b>\d+</b><span>/ \d+</span>', f"<b>{flagged}</b><span>/ {engines}</span>", sec)
     sec = re.sub(r'aria-label="\d+ of \d+ antivirus', f'aria-label="{flagged} of {engines} antivirus', sec)
+    sec = re.sub(r'data-flagged="\d+"', f'data-flagged="{flagged}"', sec)
+    sec = re.sub(r'(<span data-en>flagged</span> )\d+', rf'\g<1>{flagged}', sec)
     step1 = ('<span data-th>เช็คว่าไฟล์ที่โหลดมาเป็นไฟล์เดียวกับที่สแกน</span><span data-en>Check your file is the one we scanned</span>')
     readme = (f"> **ตรวจความปลอดภัย:** VirusTotal สแกน `CircleRoom.exe` {ver} แล้ว **{flagged}/{engines}** "
-              f"([รายงาน](https://www.virustotal.com/gui/file/{exe}))\n"
+              f"([รายงาน](https://www.virustotal.com/gui/file/{exe})){(' ' + note_th) if note_th else ''}\n"
               f"> SHA-256 ของ `CircleRoom.exe`: `{exe}` ตรวจเองได้ด้วย `Get-FileHash .\\CircleRoom.exe` "
               f"และแนะนำให้สแกนไฟล์ที่โหลดมาอีกครั้งเพื่อความปลอดภัย\n")
 pend_start = sec.find('      <p class="pending">')
