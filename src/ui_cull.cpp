@@ -6,6 +6,8 @@
 #include <cstring>
 
 #include "gl_loader.h"
+#include "heal.h"
+#include "layers.h"
 #include "i18n.h"
 #include "image_io.h"
 #include "imgui.h"
@@ -152,6 +154,8 @@ static const uint32_t kGoodReasons = ai::R_GOOD_COMP | ai::R_SHARP | ai::R_GOOD_
 
 void CullView::shutdown() {
   if (searchTh_.joinable()) searchTh_.join();
+  if (save_.th.joinable()) save_.th.join();
+  save_.active = false;
   textQ_.release();
   an_.cancel();
   refAn_.cancel();
@@ -161,7 +165,7 @@ void CullView::shutdown() {
 }
 
 bool CullView::busy() const {
-  return an_.running() || refAn_.running() || batchActive_ || wantFrames_ || searchRunning_ || textQ_.ok();
+  return an_.running() || refAn_.running() || batchActive_ || save_.active || wantFrames_ || searchRunning_ || textQ_.ok();
 }
 
 void CullView::startSearch(const std::string& q) {
@@ -222,6 +226,7 @@ void CullView::clearThumbs() {
 void CullView::setFolder(const std::string& f) {
   if (f.empty() || an_.running()) return;
   folder_ = f;
+  excluded_.clear();
   photos_.clear();
   ranked_.clear();
   selected_ = -1;
@@ -256,6 +261,7 @@ void CullView::pump(CullHost& h, StyleLibrary& lib) {
   frame_++;
   loadsThisFrame_ = 0;
   wantFrames_ = false;
+  pumpSave(h);
   if (an_.poll()) {
     clearThumbs();
     photos_ = an_.takeResults();
@@ -558,6 +564,218 @@ void CullView::drawControls(CullHost& h, StyleLibrary& lib) {
   }
 }
 
+// ---------------------------------------------------------------- saving the picks
+std::vector<int> CullView::picks() const {
+  std::vector<int> out;
+  int n = shownCount();
+  for (int i = 0; i < n; i++)
+    if (!excluded_.count(ranked_[i].idx)) out.push_back(ranked_[i].idx);
+  return out;
+}
+
+// "name.jpg" -> "name (2).jpg" ... until the name is free: saving never overwrites anything.
+static std::string freePath(const std::string& dir, const std::string& stem, const std::string& ext) {
+  std::string p = dir + "\\" + stem + ext;
+  for (int k = 2; fileExists(p) && k < 10000; k++) p = dir + "\\" + stem + " (" + std::to_string(k) + ")" + ext;
+  return p;
+}
+
+static std::string extOf(const std::string& name) {
+  size_t d = name.find_last_of('.');
+  return d == std::string::npos ? std::string() : name.substr(d);
+}
+
+// Full-size render of an edited photo, the same way the editor exports it: AI region masks,
+// highlight recovery, magic-eraser patches and photo layers included.
+static bool renderEdited(Renderer& R, const std::string& path, const EditParams& p, const std::string& sc,
+                         ImageData& img, std::vector<uint8_t>& rgb, int& w, int& h, std::string& err) {
+  if (!R.upload(img, err)) return false;
+  R.clearMask();
+  R.clearRecover();
+  if (p.recover > 0) {
+    ai::Recovery rec;
+    if (ai::recoverFile(path, nullptr, true, rec, err) && rec.valid()) R.setRecover(rec.rgba.data(), rec.w, rec.h);
+  }
+  if (anyLayer(p)) {
+    ai::SegResult seg;
+    std::vector<float> guide;
+    std::vector<uint8_t> mask;
+    int mw = 0, mh = 0;
+    if (ai::segmentFile(path, seg, guide, mw, mh, err)) {
+      ai::buildMasks(seg, guide, mw, mh, p.layers, mask);
+      R.setMask(mask.data(), mw, mh);
+    }
+  }
+  HealStore hs;
+  LayerStore ls;
+  if (p.heals > 0) {
+    hs.parse(sc);
+    hs.sync(p, R, path, true);
+  }
+  if (anyImageLayer(p)) {
+    ls.parseStrokes(sc);
+    ls.sync(p, R, true);
+    ls.sync(p, R, false);
+  }
+  Geometry g = computeGeometry(p, R.srcW(), R.srcH(), R.orientation(), false);
+  w = g.outW;
+  h = g.outH;
+  rgb.assign((size_t)w * h * 3, 0);
+  R.exportBegin(p, w, h);
+  while (!R.exportStep(rgb.data())) {}
+  hs.clear(R);
+  ls.clear(R);
+  R.clearMask();
+  R.clearRecover();
+  return true;
+}
+
+void CullView::startSave(CullHost& h, const std::string& dst) {
+  if (dst.empty() || save_.active) return;
+  if (dst == folder_) {
+    h.toast(tr(T_SaveSameFolder));
+    return;
+  }
+  save_.items = picks();
+  if (save_.items.empty()) return;
+  save_.active = true;
+  save_.render = saveRender_;
+  save_.dst = dst;
+  save_.pos = 0;
+  save_.done = save_.failed = save_.stage = 0;
+}
+
+void CullView::pumpSave(CullHost& h) {
+  SaveJob& J = save_;
+  if (!J.active) return;
+  wantFrames_ = true;
+  if (J.stage == 0) {
+    if (J.pos >= J.items.size()) {
+      J.active = false;
+      std::string msg = std::string(tr(T_SavedPicks)) + " " + std::to_string(J.done) + " " + tr(T_PhotosUnit) + " : " + J.dst;
+      if (J.failed) {
+        char b[96];
+        snprintf(b, sizeof(b), tr(T_SaveFailedN), J.failed);
+        msg += "  (" + std::string(b) + ")";
+      }
+      h.toast(msg);
+      return;
+    }
+    const std::string& src = photos_[J.items[J.pos]].path;
+    J.sidecar.clear();
+    J.params = EditParams();
+    bool edited = readSidecar(src, J.sidecar);
+    if (edited) {
+      deserializeParams(J.sidecar, J.params, true);
+      edited = !isDefault(J.params);
+    }
+    if (!J.render || !edited) {  // untouched originals: an exact copy (and the edits as a sidecar)
+      std::string name = fileName(src);
+      std::string out = freePath(J.dst, name.substr(0, name.size() - extOf(name).size()), extOf(name));
+      if (copyFileU(src, out)) {
+        J.done++;
+        if (edited) writeTextFile(sidecarPath(out), J.sidecar);
+      } else {
+        J.failed++;
+      }
+      J.pos++;
+      return;
+    }
+    J.out = freePath(J.dst, fileStem(src), ".jpg");
+    J.ready = false;
+    J.stage = 1;
+    Renderer* R = h.aiRenderer();
+    int maxDim = R ? R->maxTextureSize() : 8192;
+    std::string path = src;
+    J.th = std::thread([&J, path, maxDim]() {
+      J.ok = loadImage(path, maxDim, J.img, J.err);
+      J.ready = true;
+    });
+    return;
+  }
+  if (!J.ready) return;
+  J.th.join();
+  if (J.stage == 1) {
+    Renderer* R = h.aiRenderer();
+    const std::string& src = photos_[J.items[J.pos]].path;
+    if (J.ok && R && renderEdited(*R, src, J.params, J.sidecar, J.img, J.rgb, J.w, J.h, J.err)) {
+      J.ready = false;
+      J.stage = 3;
+      J.th = std::thread([&J]() {
+        J.ok = writeImage(J.out, J.rgb.data(), J.w, J.h, false, 92, J.err);
+        std::vector<uint8_t>().swap(J.rgb);
+        J.ready = true;
+      });
+      return;
+    }
+    J.img.release();
+    J.failed++;
+  } else {
+    if (J.ok) J.done++;
+    else J.failed++;
+  }
+  J.stage = 0;
+  J.pos++;
+}
+
+void CullView::drawSaveBar(CullHost& h) {
+  float s = h.scale;
+  if (ranked_.empty()) return;
+  std::vector<int> pk = picks();
+  if (save_.active) {
+    char b[64];
+    snprintf(b, sizeof(b), tr(T_SavingPicks), (int)save_.pos + 1, (int)save_.items.size());
+    ImGui::ProgressBar(save_.items.empty() ? 1.f : (float)save_.pos / save_.items.size(), ImVec2(320 * s, 0), b);
+    ImGui::SameLine();
+    if (ImGui::Button(trId(T_Cancel, "cancelsave"))) save_.items.resize(save_.pos + (save_.stage ? 1 : 0));
+    return;
+  }
+  char label[96];
+  snprintf(label, sizeof(label), tr(T_SavePicks), (int)pk.size());
+  ImGui::BeginDisabled(pk.empty() || batchActive_);
+  if (uiPrimaryButton((std::string(label) + "###savepicks").c_str(), ImVec2(0, 0))) openSave_ = true;
+  ImGui::EndDisabled();
+  ImGui::SameLine();
+  ImGui::AlignTextToFramePadding();
+  ImGui::PushStyleColor(ImGuiCol_Text, pal::kMuted);
+  if (excluded_.empty()) {
+    ImGui::TextUnformatted(tr(T_SavePicksHint));
+  } else {
+    char b[96];
+    snprintf(b, sizeof(b), "%d %s  \xc2\xb7  %s", (int)excluded_.size(), tr(T_LeftOut), tr(T_SavePicksHint));
+    ImGui::TextUnformatted(b);
+  }
+  ImGui::PopStyleColor();
+
+  if (openSave_) {
+    ImGui::OpenPopup("###savepicksdlg");
+    openSave_ = false;
+  }
+  ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+  if (ImGui::BeginPopupModal(trId(T_SaveTitle, "savepicksdlg"), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+    char b[128];
+    snprintf(b, sizeof(b), tr(T_SaveBody), (int)pk.size());
+    ImGui::TextUnformatted(b);
+    ImGui::Dummy(ImVec2(0, 6 * s));
+    if (ImGui::RadioButton(tr(T_SaveRender), saveRender_)) saveRender_ = true;
+    ImGui::Indent(26 * s);
+    uiHint(tr(T_SaveRenderHint));
+    ImGui::Unindent(26 * s);
+    if (ImGui::RadioButton(tr(T_SaveCopy), !saveRender_)) saveRender_ = false;
+    ImGui::Indent(26 * s);
+    uiHint(tr(T_SaveCopyHint));
+    ImGui::Unindent(26 * s);
+    ImGui::Dummy(ImVec2(0, 8 * s));
+    if (uiPrimaryButton(trId(T_SaveGo, "savego"), ImVec2(260 * s, 0))) {
+      ImGui::CloseCurrentPopup();
+      startSave(h, pickFolderDialog(h.hwnd, folder_));
+    }
+    ImGui::SameLine();
+    if (ImGui::Button(trId(T_Cancel, "savecancel"))) ImGui::CloseCurrentPopup();
+    ImGui::EndPopup();
+  }
+}
+
 void CullView::drawGrid(CullHost& h) {
   float s = h.scale;
   ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -621,6 +839,10 @@ void CullView::drawGrid(CullHost& h) {
         ImGui::InvisibleButton("##cell", ImVec2(cell, cell + labelH));
         bool hov = ImGui::IsItemHovered();
         if (ImGui::IsItemClicked()) selected_ = i;
+        if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) {  // leave out of / put back into the picks
+          if (!excluded_.erase(e.idx)) excluded_.insert(e.idx);
+        }
+        bool out = excluded_.count(e.idx) != 0;
         if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0)) h.openInEditor(p.path);
         bool sel = i == selected_;
         ImVec2 a(p0.x + 6 * s, p0.y + 6 * s), b(p0.x + cell - 6 * s, p0.y + cell - 6 * s);
@@ -631,6 +853,16 @@ void CullView::drawGrid(CullHost& h) {
           float bw = b.x - a.x - 8 * s, bh = b.y - a.y - 8 * s, k = std::min(bw / tw, bh / th);
           float iw = tw * k, ih = th * k, ix = (a.x + b.x - iw) / 2, iy = (a.y + b.y - ih) / 2;
           dl->AddImage((ImTextureID)(intptr_t)tex, ImVec2(ix, iy), ImVec2(ix + iw, iy + ih));
+        }
+        if (out) {
+          dl->AddRectFilled(a, b, IM_COL32(10, 9, 8, 175), 2.f * s);
+          const char* t = tr(T_LeftOut);
+          ImVec2 ts = ImGui::CalcTextSize(t);
+          ImVec2 m((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f);
+          float k = 16 * s;
+          dl->AddLine(ImVec2(m.x - k, m.y - k - 10 * s), ImVec2(m.x + k, m.y + k - 10 * s), IM_COL32(255, 140, 120, 255), 2.5f);
+          dl->AddLine(ImVec2(m.x + k, m.y - k - 10 * s), ImVec2(m.x - k, m.y + k - 10 * s), IM_COL32(255, 140, 120, 255), 2.5f);
+          dl->AddText(ImVec2(m.x - ts.x * 0.5f, m.y + k), IM_COL32(255, 160, 140, 255), t);
         }
         if (sel) dl->AddRect(a, b, pal::kAccent, 2.f * s, 0, 1.5f);
         char badge[32];
@@ -701,6 +933,13 @@ void CullView::drawDetail(CullHost& h) {
   ImGui::PopFont();
   ImGui::SameLine();
   ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(pal::kAccent), "#%d", selected_ + 1);
+  if (selected_ < shownCount()) {
+    bool out = excluded_.count(e.idx) != 0;
+    if (uiPill(out ? trId(T_PutBack, "putback") : trId(T_LeaveOut, "leaveout"), out, out ? 0 : IM_COL32(255, 140, 120, 255))) {
+      if (out) excluded_.erase(e.idx);
+      else excluded_.insert(e.idx);
+    }
+  }
   w = ImGui::GetContentRegionAvail().x;
   auto bar = [&](int key, float v) {
     char b[16];
@@ -790,6 +1029,9 @@ void CullView::draw(CullHost& h, StyleLibrary& lib) {
   ImGui::SetCursorPos(ImVec2(14 * s, 12 * s));
   ImGui::BeginGroup();
   drawSearchBar(h);
+  ImGui::Dummy(ImVec2(0, 6 * s));
+  drawSaveBar(h);
+  ImGui::Dummy(ImVec2(0, 4 * s));
   ImGui::EndGroup();
   ImGui::BeginChild("##cullgrid", ImVec2(0, 0), ImGuiChildFlags_None);
   ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));

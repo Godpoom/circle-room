@@ -333,6 +333,33 @@
   X(T_MaxImgLayers, "Up to 4 photo layers", "เพิ่มได้สูงสุด 4 เลเยอร์") \
   X(T_NoLayers, "No layers yet. Add a photo to cut out and place on this one.", "ยังไม่มีเลเยอร์ เพิ่มภาพที่ต้องการตัดมาวางซ้อนบนภาพนี้") \
   X(T_PathTooLong, "File path is too long", "ชื่อไฟล์/โฟลเดอร์ยาวเกินไป") \
+  X(T_ModeCompose, "Compose", "ตัดต่อ") \
+  X(T_ComposeTip, "Layers, AI cut-outs and the magic eraser", "เลเยอร์ AI ตัดพื้นหลัง และยางลบมหัศจรรย์") \
+  X(T_ToolMagic, "Magic eraser", "ยางลบมหัศจรรย์") \
+  X(T_MagicTitle, "Magic eraser (AI)", "ยางลบมหัศจรรย์ (AI)") \
+  X(T_MagicHint, "Paint over anything you want gone, like people, wires or litter. AI fills the spot with matching background.", "ระบายทับสิ่งที่ไม่ต้องการ เช่น คน สายไฟ ขยะ แล้ว AI จะเติมพื้นหลังให้กลืนไปกับภาพ") \
+  X(T_MagicBusy, "AI is filling in...", "AI กำลังเติมพื้นหลัง...") \
+  X(T_MagicCount, "Spots removed: %d", "ลบไปแล้ว %d จุด") \
+  X(T_MagicClear, "Clear all", "ล้างทั้งหมด") \
+  X(T_MagicFailed, "Magic eraser failed", "ยางลบมหัศจรรย์ทำงานไม่สำเร็จ") \
+  X(T_NeedLayer, "Select a layer first", "เลือกเลเยอร์ก่อน") \
+  X(T_Tools, "Tools", "เครื่องมือ") \
+  X(T_SavePicks, "Save the picks (%d)", "บันทึกภาพที่คัดแล้ว (%d ภาพ)") \
+  X(T_SavePicksHint, "Right-click a photo to leave it out", "คลิกขวาที่ภาพเพื่อเอาออก") \
+  X(T_SaveTitle, "Save the best photos", "บันทึกภาพที่ดีที่สุด") \
+  X(T_SaveBody, "%d picked photos will be saved to a folder you choose. The rest are not touched.", "จะบันทึกภาพที่คัดไว้ %d ภาพลงโฟลเดอร์ที่คุณเลือก ส่วนภาพที่เหลือจะไม่ถูกแตะต้อง") \
+  X(T_SaveRender, "As JPEG with your edits", "เป็น JPEG พร้อมที่แต่งไว้") \
+  X(T_SaveRenderHint, "Edited photos are exported at full size; unedited ones are copied as they are.", "ภาพที่แต่งไว้จะส่งออกเต็มความละเอียด ภาพที่ไม่ได้แต่งจะคัดลอกไฟล์เดิม") \
+  X(T_SaveCopy, "Copy the original files", "คัดลอกไฟล์ต้นฉบับ") \
+  X(T_SaveCopyHint, "Exact copies; any edits go along as .pedit files.", "ได้ไฟล์เดิมทุกประการ ค่าที่แต่งไว้ติดไปเป็นไฟล์ .pedit") \
+  X(T_SaveGo, "Choose a folder and save", "เลือกโฟลเดอร์แล้วบันทึก") \
+  X(T_SaveSameFolder, "Choose a folder other than the photos' own", "เลือกโฟลเดอร์อื่นที่ไม่ใช่โฟลเดอร์ของภาพเดิม") \
+  X(T_SavingPicks, "Saving %d / %d", "กำลังบันทึก %d / %d") \
+  X(T_SavedPicks, "Saved", "บันทึกแล้ว") \
+  X(T_SaveFailedN, "%d could not be saved", "บันทึกไม่ได้ %d ภาพ") \
+  X(T_LeaveOut, "Leave this one out", "เอาภาพนี้ออก") \
+  X(T_PutBack, "Put it back", "ใส่กลับเข้าไป") \
+  X(T_LeftOut, "left out", "เอาออกแล้ว") \
   X(T_EditToCull, "Many photos? Try AI Cull", "มีภาพเยอะ? ลองคัดภาพด้วย AI") \
   X(T_CullGuideT, "Find your best shots", "หาภาพที่ดีที่สุดของคุณ") \
   X(T_CullGuide1, "Choose a folder of photos", "เลือกโฟลเดอร์ที่มีภาพ") \

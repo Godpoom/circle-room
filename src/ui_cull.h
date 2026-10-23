@@ -7,6 +7,7 @@
 #include <thread>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "ai/cull.h"
@@ -14,6 +15,7 @@
 #include "ai/text_query.h"
 #include "ai/auto_edit.h"
 #include "ai/highlight.h"
+#include "image_io.h"
 #include "renderer.h"
 
 struct CullHost {
@@ -87,6 +89,27 @@ class CullView {
   void startSearch(const std::string& q);
   void applySearch();
   int shownCount() const;
+  // Saving the picks: the shown top N minus the photos the user left out.
+  std::vector<int> picks() const;
+  void drawSaveBar(CullHost& h);
+  void startSave(CullHost& h, const std::string& dst);
+  void pumpSave(CullHost& h);
+  std::unordered_set<int> excluded_;  // photo indices left out of the picks
+  bool openSave_ = false, saveRender_ = true;
+  struct SaveJob {
+    bool active = false, render = true;
+    std::vector<int> items;
+    size_t pos = 0;
+    int done = 0, failed = 0, stage = 0;  // 0 next photo, 1 decoding, 3 encoding
+    std::string dst, out, sidecar, err;
+    EditParams params;
+    ImageData img;
+    std::vector<uint8_t> rgb;
+    int w = 0, h = 0;
+    bool ok = false;
+    std::thread th;
+    std::atomic<bool> ready{false};
+  } save_;
 
   std::string folder_, device_;
   ai::Analyzer an_, refAn_;

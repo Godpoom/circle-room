@@ -61,6 +61,9 @@ class Renderer {
   void setLayerImage(int id, const uint8_t* rgb, int w, int h);
   void setLayerMask(int id, const uint8_t* a, int w, int h);
   void dropLayer(int id);
+  // Magic-eraser patches (sRGB colour + coverage), applied in order under the layers.
+  void setHealPatch(int k, const uint8_t* rgba, int w, int h, float u0, float v0, float u1, float v1);
+  void truncateHeal(int n);
   void dropAllLayers();
   bool layerReady(int id) const { return lay_.count(id) && lay_.at(id).col; }
   void layerSize(int id, int& w, int& h) const;
@@ -99,6 +102,15 @@ class Renderer {
   };
   unsigned compose(const EditParams& p);  // texture to develop from: the source, or the composite
   std::map<int, LayerTex> lay_;
+  struct HealTex {
+    unsigned tex = 0;
+    float r[4] = {};
+  };
+  unsigned buildHeal(int n);  // source + first n patches
+  void allocLike(unsigned& tex);  // full-size texture in the source's format, with mips
+  std::vector<HealTex> heal_;
+  unsigned progP_ = 0, healTex_ = 0, healFbo_ = 0;
+  int healVer_ = 0, healBuiltN_ = -1, healBuiltVer_ = -1, compHeal_ = -1, compHealVer_ = -1;
   unsigned progC_ = 0, compTex_ = 0, compFbo_ = 0;
   bool src16_ = false, compValid_ = false;
   int layerVer_ = 0, compVer_ = -1;

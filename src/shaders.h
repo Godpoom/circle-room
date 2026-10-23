@@ -411,3 +411,18 @@ void main() {
   fragColor = vec4(c, 1.0);
 }
 )GLSL";
+
+// Magic-eraser patch: drawn with blending over a copy of the source (scissored to its rect).
+static const char* kPatchShader = R"GLSL(
+#version 330 core
+in vec2 vO;
+out vec4 fragColor;
+uniform sampler2D uP;
+uniform mat3 uSO;   // source uv -> oriented uv
+uniform vec4 uR;    // patch rect, oriented uv: x0, y0, x1, y1
+void main() {
+  vec2 t = ((uSO * vec3(vO, 1.0)).xy - uR.xy) / (uR.zw - uR.xy);
+  if (t.x < 0.0 || t.y < 0.0 || t.x > 1.0 || t.y > 1.0) discard;
+  fragColor = texture(uP, t);
+}
+)GLSL";

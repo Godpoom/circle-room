@@ -20,7 +20,7 @@ texts are in the [`LICENSES/`](LICENSES) folder**, which also ships inside every
 | `aesthetic_b32.bin`, `prompts.bin` | [LAION aesthetic predictor](https://github.com/LAION-AI/aesthetic-predictor) (converted with `tools/convert_head.py`); prompt embeddings made with CLIP (`tools/make_prompts.py`) | MIT | `LICENSES/LAION-aesthetic-predictor-MIT.txt` |
 | `mt_th_en_*.onnx`, `mt_vocab.bin` | [Helsinki-NLP/opus-mt-th-en](https://huggingface.co/Helsinki-NLP/opus-mt-th-en) via Xenova | Apache-2.0 | `LICENSES/opus-mt-th-en-Apache-2.0.txt` |
 | `upernet_convnext_t_ade_fp16.onnx` | [openmmlab/upernet-convnext-tiny](https://huggingface.co/openmmlab/upernet-convnext-tiny) (UperNet + [ConvNeXt](https://github.com/facebookresearch/ConvNeXt), weights from [MMSegmentation](https://github.com/open-mmlab/mmsegmentation)), exported with `tools/export_upernet.py` + `tools/fp16_onnx.py` | MIT (model card); ConvNeXt MIT; MMSegmentation Apache-2.0 | `LICENSES/ConvNeXt-MIT.txt`, `LICENSES/mmsegmentation-Apache-2.0.txt` |
-| `lama_inpaint.onnx` | [LaMa](https://github.com/advimman/lama) via [opencv/inpainting_lama](https://huggingface.co/opencv/inpainting_lama) (prepared with `tools/prepare_lama.py`) | Apache-2.0 | `LICENSES/LaMa-Apache-2.0.txt` |
+| `lama_inpaint.onnx` | [LaMa](https://github.com/advimman/lama) via [opencv/inpainting_lama](https://huggingface.co/opencv/inpainting_lama) (prepared with `tools/prepare_lama.py`); magic eraser and highlight recovery | Apache-2.0 | `LICENSES/LaMa-Apache-2.0.txt` |
 | `yunet.onnx` | [OpenCV Zoo YuNet](https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet) | MIT | `LICENSES/YuNet-MIT.txt` |
 
 ## Notes

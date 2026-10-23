@@ -1,5 +1,6 @@
 #include "params.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -44,6 +45,7 @@ void copyLayers(EditParams& dst, const EditParams& src) {
   std::memcpy(dst.layers, src.layers, sizeof(dst.layers));
   dst.recover = src.recover;
   std::memcpy(dst.img, src.img, sizeof(dst.img));
+  dst.heals = src.heals;
 }
 
 bool anyImageLayer(const EditParams& p) {
@@ -120,7 +122,7 @@ std::string serializeParams(const EditParams& pin, bool includeGeometry) {
     out += line;
   });
   if (includeGeometry) {
-    snprintf(line, sizeof(line), "rotate90=%d\nflipH=%d\nflipV=%d\n", p.rotate90, p.flipH, p.flipV);
+    snprintf(line, sizeof(line), "rotate90=%d\nflipH=%d\nflipV=%d\nheals=%d\n", p.rotate90, p.flipH, p.flipV, p.heals);
     out += line;
     for (int i = 0; i < kMaxLayers; i++) {
       snprintf(line, sizeof(line), "layer%dEnabled=%d\nlayer%dRegion=%d\nlayer%dInvert=%d\n", i, p.layers[i].enabled, i,
@@ -181,6 +183,7 @@ void deserializeParams(const std::string& text, EditParams& p, bool includeGeome
       if (k == "rotate90") { p.rotate90 = atoi(v.c_str()) & 3; continue; }
       if (k == "flipH") { p.flipH = atoi(v.c_str()) ? 1 : 0; continue; }
       if (k == "flipV") { p.flipV = atoi(v.c_str()) ? 1 : 0; continue; }
+      if (k == "heals") { p.heals = std::max(0, atoi(v.c_str())); continue; }
       if (k.size() > 6 && k.compare(0, 5, "layer") == 0 && k[5] >= '0' && k[5] < '0' + kMaxLayers) {
         LocalLayer& l = p.layers[k[5] - '0'];
         std::string field = k.substr(6);

@@ -250,7 +250,8 @@ bool Renderer::init(std::string& err) {
   progA_ = link(kVertexShader, kDevelopShader, err);
   progB_ = link(kVertexShader, kFinishShader, err);
   progC_ = link(kVertexShader, kComposeShader, err);
-  if (!progA_ || !progB_ || !progC_) return false;
+  progP_ = link(kVertexShader, kPatchShader, err);
+  if (!progA_ || !progB_ || !progC_ || !progP_) return false;
   glGenVertexArrays(1, &vao_);
   glGenTextures(1, &curveTex_);
   glBindTexture(GL_TEXTURE_2D, curveTex_);
@@ -281,6 +282,11 @@ void Renderer::shutdown() {
   compTex_ = compFbo_ = 0;
   if (progC_) glDeleteProgram(progC_);
   progC_ = 0;
+  truncateHeal(0);
+  if (healTex_) glDeleteTextures(1, &healTex_);
+  if (healFbo_) glDeleteFramebuffers(1, &healFbo_);
+  if (progP_) glDeleteProgram(progP_);
+  healTex_ = healFbo_ = progP_ = 0;
   if (srcTex_) glDeleteTextures(1, &srcTex_);
   if (curveTex_) glDeleteTextures(1, &curveTex_);
   if (vao_) glDeleteVertexArrays(1, &vao_);
@@ -392,8 +398,10 @@ bool Renderer::upload(ImageData& img, std::string& err) {
   orient_ = img.orientation;
   src16_ = img.is16;
   if (compTex_) glDeleteTextures(1, &compTex_);  // the composite follows the new source's size
-  compTex_ = 0;
+  if (healTex_) glDeleteTextures(1, &healTex_);
+  compTex_ = healTex_ = 0;
   compValid_ = false;
+  healBuiltN_ = -1;
   img.release();  // the pixels now live only in VRAM
   if (glGetError() != 0) { err = "GPU upload failed (out of video memory?)"; return false; }
   return true;
@@ -710,24 +718,115 @@ void Renderer::layerSize(int id, int& w, int& h) const {
   h = it == lay_.end() ? 0 : it->second.h;
 }
 
+void Renderer::allocLike(unsigned& tex) {
+  if (tex) return;
+  glGenTextures(1, &tex);
+  glBindTexture(GL_TEXTURE_2D, tex);
+  GLenum fmt = src16_ ? GL_RGBA16 : GL_SRGB8_ALPHA8;
+  int levels = 1;
+  for (int m = std::max(srcW_, srcH_); m > 1; m >>= 1) levels++;
+  if (glpTexStorage2D) glpTexStorage2D(GL_TEXTURE_2D, levels, fmt, srcW_, srcH_);
+  else glTexImage2D(GL_TEXTURE_2D, 0, fmt, srcW_, srcH_, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+  setTexParams(true);
+}
+
+void Renderer::setHealPatch(int k, const uint8_t* rgba, int w, int h, float u0, float v0, float u1, float v1) {
+  if (k < 0) return;
+  if ((int)heal_.size() <= k) heal_.resize(k + 1);
+  HealTex& H = heal_[k];
+  if (!H.tex) glGenTextures(1, &H.tex);
+  glBindTexture(GL_TEXTURE_2D, H.tex);
+  glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+  glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8_ALPHA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+  setTexParams(false);
+  H.r[0] = u0;
+  H.r[1] = v0;
+  H.r[2] = u1;
+  H.r[3] = v1;
+  healVer_++;
+}
+
+void Renderer::truncateHeal(int n) {
+  while ((int)heal_.size() > std::max(0, n)) {
+    if (heal_.back().tex) glDeleteTextures(1, &heal_.back().tex);
+    heal_.pop_back();
+  }
+  healVer_++;
+}
+
+unsigned Renderer::buildHeal(int n) {
+  if (healTex_ && healBuiltN_ == n && healBuiltVer_ == healVer_) return healTex_;
+  allocLike(healTex_);
+  if (!healFbo_) glGenFramebuffers(1, &healFbo_);
+  glBindFramebuffer(GL_FRAMEBUFFER, healFbo_);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, healTex_, 0);
+  glViewport(0, 0, srcW_, srcH_);
+  glBindVertexArray(vao_);
+  if (!src16_) glEnable(GL_FRAMEBUFFER_SRGB);
+  M3 so = invertM3(orientMatrix(orient_)), os = orientMatrix(orient_);
+  // 1) plain copy of the source (the compose shader with no layers)
+  unsigned P = progC_;
+  glUseProgram(P);
+  auto U = [&](const char* nm) { return glGetUniformLocation(P, nm); };
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, srcTex_);
+  glUniform1i(U("uSrc"), 0);
+  glUniform2f(U("uO0"), 0.f, 0.f);
+  glUniform2f(U("uO1"), 1.f, 1.f);
+  glUniformMatrix3fv(U("uSO"), 1, GL_TRUE, so.m);
+  glUniform1i(U("uN"), 0);
+  glDrawArrays(GL_TRIANGLES, 0, 3);
+  // 2) patches in order, each limited to its own rectangle
+  P = progP_;
+  glUseProgram(P);
+  glUniform1i(U("uP"), 0);
+  glUniform2f(U("uO0"), 0.f, 0.f);
+  glUniform2f(U("uO1"), 1.f, 1.f);
+  glUniformMatrix3fv(U("uSO"), 1, GL_TRUE, so.m);
+  glEnable(GL_BLEND);
+  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+  glEnable(GL_SCISSOR_TEST);
+  for (int k = 0; k < n; k++) {
+    const HealTex& H = heal_[k];
+    float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f;
+    for (int c = 0; c < 4; c++) {
+      float sx, sy;
+      apply(os, H.r[(c & 1) ? 2 : 0], H.r[(c & 2) ? 3 : 1], sx, sy);
+      x0 = std::min(x0, sx), x1 = std::max(x1, sx), y0 = std::min(y0, sy), y1 = std::max(y1, sy);
+    }
+    int px0 = std::max(0, (int)std::floor(x0 * srcW_) - 1), py0 = std::max(0, (int)std::floor(y0 * srcH_) - 1);
+    int px1 = std::min(srcW_, (int)std::ceil(x1 * srcW_) + 1), py1 = std::min(srcH_, (int)std::ceil(y1 * srcH_) + 1);
+    if (px1 <= px0 || py1 <= py0) continue;
+    glScissor(px0, py0, px1 - px0, py1 - py0);
+    glBindTexture(GL_TEXTURE_2D, H.tex);
+    glUniform4f(U("uR"), H.r[0], H.r[1], H.r[2], H.r[3]);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+  }
+  glDisable(GL_SCISSOR_TEST);
+  glDisable(GL_BLEND);
+  glDisable(GL_FRAMEBUFFER_SRGB);
+  glBindTexture(GL_TEXTURE_2D, healTex_);
+  glGenerateMipmap(GL_TEXTURE_2D);
+  healBuiltN_ = n;
+  healBuiltVer_ = healVer_;
+  return healTex_;
+}
+
 unsigned Renderer::compose(const EditParams& p) {
+  int nh = 0;
+  while (nh < p.heals && nh < (int)heal_.size() && heal_[nh].tex) nh++;
+  unsigned base = nh ? buildHeal(nh) : srcTex_;
   const ImageLayer* use[kMaxImgLayers];
   int n = 0;
   for (const ImageLayer& l : p.img)
     if (l.enabled && !l.hidden && layerReady(l.id)) use[n++] = &l;
-  if (!n) return srcTex_;
-  if (compValid_ && compVer_ == layerVer_ && std::memcmp(compKey_, p.img, sizeof(compKey_)) == 0) return compTex_;
-  if (!compTex_) {
-    glGenTextures(1, &compTex_);
-    glBindTexture(GL_TEXTURE_2D, compTex_);
-    GLenum fmt = src16_ ? GL_RGBA16 : GL_SRGB8_ALPHA8;
-    int levels = 1;
-    for (int m = std::max(srcW_, srcH_); m > 1; m >>= 1) levels++;
-    if (glpTexStorage2D) glpTexStorage2D(GL_TEXTURE_2D, levels, fmt, srcW_, srcH_);
-    else glTexImage2D(GL_TEXTURE_2D, 0, fmt, srcW_, srcH_, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-    setTexParams(true);
-    if (!compFbo_) glGenFramebuffers(1, &compFbo_);
-  }
+  if (!n) return base;
+  if (compValid_ && compVer_ == layerVer_ && compHeal_ == nh && compHealVer_ == healVer_ &&
+      std::memcmp(compKey_, p.img, sizeof(compKey_)) == 0)
+    return compTex_;
+  allocLike(compTex_);
+  if (!compFbo_) glGenFramebuffers(1, &compFbo_);
   glBindFramebuffer(GL_FRAMEBUFFER, compFbo_);
   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, compTex_, 0);
   glViewport(0, 0, srcW_, srcH_);
@@ -736,7 +835,7 @@ unsigned Renderer::compose(const EditParams& p) {
   glBindVertexArray(vao_);
   auto U = [&](const char* nm) { return glGetUniformLocation(P, nm); };
   glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, srcTex_);
+  glBindTexture(GL_TEXTURE_2D, base);
   glUniform1i(U("uSrc"), 0);
   glUniform2f(U("uO0"), 0.f, 0.f);
   glUniform2f(U("uO1"), 1.f, 1.f);
@@ -781,6 +880,8 @@ unsigned Renderer::compose(const EditParams& p) {
   glGenerateMipmap(GL_TEXTURE_2D);
   std::memcpy(compKey_, p.img, sizeof(compKey_));
   compVer_ = layerVer_;
+  compHeal_ = nh;
+  compHealVer_ = healVer_;
   compValid_ = true;
   return compTex_;
 }

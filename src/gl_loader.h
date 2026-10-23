@@ -21,6 +21,8 @@ typedef char GLchar;
 #define GL_CULL_FACE 0x0B44
 #define GL_DEPTH_TEST 0x0B71
 #define GL_BLEND 0x0BE2
+#define GL_SRC_ALPHA 0x0302
+#define GL_ONE_MINUS_SRC_ALPHA 0x0303
 #define GL_SCISSOR_TEST 0x0C11
 #define GL_UNPACK_ROW_LENGTH 0x0CF2
 #define GL_UNPACK_ALIGNMENT 0x0CF5
@@ -68,6 +70,8 @@ typedef char GLchar;
   X(void, glClear, (GLbitfield mask)) \
   X(void, glEnable, (GLenum cap)) \
   X(void, glDisable, (GLenum cap)) \
+  X(void, glBlendFunc, (GLenum s, GLenum d)) \
+  X(void, glScissor, (GLint x, GLint y, GLsizei w, GLsizei h)) \
   X(void, glFinish, (void)) \
   X(void, glGenTextures, (GLsizei n, GLuint* t)) \
   X(void, glDeleteTextures, (GLsizei n, const GLuint* t)) \

@@ -175,6 +175,55 @@ void drawIcon(ImDrawList* dl, int icon, ImVec2 c, float size, ImU32 col) {
       }
       break;
     }
+    case IC_LAYERS: {  // two stacked sheets
+      ImVec2 a[4] = {P(c, r, 0, -0.75f), P(c, r, 0.85f, -0.3f), P(c, r, 0, 0.15f), P(c, r, -0.85f, -0.3f)};
+      dl->AddPolyline(a, 4, col, ImDrawFlags_Closed, t);
+      ImVec2 b[3] = {P(c, r, -0.85f, 0.15f), P(c, r, 0, 0.6f), P(c, r, 0.85f, 0.15f)};
+      dl->AddPolyline(b, 3, col, 0, t);
+      break;
+    }
+    case IC_MOVE: {  // mouse pointer with a small four-way cross: the move tool
+      ImVec2 q[7] = {P(c, r, -0.55f, -0.85f), P(c, r, 0.35f, 0.05f), P(c, r, -0.05f, 0.08f), P(c, r, 0.2f, 0.6f),
+                     P(c, r, 0.02f, 0.68f), P(c, r, -0.22f, 0.18f), P(c, r, -0.55f, 0.45f)};
+      dl->AddPolyline(q, 7, col, ImDrawFlags_Closed, t);
+      ImVec2 m = P(c, r, 0.55f, -0.45f);
+      float k = r * 0.3f;
+      dl->AddLine(ImVec2(m.x - k, m.y), ImVec2(m.x + k, m.y), col, t);
+      dl->AddLine(ImVec2(m.x, m.y - k), ImVec2(m.x, m.y + k), col, t);
+      break;
+    }
+    case IC_WAND: {  // wand with a sparkle at its tip
+      dl->AddLine(P(c, r, -0.8f, 0.8f), P(c, r, 0.2f, -0.2f), col, t * 1.6f);
+      ImVec2 o = P(c, r, 0.45f, -0.45f);
+      ImVec2 pts[8];
+      for (int i = 0; i < 8; i++) {
+        float a = i * kPi / 4 - kPi / 2, d = (i & 1) ? 0.12f : 0.45f;
+        pts[i] = ImVec2(o.x + std::cos(a) * d * r, o.y + std::sin(a) * d * r);
+      }
+      dl->AddConvexPolyFilled(pts, 8, col);
+      dl->AddCircleFilled(P(c, r, -0.15f, -0.7f), r * 0.1f, col);
+      dl->AddCircleFilled(P(c, r, 0.75f, 0.2f), r * 0.08f, col);
+      break;
+    }
+    case IC_ERASER: {  // tilted block, half filled
+      float cs = std::cos(-kPi / 4), sn = std::sin(-kPi / 4);
+      auto R2 = [&](float x, float y) { return P(c, r, x * cs - y * sn, x * sn + y * cs); };
+      ImVec2 q[4] = {R2(-0.8f, -0.35f), R2(0.8f, -0.35f), R2(0.8f, 0.35f), R2(-0.8f, 0.35f)};
+      dl->AddPolyline(q, 4, col, ImDrawFlags_Closed, t);
+      ImVec2 f[4] = {R2(-0.8f, -0.35f), R2(-0.1f, -0.35f), R2(-0.1f, 0.35f), R2(-0.8f, 0.35f)};
+      dl->AddConvexPolyFilled(f, 4, col);
+      break;
+    }
+    case IC_BRUSH: {  // round brush
+      dl->AddLine(P(c, r, 0.8f, -0.8f), P(c, r, -0.05f, 0.05f), col, t * 1.4f);
+      dl->AddCircleFilled(P(c, r, -0.35f, 0.35f), r * 0.38f, col);
+      break;
+    }
+    case IC_PLUS: {
+      dl->AddLine(P(c, r, -0.7f, 0), P(c, r, 0.7f, 0), col, t * 1.2f);
+      dl->AddLine(P(c, r, 0, -0.7f), P(c, r, 0, 0.7f), col, t * 1.2f);
+      break;
+    }
     case IC_LOGO: {  // the Circle Room mark: a paper ring with a safelight-red disc resting low inside, on a graphite tile
       float R = r;
       dl->AddRectFilled(P(c, R, -1, -1), P(c, R, 1, 1), pal::kRail, R * 0.44f);

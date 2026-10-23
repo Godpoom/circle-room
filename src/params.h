@@ -69,6 +69,7 @@ struct EditParams {
   LocalLayer layers[kMaxLayers];
   float recover;  // AI highlight recovery 0..100 (image specific)
   ImageLayer img[kMaxImgLayers];  // photo layers (image specific)
+  int heals;                       // magic-eraser patches in use (strokes live in HealStore)
 
   EditParams();
 };

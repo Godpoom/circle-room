@@ -26,6 +26,7 @@
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 #include "imgui_internal.h"
+#include "heal.h"
 #include "layers.h"
 #include "params.h"
 #include "platform_win.h"
@@ -231,6 +232,10 @@ struct App {
   int layerDrag = 0;    // 0 none, 1 move, 2 resize, 3 rotate, 4 brush
   ImageLayer layerStart;
   float dragX = 0, dragY = 0;  // drag start, oriented pixels of the base photo
+  // Magic eraser (LaMa fills painted strokes; patches lie under the layers)
+  HealStore heal;
+  HealStroke healPend;
+  int editPage = 1;  // page the Edit tab returns to after Compose
 };
 
 static App* g_app = nullptr;
@@ -266,7 +271,8 @@ static void frameOf(App& a, const EditParams& p, int& w, int& h) {
 static void saveSidecar(App& a) {
   if (!a.hasImage) return;
   writeSidecar(a.path, isDefault(a.params) ? std::string()
-                                           : serializeParams(a.params, true) + a.layers.serializeStrokes(a.params));
+                                           : serializeParams(a.params, true) + a.layers.serializeStrokes(a.params) +
+                                                 a.heal.serialize(a.params));
 }
 
 static void paramsReplaced(App& a) {
@@ -314,6 +320,8 @@ static void finishLoad(App& a) {
   if (readSidecar(a.path, sc)) deserializeParams(sc, p, true);
   a.layers.clear(a.R);
   a.layers.parseStrokes(sc);
+  a.heal.clear(a.R);
+  a.heal.parse(sc);
   a.selLayer = -1;
   a.layerDrag = 0;
   a.params = p;
@@ -839,8 +847,72 @@ static void layerCanvas(App& a, const Geometry& g, ImVec2 tl, float dW, float dH
     }
   }
 
+  // Magic-eraser strokes: the one being painted and those AI is still filling, in red.
+  {
+    M3 orToOut = invertM3(g.outToOriented);
+    auto orScreen = [&](float u, float v) {
+      float x, y;
+      applyM3(orToOut, u, v, x, y);
+      return ImVec2(tl.x + x * dW, tl.y + y * dH);
+    };
+    ImVec2 e0 = orScreen(0, 0), e1 = orScreen(1, 0);
+    float owScreen = std::hypot(e1.x - e0.x, e1.y - e0.y);
+    auto drawStroke = [&](const HealStroke& st, ImU32 col) {
+      float rad = std::max(1.f, st.radius * owScreen);
+      for (size_t k = 0; k + 1 < st.pts.size(); k += 2) {
+        ImVec2 q = orScreen(st.pts[k], st.pts[k + 1]);
+        dl->AddCircleFilled(q, rad, col, 24);
+        if (k >= 2) {
+          ImVec2 q0 = orScreen(st.pts[k - 2], st.pts[k - 1]);
+          dl->AddLine(q0, q, col, rad * 2.f);
+        }
+      }
+    };
+    const auto& hs = a.heal.strokes();
+    bool busyShown = false;
+    for (int k = 0; k < std::min(p.heals, (int)hs.size()); k++)
+      if (!a.heal.ready(k)) {
+        drawStroke(hs[k], IM_COL32(226, 82, 54, 110));
+        if (!busyShown && !hs[k].pts.empty()) {
+          ImVec2 q = orScreen(hs[k].pts[0], hs[k].pts[1]);
+          const char* msg = tr(T_MagicBusy);
+          ImVec2 ts = ImGui::CalcTextSize(msg);
+          dl->AddRectFilled(ImVec2(q.x - ts.x * 0.5f - 10, q.y - ts.y - 30), ImVec2(q.x + ts.x * 0.5f + 10, q.y - 16),
+                            IM_COL32(18, 17, 16, 225), 3.f);
+          dl->AddText(ImVec2(q.x - ts.x * 0.5f, q.y - ts.y - 23), pal::kText, msg);
+          busyShown = true;
+        }
+      }
+    if (a.layerDrag == 5) drawStroke(a.healPend, IM_COL32(226, 82, 54, 140));
+    // Press / drag / release of the magic eraser
+    if (a.layerTool == 3) {
+      float ox, oy, u, v;
+      mouseOut(ox, oy);
+      applyM3(g.outToOriented, ox, oy, u, v);
+      if (ImGui::IsItemActivated() && ImGui::IsMouseClicked(0)) {
+        a.healPend = HealStroke();
+        a.healPend.radius = a.brushPx * 0.5f / std::max(1.f, owScreen);
+        a.healPend.pts = {u, v};
+        a.layerDrag = 5;
+      } else if (a.layerDrag == 5 && active) {
+        float dx = u - a.healPend.pts[a.healPend.pts.size() - 2], dy = v - a.healPend.pts.back();
+        if (dx * dx + dy * dy > 1e-8f) {
+          a.healPend.pts.push_back(u);
+          a.healPend.pts.push_back(v);
+        }
+      }
+      if (a.layerDrag == 5 && !active) {
+        a.heal.add(p, a.R, std::move(a.healPend));
+        a.healPend = HealStroke();
+        a.layerDrag = 0;
+        a.er.changed = true;
+        a.er.commit = T_ToolMagic;
+      }
+    }
+  }
+
   // Brush cursor
-  bool brush = a.layerTool != 0 && a.selLayer >= 0;
+  bool brush = a.layerTool == 3 || (a.layerTool != 0 && a.selLayer >= 0);
   if (brush && (hovered || a.layerDrag == 4)) {
     dl->AddCircle(io.MousePos, a.brushPx * 0.5f, IM_COL32(0, 0, 0, 160), 0, 3.f);
     dl->AddCircle(io.MousePos, a.brushPx * 0.5f, a.layerTool == 1 ? pal::kText : pal::kAccent, 0, 1.5f);
@@ -854,7 +926,7 @@ static void layerCanvas(App& a, const Geometry& g, ImVec2 tl, float dW, float dH
   }
 
   // Press: grab a handle, start a stroke, or pick the layer under the mouse.
-  if (ImGui::IsItemActivated() && ImGui::IsMouseClicked(0)) {
+  if (a.layerTool != 3 && ImGui::IsItemActivated() && ImGui::IsMouseClicked(0)) {
     mouseOriented(a.dragX, a.dragY);
     if (brush) {
       ImageLayer& l = p.img[a.selLayer];
@@ -892,7 +964,7 @@ static void layerCanvas(App& a, const Geometry& g, ImVec2 tl, float dW, float dH
   }
 
   // Drag
-  if (a.layerDrag && active && a.selLayer >= 0) {
+  if (a.layerDrag && a.layerDrag != 5 && active && a.selLayer >= 0) {
     ImageLayer& l = p.img[a.selLayer];
     float mx, my;
     mouseOriented(mx, my);
@@ -921,7 +993,7 @@ static void layerCanvas(App& a, const Geometry& g, ImVec2 tl, float dW, float dH
     }
     a.er.changed = true;
   }
-  if (a.layerDrag && !active) {
+  if (a.layerDrag && a.layerDrag != 5 && !active) {
     a.er.commit = a.layerDrag == 4 ? T_LayerBrush : T_LayerEdit;
     a.layerDrag = 0;
   }
@@ -941,6 +1013,31 @@ static void drawLayersPanel(App& a) {
   EditParams& p = a.params;
   float s = a.scale;
   if (a.selLayer >= 0 && (a.selLayer >= kMaxImgLayers || !p.img[a.selLayer].enabled)) a.selLayer = -1;
+  if ((a.layerTool == 1 || a.layerTool == 2) && a.selLayer < 0) a.layerTool = 0;
+  if (a.layerTool == 3) {
+    uiCardBegin("##magic", tr(T_MagicTitle), false);
+    uiHint(tr(T_MagicHint));
+    ImGui::Dummy(ImVec2(0, 2.f * s));
+    EditResult dummy;
+    uiSlider(dummy, T_BrushSize, "msz", &a.brushPx, 4, 800, 60, "%.0f px");
+    if (a.heal.busy(p)) {
+      ImGui::PushStyleColor(ImGuiCol_Text, pal::kAccent);
+      ImGui::TextUnformatted(tr(T_MagicBusy));
+      ImGui::PopStyleColor();
+    }
+    if (p.heals > 0) {
+      char buf[96];
+      snprintf(buf, sizeof(buf), tr(T_MagicCount), p.heals);
+      ImGui::TextUnformatted(buf);
+      ImGui::SameLine();
+      if (uiPill(trId(T_MagicClear, "mclr"), false)) {
+        p.heals = 0;
+        a.er.changed = true;
+        a.er.commit = T_MagicClear;
+      }
+    }
+    uiCardEnd();
+  }
   uiCardBegin("##imglayers", tr(T_PhotoLayers), false);
   if (uiPrimaryButton(trId(T_AddPhotoLayer, "addlayer"))) {
     for (const std::string& f : openImagesDialog(glfwGetWin32Window(a.win), a.S.lastDir)) addImageLayer(a, f);
@@ -1007,11 +1104,7 @@ static void drawLayersPanel(App& a) {
   ImageLayer& l = p.img[i];
   LayerAsset* A = a.layers.asset(l.id);
   uiCardBegin("##layertools", tr(T_SelectedLayer), false);
-  const char* tools[3] = {tr(T_ToolMove), tr(T_ToolErase), tr(T_ToolRestore)};
-  int t = uiSegmented("ltool", tools, 3, a.layerTool);
-  if (t >= 0) a.layerTool = t;
-  ImGui::Dummy(ImVec2(0, 2.f * s));
-  if (a.layerTool == 0) {
+  if (a.layerTool != 1 && a.layerTool != 2) {
     uiHint(tr(T_MoveHint));
   } else {
     EditResult dummy;
@@ -1555,7 +1648,41 @@ static void drawTopBar(App& a, float barH) {
 
   // Mode switch: Edit is a plain tab; AI Cull is a lit button so nobody can miss it.
   ImGui::SetCursorPos(ImVec2(x, std::floor((barH - fh) * 0.5f)));
-  if (uiTextToggle(tr(T_ModeEdit), a.mode == 0)) a.mode = 0;
+  bool composing = a.mode == 0 && a.page == PG_LAYERS;
+  if (uiTextToggle(tr(T_ModeEdit), a.mode == 0 && !composing)) {
+    a.mode = 0;
+    if (composing) setPage(a, a.editPage == PG_LAYERS ? PG_LIGHT : a.editPage);
+  }
+  ImGui::SameLine(0, 12.f * s);
+  {  // Compose: a main mode of its own, not just a page in the index
+    float bh = fh + 6.f * s;
+    centerY(barH, bh);
+    ImGui::PushFont(g_fontBold);
+    const char* cl = tr(T_ModeCompose);
+    float tw = ImGui::CalcTextSize(cl).x;
+    float iw = 16.f * s, bw = 14.f * s + iw + 8.f * s + tw + 16.f * s;
+    ImVec2 p0 = ImGui::GetCursorScreenPos();
+    bool clicked = ImGui::InvisibleButton("##composemode", ImVec2(bw, bh));
+    bool hov = ImGui::IsItemHovered();
+    ImVec2 p1(p0.x + bw, p0.y + bh);
+    if (composing) dl->AddRectFilled(p0, p1, pal::kText, 3.f * s);
+    else {
+      if (hov) dl->AddRectFilled(p0, p1, IM_COL32(255, 255, 255, 18), 3.f * s);
+      dl->AddRect(p0, p1, pal::kText, 3.f * s, 0, 1.5f);
+    }
+    ImU32 fg = composing ? pal::kInk : pal::kText;
+    drawIcon(dl, IC_LAYERS, ImVec2(p0.x + 14.f * s + iw * 0.5f, p0.y + bh * 0.5f), iw, fg);
+    dl->AddText(ImVec2(p0.x + 14.f * s + iw + 8.f * s, p0.y + (bh - ImGui::GetTextLineHeight()) * 0.5f), fg, cl);
+    ImGui::PopFont();
+    if (hov) ImGui::SetTooltip("%s", tr(T_ComposeTip));
+    if (clicked) {
+      a.mode = 0;
+      if (a.page != PG_LAYERS) {
+        a.editPage = a.page;
+        setPage(a, PG_LAYERS);
+      }
+    }
+  }
   ImGui::SameLine(0, 12.f * s);
   {
     float bh = fh + 6.f * s;
@@ -2115,7 +2242,7 @@ static void drawCanvas(App& a) {
   if (hovered && io.MouseWheel != 0.f)
     zoomAt(std::clamp(z * std::pow(1.2f, io.MouseWheel), std::min(fitZ, 1.f) * 0.25f, 16.f), io.MousePos);
   bool layerMode = a.page == PG_LAYERS && !crop;
-  bool layerOwns = layerMode && (a.layerDrag != 0 || (a.layerTool != 0 && a.selLayer >= 0));
+  bool layerOwns = layerMode && (a.layerDrag != 0 || a.layerTool == 3 || (a.layerTool != 0 && a.selLayer >= 0));
   if (!crop && !layerMode && hovered && ImGui::IsMouseDoubleClicked(0)) {
     if (a.view.fit) zoomAt(1.f, io.MousePos);
     else a.view.fit = true;
@@ -2239,6 +2366,40 @@ static void drawCanvasOverlays(App& a, ImVec2 c0, ImVec2 sz) {
     uiHistogram(a.histo, s, hw, hh, true);
   }
   if (a.cropMode) return;
+  if (a.page == PG_LAYERS) {  // tool palette down the left edge, like an image editor's toolbox
+    float bs = 38.f * s, pad = 6.f * s;
+    struct T { int icon, tool; const char* name; const char* key; };
+    const T tools[4] = {{IC_MOVE, 0, tr(T_ToolMove), "V"}, {IC_WAND, 3, tr(T_ToolMagic), "J"},
+                        {IC_ERASER, 1, tr(T_ToolErase), "E"}, {IC_BRUSH, 2, tr(T_ToolRestore), "B"}};
+    float ph = pad * 2 + bs * 5 + 10.f * s;
+    ImVec2 pp(c0.x + 14.f * s, c0.y + 14.f * s);
+    ImGui::SetCursorScreenPos(pp);
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32(24, 23, 21, 240));
+    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 3.f * s);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(pad, pad));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
+    ImGui::BeginChild("##composetools", ImVec2(bs + pad * 2, ph), ImGuiChildFlags_AlwaysUseWindowPadding,
+                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    ImDrawList* pdl = ImGui::GetWindowDrawList();
+    pdl->AddRect(pp, ImVec2(pp.x + bs + pad * 2, pp.y + ph), pal::kFrame, 3.f * s);
+    for (const T& t : tools) {
+      bool needLayer = t.tool == 1 || t.tool == 2;
+      char tip[160];
+      snprintf(tip, sizeof(tip), "%s  (%s)%s%s", t.name, t.key, needLayer && a.selLayer < 0 ? " - " : "",
+               needLayer && a.selLayer < 0 ? tr(T_NeedLayer) : "");
+      ImGui::PushID(t.tool);
+      ImGui::BeginDisabled(needLayer && a.selLayer < 0);
+      if (iconButton("##tool", t.icon, a.layerTool == t.tool, tip, bs)) a.layerTool = t.tool;
+      ImGui::EndDisabled();
+      ImGui::PopID();
+    }
+    ImGui::Dummy(ImVec2(0, 10.f * s));
+    if (iconButton("##addphoto", IC_PLUS, false, tr(T_AddPhotoLayer), bs))
+      for (const std::string& f : openImagesDialog(glfwGetWin32Window(a.win), a.S.lastDir)) addImageLayer(a, f);
+    ImGui::EndChild();
+    ImGui::PopStyleVar(3);
+    ImGui::PopStyleColor();
+  }
   const char* lb[6] = {tr(T_TbOriginal), tr(T_TbSplit), tr(T_TbFit), "1:1", tr(T_TbClip), tr(T_TbHisto)};
   float pad = 8.f * s, sep = 18.f * s;
   float tw = pad * 2 + sep * 2;
@@ -2601,6 +2762,12 @@ static void handleShortcuts(App& a) {
   for (int i = 0; i < std::min(9, (int)PG_COUNT) && !ctrl; i++)
     if (ImGui::IsKeyPressed((ImGuiKey)(ImGuiKey_1 + i), false)) setPage(a, i);
   if (!ctrl && PG_COUNT > 9 && ImGui::IsKeyPressed(ImGuiKey_0, false)) setPage(a, 9);
+  if (a.page == PG_LAYERS && !ctrl && !a.cropMode) {  // Photoshop-like tool keys
+    if (ImGui::IsKeyPressed(ImGuiKey_V, false)) a.layerTool = 0;
+    if (ImGui::IsKeyPressed(ImGuiKey_J, false)) a.layerTool = 3;
+    if (ImGui::IsKeyPressed(ImGuiKey_E, false) && a.selLayer >= 0) a.layerTool = 1;
+    if (ImGui::IsKeyPressed(ImGuiKey_B, false) && a.selLayer >= 0) a.layerTool = 2;
+  }
   if (a.page == PG_LAYERS && a.layerTool != 0) {  // brush size
     if (ImGui::IsKeyPressed(ImGuiKey_LeftBracket)) a.brushPx = std::max(4.f, a.brushPx / 1.15f);
     if (ImGui::IsKeyPressed(ImGuiKey_RightBracket)) a.brushPx = std::min(800.f, a.brushPx * 1.15f);
@@ -2857,6 +3024,13 @@ static int runHeadless(const std::vector<std::string>& args) {
       ai::buildMasks(seg, guide, mw, mh, p.layers, mask);
       R.setMask(mask.data(), mw, mh);
       printf("regions + masks: %.0f ms\n", ms(ts));
+    }
+    HealStore healStore;
+    if (p.heals > 0) {
+      auto th0 = Clock::now();
+      healStore.parse(t);
+      healStore.sync(p, R, args[2], true);
+      printf("magic eraser: %.0f ms\n", ms(th0));
     }
     LayerStore layerStore;
     if (anyImageLayer(p)) {
@@ -3371,6 +3545,11 @@ int main(int, char**) {
     if (a.recJob.active && a.recJob.done) finishRecover(a);
     updateMasks(a);
     if (a.hasImage && a.layers.sync(a.params, a.R)) a.maskVer++;
+    if (a.hasImage && a.heal.sync(a.params, a.R, a.path)) a.maskVer++;
+    {
+      std::string he = a.heal.takeError();
+      if (!he.empty()) showToast(a, std::string(tr(T_MagicFailed)) + ": " + he);
+    }
     if (!a.drops.empty()) {
       if (a.mode == 1) a.cull.onDrop(a.drops);
       else if (a.page == PG_LAYERS && a.hasImage)
