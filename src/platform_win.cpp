@@ -47,11 +47,16 @@ bool readFileBytes(const std::string& path, std::vector<unsigned char>& out) {
   return got == (size_t)size;
 }
 
+// Written next to the target and swapped in only once complete: a full disk or a crash
+// mid-write leaves the previous file intact instead of a truncated one.
 bool writeTextFile(const std::string& path, const std::string& text) {
-  FILE* f = ufopen(path, "wb");
+  std::string tmp = path + ".tmp";
+  FILE* f = ufopen(tmp, "wb");
   if (!f) return false;
   bool ok = fwrite(text.data(), 1, text.size(), f) == text.size();
-  fclose(f);
+  ok = (fclose(f) == 0) && ok;
+  if (ok) ok = replaceFileU(tmp, path);
+  if (!ok) deleteFileU(tmp);
   return ok;
 }
 
@@ -228,7 +233,7 @@ bool fileInfo(const std::string& path, unsigned long long& size, long long& mtim
 }
 
 bool replaceFileU(const std::string& from, const std::string& to) {
-  return MoveFileExW(utf8ToWide(from).c_str(), utf8ToWide(to).c_str(), MOVEFILE_REPLACE_EXISTING) != 0;
+  return MoveFileExW(utf8ToWide(from).c_str(), utf8ToWide(to).c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
 }
 
 bool setHiddenU(const std::string& path) {
@@ -295,6 +300,8 @@ std::string pickFolderDialog(void* hwnd, const std::string& initialDir) {
   if (SUCCEEDED(init)) CoUninitialize();
   return result;
 }
+
+void hardenDllSearch() { SetDllDirectoryW(L""); }
 
 void* getProcAddressU(const char* dll, const char* fn) {
   HMODULE h = GetModuleHandleA(dll);

@@ -49,6 +49,7 @@ class Analyzer {
 
  private:
   void run(bool preferGpu);
+  void runGuarded(bool preferGpu);
   std::string folder_;
   std::vector<std::string> files_;
   std::vector<PhotoInfo> results_;

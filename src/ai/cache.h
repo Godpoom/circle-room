@@ -42,5 +42,8 @@ class ThumbStore {
   FILE* f_ = nullptr;
 };
 bool readThumb(const std::string& folder, uint64_t off, uint32_t len, std::vector<uint8_t>& out);
+// Deletes only files this app creates for the folder: the analysis cache, thumbnails and the
+// AI overlays in .photoeditor_cache. Photos and .pedit edits are never touched. Returns the count.
+int clearFolderCache(const std::string& folder);
 
 }  // namespace ai

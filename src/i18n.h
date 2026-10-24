@@ -360,6 +360,9 @@
   X(T_LeaveOut, "Leave this one out", "เอาภาพนี้ออก") \
   X(T_PutBack, "Put it back", "ใส่กลับเข้าไป") \
   X(T_LeftOut, "left out", "เอาออกแล้ว") \
+  X(T_ClearCache, "Clear AI cache", "ล้าง cache AI") \
+  X(T_ClearCacheTip, "Deletes only this folder's AI analysis, thumbnails and AI fills; photos and edits stay. The folder is analysed again.", "ลบเฉพาะผลวิเคราะห์ AI ภาพย่อ และผลที่ AI เติมของโฟลเดอร์นี้ ภาพและค่าที่แต่งไว้ไม่ถูกลบ แล้วจะวิเคราะห์โฟลเดอร์ใหม่") \
+  X(T_CacheCleared, "AI cache cleared", "ล้าง cache AI แล้ว") \
   X(T_EditToCull, "Many photos? Try AI Cull", "มีภาพเยอะ? ลองคัดภาพด้วย AI") \
   X(T_CullGuideT, "Find your best shots", "หาภาพที่ดีที่สุดของคุณ") \
   X(T_CullGuide1, "Choose a folder of photos", "เลือกโฟลเดอร์ที่มีภาพ") \

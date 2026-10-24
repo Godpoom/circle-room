@@ -31,6 +31,7 @@
 #include "params.h"
 #include "platform_win.h"
 #include "renderer.h"
+#include "selftest.h"
 #include "ui_cull.h"
 #include "ui_icons.h"
 #include "ui_panels.h"
@@ -287,7 +288,12 @@ static void openImage(App& a, const std::string& path) {
   a.load.path = path;
   int maxDim = a.R.maxTextureSize();
   a.load.th = std::thread([&L = a.load, maxDim]() {
-    L.ok = loadImage(L.path, maxDim, L.img, L.err);
+    try {
+      L.ok = loadImage(L.path, maxDim, L.img, L.err);
+    } catch (const std::exception& e) {
+      L.ok = false;
+      L.err = e.what();
+    }
     L.done = true;
     glfwPostEmptyEvent();
   });
@@ -382,7 +388,12 @@ static void pumpExport(App& a) {
       if (a.R.exportStep(e.rgb.data())) {
         e.stage = 2;
         e.th = std::thread([&e]() {
-          e.ok = writeImage(e.path, e.rgb.data(), e.w, e.h, e.png, e.quality, e.err);
+          try {
+            e.ok = writeImage(e.path, e.rgb.data(), e.w, e.h, e.png, e.quality, e.err);
+          } catch (const std::exception& x) {
+            e.ok = false;
+            e.err = x.what();
+          }
           std::vector<uint8_t>().swap(e.rgb);
           e.done = true;
           glfwPostEmptyEvent();
@@ -551,7 +562,12 @@ static void startSegmentation(App& a) {
   a.segJob.done = false;
   a.segJob.path = a.path;
   a.segJob.th = std::thread([&J = a.segJob]() {
-    J.ok = ai::segmentFile(J.path, J.seg, J.guide, J.W, J.H, J.err);
+    try {
+      J.ok = ai::segmentFile(J.path, J.seg, J.guide, J.W, J.H, J.err);
+    } catch (const std::exception& e) {
+      J.ok = false;
+      J.err = e.what();
+    }
     J.done = true;
     glfwPostEmptyEvent();
   });
@@ -709,6 +725,11 @@ static void addImageLayer(App& a, const std::string& path) {
   if (!a.hasImage || path.empty()) return;
   if (path.size() >= (size_t)kLayerPathMax) {
     showToast(a, tr(T_PathTooLong));
+    return;
+  }
+  std::string why;
+  if (!layerPathAllowed(path, why)) {
+    showToast(a, std::string(tr(T_LoadFailed)) + ": " + fileName(path) + " (" + why + ")");
     return;
   }
   int slot = -1;
@@ -896,7 +917,7 @@ static void layerCanvas(App& a, const Geometry& g, ImVec2 tl, float dW, float dH
         a.layerDrag = 5;
       } else if (a.layerDrag == 5 && active) {
         float dx = u - a.healPend.pts[a.healPend.pts.size() - 2], dy = v - a.healPend.pts.back();
-        if (dx * dx + dy * dy > 1e-8f) {
+        if (dx * dx + dy * dy > 1e-8f && a.healPend.pts.size() < kMaxStrokePoints * 2) {
           a.healPend.pts.push_back(u);
           a.healPend.pts.push_back(v);
         }
@@ -1266,7 +1287,12 @@ static void startRecover(App& a) {
   a.recJob.segOk = a.seg.valid();
   if (a.recJob.segOk) a.recJob.seg = a.seg;  // regions split white sky from white sand
   a.recJob.th = std::thread([&J = a.recJob]() {
-    J.ok = ai::recoverFile(J.path, J.segOk ? &J.seg : nullptr, true, J.rec, J.err);
+    try {
+      J.ok = ai::recoverFile(J.path, J.segOk ? &J.seg : nullptr, true, J.rec, J.err);
+    } catch (const std::exception& e) {
+      J.ok = false;
+      J.err = e.what();
+    }
     J.done = true;
     glfwPostEmptyEvent();
   });
@@ -3448,6 +3474,7 @@ static int runAiRank(const std::vector<std::string>& args) {
 }
 
 int main(int, char**) {
+  hardenDllSearch();
   std::vector<std::string> args = commandLineArgs();
   if (args.size() >= 2 && args[1] == "--ai-rank") return runAiRank(args);
   if (args.size() >= 2 && args[1] == "--ai-style") return runAiStyle(args);
@@ -3457,6 +3484,7 @@ int main(int, char**) {
   if (args.size() >= 2 && args[1] == "--ai-auto") return runAiAuto(args);
   if (args.size() >= 2 && args[1] == "--ai-recover") return runAiRecover(args);
   if (args.size() >= 2 && args[1] == "--ai-tokcheck") return runTokCheck(args);
+  if (args.size() >= 2 && args[1] == "--selftest") return runSelfTest(args);
   if (args.size() >= 2 && (args[1] == "--export" || args[1] == "--bench")) return runHeadless(args);
 
   App a;

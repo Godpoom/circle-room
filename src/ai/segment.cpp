@@ -87,6 +87,7 @@ void makeGuide(const SmallImage& img, std::vector<float>& gray) {
 
 // Mean over a (2r+1)^2 window, clamped at the borders; separable running sums, O(N).
 void boxMean(const std::vector<float>& in, int w, int h, int r, std::vector<float>& out) {
+  r = std::max(0, r);  // a negative radius would index before the row
   std::vector<float> tmp(in.size());
   out.resize(in.size());
   for (int y = 0; y < h; y++) {

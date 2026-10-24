@@ -49,8 +49,9 @@ bool ortLoaded() { return g_api != nullptr; }
 static bool ortLoadLocked(std::string& err) {
   if (g_api) return true;
   std::wstring dll = utf8ToWide(aiDir() + "\\onnxruntime.dll");
-  // ALTERED_SEARCH_PATH: DirectML.dll next to onnxruntime.dll is found first.
-  g_dll = LoadLibraryExW(dll.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
+  // Its own imports (VC++ runtime, DirectML) come only from ai\ itself or System32: never from
+  // the current folder or PATH, where someone else's DLL could be waiting.
+  g_dll = LoadLibraryExW(dll.c_str(), nullptr, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32);
   if (!g_dll) {
     err = "cannot load ai\\onnxruntime.dll (missing file or Visual C++ runtime)";
     return false;

@@ -297,6 +297,7 @@ std::string HealStore::takeError() {
 
 void HealStore::add(EditParams& p, Renderer& R, HealStroke s) {
   int keep = std::clamp(p.heals, 0, (int)strokes_.size());
+  if (keep >= kMaxHeals || !cleanStroke(s.pts, s.radius, 0.f, 1.f, 0.5f, kMaxStrokePoints)) return;
   if ((int)strokes_.size() > keep) {
     strokes_.resize(keep);
     patches_.resize(keep);
@@ -360,6 +361,22 @@ bool HealStore::sync(const EditParams& p, Renderer& R, const std::string& photo,
     running_ = true;
     int maxDim = R.maxTextureSize();
     th_ = std::thread([this, before = std::move(before), st = std::move(st), photo, W, H, maxDim]() {
+      try {
+        work(before, st, photo, W, H, maxDim);
+      } catch (const std::exception& e) {
+        jobOut_.ready = false;
+        jobErr_ = e.what();
+      }
+      done_ = true;
+      if (g_layerWake) g_layerWake();
+    });
+    if (!wait) return changed;
+  }
+}
+
+void HealStore::work(const std::vector<HealPatch>& before, const HealStroke& st, const std::string& photo, int W,
+                     int H, int maxDim) {
+  {
       HealPatch& out = jobOut_;
       std::string cp = patchPath(photo, out.hash), err;
       int rx0, ry0, rx1, ry1;
@@ -398,10 +415,6 @@ bool HealStore::sync(const EditParams& p, Renderer& R, const std::string& photo,
         lama.release();
         ai::ortUnload();
       }
-      done_ = true;
-      if (g_layerWake) g_layerWake();
-    });
-    if (!wait) return changed;
   }
 }
 
@@ -445,7 +458,9 @@ void HealStore::parse(const std::string& text) {
         s.pts.push_back(y);
       }
     }
-    if (s.radius > 0 && !s.pts.empty()) {
+    // Each stroke costs a LaMa run and a rasterised mask at full size: keep them bounded.
+    if ((int)strokes_.size() < kMaxHeals && cleanStroke(s.pts, s.radius, 0.f, 1.f, 0.5f, kMaxStrokePoints) &&
+        strokeCost(s.pts, s.radius, 0.3f) <= kMaxStrokeCost) {
       strokes_.push_back(std::move(s));
       patches_.emplace_back();
     }

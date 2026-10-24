@@ -79,6 +79,15 @@ def main():
     print("  CircleRoom.exe          ", sha256(exe))
     print("  CircleRoom_Portable.zip ", sha256(full))
     print("  CircleRoom_Lite.zip     ", sha256(lite))
+    # SHA256SUMS.txt (attach to the release): every shipped binary and model, so anyone can
+    # check that ai\ DLLs and models were not swapped (Get-FileHash <file>).
+    sums = [(sha256(exe), "CircleRoom.exe"), (sha256(full), "CircleRoom_Portable.zip"), (sha256(lite), "CircleRoom_Lite.zip")]
+    sums += [(sha256(os.path.join(ai_dir, f)), "ai/" + f) for f in ai_files]
+    sums += [(sha256(os.path.join(vc_dir, f)), "ai/" + f) for f in VC]
+    with open(os.path.join(out_dir, "SHA256SUMS.txt"), "w", encoding="utf-8", newline="\n") as fh:
+        for h, name in sums:
+            fh.write(f"{h}  {name}\n")
+    print("  wrote", os.path.join(out_dir, "SHA256SUMS.txt"), f"({len(sums)} files)")
 
 
 if __name__ == "__main__":

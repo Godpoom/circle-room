@@ -44,6 +44,9 @@ class HealStore {
 
  private:
   void join();
+  // Worker body: the fill for one stroke into jobOut_ / jobErr_ (from the cache when possible).
+  void work(const std::vector<HealPatch>& before, const HealStroke& st, const std::string& photo, int W, int H,
+            int maxDim);
   std::vector<HealStroke> strokes_;
   std::vector<HealPatch> patches_;
   std::thread th_;

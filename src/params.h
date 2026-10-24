@@ -22,6 +22,11 @@ struct LocalLayer {
 // Another photo composited on top of this one (index 0 = bottom). Placed in EXIF-oriented
 // coordinates of the base photo, so crop / rotate / straighten keep it where it was put.
 constexpr int kMaxImgLayers = 4;
+constexpr int kMaxLayerId = 1 << 24;
+constexpr int kMaxLayerStrokes = 2000;  // eraser / restore strokes per photo layer
+constexpr int kMaxHeals = 100;          // magic-eraser strokes per photo
+constexpr int kMaxRegionId = 64;        // above any ai::Region
+constexpr unsigned long long kMaxSidecarBytes = 32ull << 20;
 constexpr int kLayerPathMax = 520;  // UTF-8 bytes
 enum { BLEND_NORMAL, BLEND_MULTIPLY, BLEND_SCREEN, BLEND_OVERLAY, BLEND_SOFTLIGHT, BLEND_DARKEN, BLEND_LIGHTEN, BLEND_COUNT };
 struct ImageLayer {
@@ -83,6 +88,8 @@ void copyLayers(EditParams& dst, const EditParams& src);
 bool anyLayer(const EditParams& p);
 bool anyImageLayer(const EditParams& p);  // enabled and not hidden
 bool sameImageLayers(const EditParams& a, const EditParams& b);
+// Forces every value finite and into a usable range (applied to everything read from disk).
+void sanitizeParams(EditParams& p);
 
 // Sidecar next to each photo ("photo.jpg.pedit"). Files from older builds (".lre") are still
 // read, and replaced by the new name on the next save.

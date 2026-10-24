@@ -75,5 +75,20 @@ class LayerStore {
   std::map<int, int> gen_;  // bumped whenever a layer's stroke list is cut back
 };
 
+// Brush strokes read from a sidecar are untrusted: these keep them finite, bounded and cheap.
+constexpr size_t kMaxStrokePoints = 20000;  // per stroke (a long, slow drag is ~2000)
+constexpr double kMaxStrokeCost = 60.0;     // per stroke, in (mask width)^2 pixel visits
+constexpr double kMaxLayerCost = 400.0;     // all strokes of one layer
+// Drops non-finite points, clamps the rest to [lo, hi], keeps at most maxPts points.
+// False when nothing usable is left or the radius is not in (0, maxRadius].
+bool cleanStroke(std::vector<float>& pts, float radius, float lo, float hi, float maxRadius, size_t maxPts);
+// Rasterising cost of a stroke (dabs every step * radius along it), in (mask width)^2 units.
+double strokeCost(const std::vector<float>& pts, float radius, float stepFrac);
+
+// Layer photos come from a path stored in the sidecar, which may have been written by someone
+// else. Only a local image file is opened: never a UNC / network share (opening \\host\share
+// would hand that host the user's Windows credentials), a device path or a stream.
+bool layerPathAllowed(const std::string& path, std::string& why);
+
 // Oriented 8-bit sRGB copy of a decoded photo, long edge <= maxDim.
 bool loadLayerPixels(const std::string& path, int maxDim, std::vector<uint8_t>& rgb, int& w, int& h, std::string& err);

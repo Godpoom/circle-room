@@ -1,5 +1,6 @@
 #include "ai/cache.h"
 
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 
@@ -9,6 +10,12 @@ namespace ai {
 
 static const char kMagic[4] = {'P', 'E', 'A', 'I'};
 static const uint32_t kVersion = 2;  // v2: adaptive neutral zones in ToneSig
+
+// Limits for files read back from disk. A folder can hold someone else's cache files, so a
+// damaged or crafted one must never make us allocate gigabytes or read past the data.
+static const uint64_t kMaxCacheBytes = 512ull << 20;  // ~200k photos at ~2.5 KB each
+static const uint32_t kMaxEntries = 200000;
+static const uint32_t kMaxThumbBytes = 8u << 20;       // thumbnails are ~20-60 KB JPEGs
 
 static std::string cachePath(const std::string& folder) { return folder + "\\.photoeditor_ai"; }
 static std::string thumbPath(const std::string& folder) { return folder + "\\.photoeditor_thumbs"; }
@@ -73,8 +80,34 @@ bool saveCache(const std::string& folder, const std::vector<PhotoInfo>& items) {
   return replaceFileU(tmp, cachePath(folder)) && setHiddenU(cachePath(folder));
 }
 
+// Smallest possible record: empty name plus every fixed-size field.
+static size_t minRecordBytes() {
+  PhotoInfo p;
+  return sizeof(uint32_t) + sizeof(p.size) + sizeof(p.mtime) + sizeof(p.w) + sizeof(p.h) + sizeof(p.shot) +
+         sizeof(p.feat) + sizeof(p.faces) + sizeof(p.faceSharp) + sizeof(p.faceArea) + sizeof(p.eyesOpen) + 1 +
+         sizeof(p.aesthetic) + sizeof(p.prompts) + sizeof(p.emb) + sizeof(p.tone) + sizeof(p.thumbOff) + sizeof(p.thumbLen);
+}
+
+static bool finite(const float* v, size_t n) {
+  for (size_t i = 0; i < n; i++)
+    if (!std::isfinite(v[i])) return false;
+  return true;
+}
+
+// Values that later feed sorting and maths: NaN would break std::sort's ordering.
+static bool plausible(const PhotoInfo& p) {
+  static_assert(sizeof(Features) % sizeof(float) == 0, "Features holds floats only");
+  return p.w >= 0 && p.h >= 0 && p.faces >= 0 && p.faces <= 1000 &&
+         finite((const float*)&p.feat, sizeof(p.feat) / sizeof(float)) && std::isfinite(p.faceSharp) &&
+         std::isfinite(p.faceArea) && std::isfinite(p.eyesOpen) && std::isfinite(p.aesthetic) &&
+         finite(p.prompts, P_COUNT) && finite(p.emb, kEmbDim) && finite(p.tone.v, kToneDim) && p.thumbLen <= kMaxThumbBytes;
+}
+
 bool loadCache(const std::string& folder, std::vector<PhotoInfo>& out) {
   out.clear();
+  unsigned long long fsize = 0;
+  long long mtime = 0;
+  if (!fileInfo(cachePath(folder), fsize, mtime) || fsize > kMaxCacheBytes) return false;  // too big: re-analyse
   std::vector<unsigned char> b;
   if (!readFileBytes(cachePath(folder), b)) return false;
   Reader r{b.data(), b.data() + b.size()};
@@ -85,6 +118,8 @@ bool loadCache(const std::string& folder, std::vector<PhotoInfo>& out) {
   r.pod(featSize);
   r.pod(n);
   if (!r.ok || std::memcmp(magic, kMagic, 4) != 0 || ver != kVersion || featSize != sizeof(Features)) return false;
+  // The count must fit in the bytes that follow; otherwise the file is damaged.
+  if (n > kMaxEntries || (size_t)(r.end - r.p) / minRecordBytes() < n) return false;
   out.reserve(n);
   for (uint32_t i = 0; i < n && r.ok; i++) {
     PhotoInfo p;
@@ -102,9 +137,28 @@ bool loadCache(const std::string& folder, std::vector<PhotoInfo>& out) {
     r.raw(p.emb, sizeof(p.emb));
     r.raw(&p.tone, sizeof(p.tone));
     r.pod(p.thumbOff); r.pod(p.thumbLen);
-    if (r.ok) out.push_back(std::move(p));
+    if (r.ok && plausible(p)) out.push_back(std::move(p));  // a bad entry is just analysed again
   }
+  if (!r.ok) out.clear();
   return r.ok;
+}
+
+int clearFolderCache(const std::string& folder) {
+  int n = 0;
+  for (const std::string& f : {cachePath(folder), cachePath(folder) + ".tmp", thumbPath(folder)})
+    n += deleteFileU(f) ? 1 : 0;
+  std::string dir = folder + "\\.photoeditor_cache";
+  for (const std::string& f : listFiles(dir, "")) {
+    std::string name = fileName(f);
+    auto ends = [&](const char* suf) {
+      size_t k = std::strlen(suf);
+      return name.size() >= k && name.compare(name.size() - k, k, suf) == 0;
+    };
+    bool ours = ends(".recover.png") || (ends(".png") && name.find(".heal-") != std::string::npos) ||
+                ends(".png.part") || ends(".tmp");
+    if (ours && deleteFileU(f)) n++;
+  }
+  return n;
 }
 
 bool ThumbStore::openAppend(const std::string& folder) {
@@ -128,12 +182,20 @@ void ThumbStore::close() {
 }
 
 bool readThumb(const std::string& folder, uint64_t off, uint32_t len, std::vector<uint8_t>& out) {
-  if (!len) return false;
+  out.clear();
+  if (!len || len > kMaxThumbBytes) return false;
   FILE* f = ufopen(thumbPath(folder), "rb");
   if (!f) return false;
-  out.resize(len);
-  bool ok = _fseeki64(f, (long long)off, SEEK_SET) == 0 && fread(out.data(), 1, len, f) == len;
+  // The slice must lie inside the file before anything is allocated.
+  bool ok = _fseeki64(f, 0, SEEK_END) == 0;
+  long long size = ok ? _ftelli64(f) : -1;
+  ok = ok && size >= 0 && off <= (uint64_t)size && len <= (uint64_t)size - off;
+  if (ok) {
+    out.resize(len);
+    ok = _fseeki64(f, (long long)off, SEEK_SET) == 0 && fread(out.data(), 1, len, f) == len;
+  }
   fclose(f);
+  if (!ok) out.clear();
   return ok;
 }
 

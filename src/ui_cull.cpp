@@ -176,7 +176,12 @@ void CullView::startSearch(const std::string& q) {
   searchDone_ = false;
   searchTh_ = std::thread([this] {
     std::string err;
-    searchOk_ = (textQ_.ok() || textQ_.load(err)) && textQ_.embed(pendingQuery_, pendingEmb_, &searchEnglish_, err);
+    try {
+      searchOk_ = (textQ_.ok() || textQ_.load(err)) && textQ_.embed(pendingQuery_, pendingEmb_, &searchEnglish_, err);
+    } catch (const std::exception& e) {
+      searchOk_ = false;
+      err = e.what();
+    }
     searchErr_ = err;
     searchDone_ = true;
   });
@@ -409,6 +414,15 @@ void CullView::drawControls(CullHost& h, StyleLibrary& lib) {
     if (ImGui::Button(trId(T_Analyze, "rescan"))) setFolder(folder_);
     ImGui::SameLine();
     ImGui::TextDisabled("%zu %s", photos_.size(), tr(T_PhotosUnit));
+    ImGui::BeginDisabled(save_.active || batchActive_);
+    if (ImGui::SmallButton(trId(T_ClearCache, "clearcache"))) {
+      clearThumbs();
+      int n = ai::clearFolderCache(folder_);
+      h.toast(std::string(tr(T_CacheCleared)) + " (" + std::to_string(n) + ")");
+      setFolder(folder_);  // analyse again from scratch
+    }
+    ImGui::EndDisabled();
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("%s", tr(T_ClearCacheTip));
   }
   if (!device_.empty()) uiHint((std::string(tr(T_Device)) + ": " + device_).c_str());
   uiCardEnd();
@@ -688,7 +702,12 @@ void CullView::pumpSave(CullHost& h) {
     int maxDim = R ? R->maxTextureSize() : 8192;
     std::string path = src;
     J.th = std::thread([&J, path, maxDim]() {
-      J.ok = loadImage(path, maxDim, J.img, J.err);
+      try {
+        J.ok = loadImage(path, maxDim, J.img, J.err);
+      } catch (const std::exception& e) {
+        J.ok = false;
+        J.err = e.what();
+      }
       J.ready = true;
     });
     return;
@@ -702,7 +721,12 @@ void CullView::pumpSave(CullHost& h) {
       J.ready = false;
       J.stage = 3;
       J.th = std::thread([&J]() {
-        J.ok = writeImage(J.out, J.rgb.data(), J.w, J.h, false, 92, J.err);
+        try {
+          J.ok = writeImage(J.out, J.rgb.data(), J.w, J.h, false, 92, J.err);
+        } catch (const std::exception& e) {
+          J.ok = false;
+          J.err = e.what();
+        }
         std::vector<uint8_t>().swap(J.rgb);
         J.ready = true;
       });

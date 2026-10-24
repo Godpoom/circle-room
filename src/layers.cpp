@@ -9,6 +9,7 @@
 #include "ai/wic_decode.h"
 #include "gl_loader.h"
 #include "image_io.h"
+#include "platform_win.h"
 #include "renderer.h"
 
 void (*g_layerWake)() = nullptr;
@@ -84,6 +85,52 @@ static void makeThumb(const std::vector<uint8_t>& rgb, int w, int h, int maxDim,
       for (int c = 0; c < 3; c++) out[((size_t)y * tw + x) * 3 + c] = (uint8_t)(s[c] / std::max(1u, n));
     }
   }
+}
+
+bool layerPathAllowed(const std::string& path, std::string& why) {
+  why = "only local image files can be layers";
+  if (path.size() < 4 || path.size() >= (size_t)kLayerPathMax) return false;
+  char d = path[0];
+  bool drive = ((d >= 'A' && d <= 'Z') || (d >= 'a' && d <= 'z')) && path[1] == ':' && (path[2] == '\\' || path[2] == '/');
+  if (!drive || path.find(':', 2) != std::string::npos) return false;  // also rules out \\?\, \\.\ and file:stream
+  size_t dot = path.find_last_of('.');
+  std::string ext = dot == std::string::npos ? "" : path.substr(dot + 1);
+  for (char& c : ext) c = (char)((c >= 'A' && c <= 'Z') ? c + 32 : c);
+  static const char* kExt[] = {"jpg", "jpeg", "jpe", "png", "bmp", "tif", "tiff", "gif", "tga", "psd"};
+  bool known = false;
+  for (const char* e : kExt) known |= ext == e;
+  if (!known) {
+    why = "not an image file";
+    return false;
+  }
+  unsigned long long size = 0;
+  long long mtime = 0;
+  if (isDirectory(path) || !fileInfo(path, size, mtime)) {
+    why = "file not found";
+    return false;
+  }
+  return true;
+}
+
+bool cleanStroke(std::vector<float>& pts, float radius, float lo, float hi, float maxRadius, size_t maxPts) {
+  if (!std::isfinite(radius) || radius <= 0.f || radius > maxRadius) return false;
+  std::vector<float> out;
+  out.reserve(std::min(pts.size(), maxPts * 2));
+  for (size_t i = 0; i + 1 < pts.size() && out.size() < maxPts * 2; i += 2) {
+    if (!std::isfinite(pts[i]) || !std::isfinite(pts[i + 1])) continue;
+    out.push_back(std::clamp(pts[i], lo, hi));
+    out.push_back(std::clamp(pts[i + 1], lo, hi));
+  }
+  pts.swap(out);
+  return !pts.empty();
+}
+
+double strokeCost(const std::vector<float>& pts, float radius, float stepFrac) {
+  double step = std::max((double)radius * stepFrac, 1.0 / 2048), area = std::min(3.14159 * radius * radius, 9.0);
+  double dabs = 1;
+  for (size_t i = 2; i + 1 < pts.size(); i += 2)
+    dabs += std::hypot(pts[i] - pts[i - 2], pts[i + 1] - pts[i - 1]) / step + 1;
+  return dabs * area;
 }
 
 LayerAsset* LayerStore::asset(int id) {
@@ -170,19 +217,32 @@ bool LayerStore::sync(const EditParams& p, Renderer& R, bool wait) {
       LayerAsset* A = slot.get();
       A->id = l.id;
       A->path = l.path;
+      if (!layerPathAllowed(A->path, A->err)) {
+        A->stage = -1;
+        continue;
+      }
       A->stage = 1;
       int maxDim = std::min(4096, R.maxTextureSize());
       A->th = std::thread([A, maxDim]() {
-        if (!loadLayerPixels(A->path, maxDim, A->rgb, A->w, A->h, A->err)) {
-          A->stage = -1;
+        try {
+          if (!loadLayerPixels(A->path, maxDim, A->rgb, A->w, A->h, A->err)) {
+            A->stage = -1;
+            wake();
+            return;
+          }
+          makeThumb(A->rgb, A->w, A->h, 160, A->thumb, A->tw, A->th2);
+          A->stage = 2;
           wake();
-          return;
+          std::string e2;
+          A->segOk = ai::segmentFile(A->path, A->seg, A->guide, A->gw, A->gh, e2);
+        } catch (const std::exception&) {  // out of memory: the layer fails, the app keeps running
+          A->segOk = false;
+          if (A->stage < 2) {
+            A->stage = -1;
+            wake();
+            return;
+          }
         }
-        makeThumb(A->rgb, A->w, A->h, 160, A->thumb, A->tw, A->th2);
-        A->stage = 2;
-        wake();
-        std::string e2;
-        A->segOk = ai::segmentFile(A->path, A->seg, A->guide, A->gw, A->gh, e2);
         A->stage = 4;
         wake();
       });
@@ -267,6 +327,7 @@ bool LayerStore::sync(const EditParams& p, Renderer& R, bool wait) {
 
 void LayerStore::beginStroke(ImageLayer& l, int erase, float radius, float hard, float x, float y) {
   std::vector<Stroke>& S = strokes_[l.id];
+  if (l.strokes >= kMaxLayerStrokes || !std::isfinite(radius) || !std::isfinite(x) || !std::isfinite(y)) return;
   if ((int)S.size() > l.strokes) {
     S.resize(std::max(0, l.strokes));
     gen_[l.id]++;
@@ -284,6 +345,7 @@ void LayerStore::extendStroke(const ImageLayer& l, float x, float y) {
   std::vector<Stroke>& S = strokes_[l.id];
   if (S.empty() || (int)S.size() != l.strokes) return;
   std::vector<float>& pts = S.back().pts;
+  if (pts.size() >= kMaxStrokePoints * 2 || !std::isfinite(x) || !std::isfinite(y)) return;
   float dx = x - pts[pts.size() - 2], dy = y - pts[pts.size() - 1];
   if (dx * dx + dy * dy < 1e-8f) return;
   pts.push_back(x);
@@ -315,12 +377,14 @@ std::string LayerStore::serializeStrokes(const EditParams& p) const {
 void LayerStore::parseStrokes(const std::string& text) {
   std::stringstream ss(text);
   std::string line;
+  std::map<int, double> cost;  // per layer id, against kMaxLayerCost
   while (std::getline(ss, line)) {
     if (line.compare(0, 6, "stroke") != 0) continue;
     if (!line.empty() && line.back() == '\r') line.pop_back();
     size_t eq = line.find('=');
     if (eq == std::string::npos) continue;
     int id = atoi(line.c_str() + 6);
+    if (id <= 0 || id >= kMaxLayerId) continue;
     Stroke s;
     std::stringstream ps(line.substr(eq + 1));
     std::string part;
@@ -337,7 +401,16 @@ void LayerStore::parseStrokes(const std::string& text) {
         s.pts.push_back(y);
       }
     }
-    if (!head && !s.pts.empty()) strokes_[id].push_back(std::move(s));
+    if (head || (strokes_.size() >= 64 && !strokes_.count(id))) continue;
+    // Layer uv may run a little past the layer; the mask is up to 1536 px wide.
+    if (!cleanStroke(s.pts, s.radius, -1.f, 2.f, 2.f, kMaxStrokePoints)) continue;
+    s.erase = s.erase ? 1 : 0;
+    s.hard = std::isfinite(s.hard) ? std::clamp(s.hard, 0.f, 1.f) : 0.5f;
+    double c = strokeCost(s.pts, s.radius, 0.25f);
+    std::vector<Stroke>& S = strokes_[id];
+    if (c > kMaxStrokeCost || cost[id] + c > kMaxLayerCost || (int)S.size() >= kMaxLayerStrokes) continue;
+    cost[id] += c;
+    S.push_back(std::move(s));
   }
 }
 

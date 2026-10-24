@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <new>
 
 #include "platform_win.h"
 
@@ -120,7 +121,13 @@ static void applyOrientation(SmallImage& im, int o) {
   im.h = oh;
 }
 
-bool decodeScaled(const std::string& path, int maxDim, SmallImage& out, DecodeInfo* info, std::string& err) {
+// Headers are untrusted: a few-KB file can claim billions of pixels.
+static const UINT kMaxSide = 1u << 17;
+static const uint64_t kMaxSourcePixels = 1000ull * 1000 * 1000;
+static const uint64_t kMaxDecodeBytes = 1024ull << 20;
+
+static bool decodeScaledImpl(const std::string& path, int maxDim, SmallImage& out, DecodeInfo* info, std::string& err) {
+  maxDim = std::max(1, maxDim);
   WicScope wic;
   IWICImagingFactory* f = wic.f;
   if (!f) { err = "WIC unavailable"; return false; }
@@ -133,7 +140,11 @@ bool decodeScaled(const std::string& path, int maxDim, SmallImage& out, DecodeIn
   ComPtr<IWICBitmapFrameDecode> fr;
   if (FAILED(dec->GetFrame(0, &fr))) { err = "no frame"; return false; }
   UINT W = 0, H = 0;
-  fr->GetSize(&W, &H);
+  if (FAILED(fr->GetSize(&W, &H)) || W == 0 || H == 0 || W > kMaxSide || H > kMaxSide ||
+      (uint64_t)W * H > kMaxSourcePixels) {
+    err = "image dimensions out of range";
+    return false;
+  }
   int orient = 1;
   int64_t shot = 0;
   {
@@ -154,7 +165,8 @@ bool decodeScaled(const std::string& path, int maxDim, SmallImage& out, DecodeIn
     UINT cw = dw, ch = dh;
     WICPixelFormatGUID fmt = GUID_WICPixelFormat24bppBGR;
     if (SUCCEEDED(tr->GetClosestSize(&cw, &ch)) && SUCCEEDED(tr->GetClosestPixelFormat(&fmt)) &&
-        IsEqualGUID(fmt, GUID_WICPixelFormat24bppBGR)) {
+        IsEqualGUID(fmt, GUID_WICPixelFormat24bppBGR) && cw > 0 && ch > 0 && cw <= W && ch <= H &&
+        (uint64_t)cw * 3 * ch <= kMaxDecodeBytes) {
       im.w = (int)cw;
       im.h = (int)ch;
       UINT stride = cw * 3;
@@ -164,6 +176,10 @@ bool decodeScaled(const std::string& path, int maxDim, SmallImage& out, DecodeIn
     }
   }
   if (!done) {
+    if ((uint64_t)dw * 3 * dh > kMaxDecodeBytes) {
+      err = "image too large";
+      return false;
+    }
     ComPtr<IWICBitmapScaler> sc;
     ComPtr<IWICFormatConverter> cv;
     if (FAILED(f->CreateBitmapScaler(&sc)) || FAILED(sc->Initialize(fr.p, dw, dh, WICBitmapInterpolationModeFant)) ||
@@ -191,6 +207,16 @@ bool decodeScaled(const std::string& path, int maxDim, SmallImage& out, DecodeIn
     info->shotTime = shot;
   }
   return true;
+}
+
+bool decodeScaled(const std::string& path, int maxDim, SmallImage& out, DecodeInfo* info, std::string& err) {
+  try {
+    return decodeScaledImpl(path, maxDim, out, info, err);
+  } catch (const std::bad_alloc&) {  // AI worker threads call this: never let it end the app
+    out = SmallImage();
+    err = "not enough memory for this image";
+    return false;
+  }
 }
 
 void resample(const SmallImage& in, float x0, float y0, float x1, float y1, int outW, int outH, SmallImage& out) {

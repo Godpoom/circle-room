@@ -129,7 +129,7 @@ void Analyzer::startFolder(const std::string& folder, bool preferGpu) {
   running_ = true;
   done_ = 0;
   total_ = 0;
-  th_ = std::thread([this, preferGpu] { run(preferGpu); });
+  th_ = std::thread([this, preferGpu] { runGuarded(preferGpu); });
 }
 
 void Analyzer::startFiles(const std::vector<std::string>& files, bool preferGpu) {
@@ -142,7 +142,21 @@ void Analyzer::startFiles(const std::vector<std::string>& files, bool preferGpu)
   running_ = true;
   done_ = 0;
   total_ = 0;
-  th_ = std::thread([this, preferGpu] { run(preferGpu); });
+  th_ = std::thread([this, preferGpu] { runGuarded(preferGpu); });
+}
+
+// Out of memory on some photo: end the job with what was analysed instead of ending the app.
+void Analyzer::runGuarded(bool preferGpu) {
+  try {
+    run(preferGpu);
+  } catch (const std::exception& e) {
+    {
+      std::lock_guard<std::mutex> lk(msgMutex_);
+      msg_ = std::string("analysis stopped: ") + e.what();
+    }
+    running_ = false;
+    finished_ = true;
+  }
 }
 
 float Analyzer::progress() const { return total_ > 0 ? (float)done_ / total_ : 0.f; }

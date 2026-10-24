@@ -22,6 +22,9 @@ bool replaceFileU(const std::string& from, const std::string& to);
 bool setHiddenU(const std::string& path);
 bool copyFileU(const std::string& from, const std::string& to);  // never overwrites
 
+// Takes the current directory out of the DLL search order (call first thing in main).
+void hardenDllSearch();
+
 std::string exeDir();
 std::string dirOf(const std::string& path);
 std::string fileName(const std::string& path);
