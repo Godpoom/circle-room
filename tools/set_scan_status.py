@@ -38,6 +38,11 @@ if mode == "pending":
         <span data-th>ดูรายงานของ {prev_ver} บน VirusTotal</span><span data-en>Open the {prev_ver} report on VirusTotal</span>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg>
       </a>'''
+    # The ring shows the previous version's clean result, matching the text beside it.
+    sec = re.sub(r'<b>\d+</b><span>/ \d+</span>', "<b>0</b><span>/ 71</span>", sec)
+    sec = re.sub(r'aria-label="\d+ of \d+ antivirus', 'aria-label="0 of 71 antivirus', sec)
+    sec = re.sub(r'data-flagged="\d+"', 'data-flagged="0"', sec)
+    sec = re.sub(r'(<span data-en>flagged</span> )\d+', r'\g<1>0', sec)
     step1 = ('<span data-th>เช็คว่าไฟล์ที่โหลดมาตรงกับที่เราปล่อย</span><span data-en>Check your file matches our release</span>')
     readme = (f"> **ตรวจความปลอดภัย:** เวอร์ชัน {ver} กำลังรอผลสแกน VirusTotal (เวอร์ชัน {prev_ver} ได้ 0/71 "
               f"[รายงาน](https://www.virustotal.com/gui/file/{prev_exe}))\n"
