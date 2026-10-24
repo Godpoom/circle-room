@@ -36,8 +36,11 @@
 html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--paper);font-family:var(--f-text);font-size:17px;line-height:1.72;
   -webkit-font-smoothing:antialiased;overflow-x:hidden}
-/* film grain */
-body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:50;opacity:.05;
+/* living background: safelight glow, tray ripples and dust (drawn by the script at the end) */
+#bg{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none;display:block}
+main,footer{position:relative;z-index:1}
+/* film grain (flickers like a projected print when motion is allowed) */
+body::before{content:"";position:fixed;inset:-50%;pointer-events:none;z-index:50;opacity:.05;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
 a{color:inherit}
 img{max-width:100%;display:block}
@@ -54,7 +57,7 @@ html[lang="en"] [data-en]{display:revert}
 /* ---------- top bar ---------- */
 .top{position:sticky;top:0;z-index:20;background:rgba(18,17,16,.86);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
 .top .wrap{display:flex;align-items:center;gap:var(--s5);height:60px}
-.brand{display:flex;align-items:center;gap:10px;text-decoration:none;font-family:var(--f-display);font-weight:600;font-size:25px;letter-spacing:.01em}
+.brand{display:flex;align-items:center;gap:10px;white-space:nowrap;flex:none;text-decoration:none;font-family:var(--f-display);font-weight:600;font-size:25px;letter-spacing:.01em}
 .brand img{width:30px;height:30px;border-radius:7px}
 .brand span{color:var(--red)}
 .top nav{margin-left:auto;display:flex;align-items:center;gap:var(--s5);font-size:15px}
@@ -104,7 +107,7 @@ h1 em{font-style:normal;color:var(--red)}
 .vf.bl{bottom:30px;left:-10px;border-bottom-width:1px;border-left-width:1px}
 
 /* ---------- steps ---------- */
-.steps{border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--bg-2)}
+.steps{border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:rgba(27,26,24,.74);backdrop-filter:blur(2px)}
 .steps .wrap{display:grid;grid-template-columns:220px 1fr 1fr 1fr;gap:0}
 .steps .head{padding:var(--s6) var(--s5) var(--s6) 0}
 .steps h2{font-family:var(--f-display);font-size:34px;line-height:1.05;margin:6px 0 0;font-weight:600}
@@ -210,6 +213,11 @@ footer a{color:var(--muted)}
 
 /* entrance */
 @media (prefers-reduced-motion:no-preference){
+  body::before{animation:grain .9s steps(6) infinite}
+  @keyframes grain{0%{transform:translate(0,0)}17%{transform:translate(-3%,2%)}33%{transform:translate(2%,-4%)}
+    50%{transform:translate(-4%,-1%)}67%{transform:translate(3%,3%)}83%{transform:translate(-1%,4%)}100%{transform:translate(0,0)}}
+}
+@media (prefers-reduced-motion:no-preference){
   .rise{opacity:0;transform:translateY(10px);animation:rise .6s var(--ease) forwards}
   .rise.d1{animation-delay:.06s}.rise.d2{animation-delay:.14s}.rise.d3{animation-delay:.22s}.rise.d4{animation-delay:.32s}
   @keyframes rise{to{opacity:1;transform:none}}
@@ -291,7 +299,7 @@ h1 .ln>span{display:inline-block}
 
 
 /* ---------- maker ---------- */
-.maker{padding:var(--s8) 0;border-top:1px solid var(--line);background:var(--bg-2)}
+.maker{padding:var(--s8) 0;border-top:1px solid var(--line);background:rgba(27,26,24,.74);backdrop-filter:blur(2px)}
 .maker .wrap{display:grid;grid-template-columns:5fr 7fr;gap:var(--s7);align-items:start}
 .maker h2{font-family:var(--f-display);font-weight:600;font-size:clamp(34px,4.2vw,54px);line-height:1;margin:var(--s3) 0 var(--s4);letter-spacing:-.01em}
 html[lang="th"] .maker h2{font-family:var(--f-text);font-size:clamp(28px,3.4vw,42px);line-height:1.3}
@@ -328,6 +336,7 @@ html[lang="th"] .maker h2{font-family:var(--f-text);font-size:clamp(28px,3.4vw,4
   .wrap{padding:0 var(--s4)}
   body{font-size:16px}
   .top nav a.hide-sm{display:none}
+  .top .wrap,.top nav{gap:var(--s4)}
   .hero{padding-top:var(--s6)}
   .lede{font-size:17px}
   .frame{padding:var(--s4)}
@@ -349,9 +358,13 @@ html[lang="th"] .maker h2{font-family:var(--f-text);font-size:clamp(28px,3.4vw,4
   .feat .head{flex-direction:column;gap:4px}
   .row.big h3{font-size:23px}
 }
+@media (max-width:400px){
+  .top nav a[href*="github"]{display:none}  /* keep the name and the language switch on one line */
+}
 </style>
 </head>
 <body>
+<canvas id="bg" aria-hidden="true"></canvas>
 
 <header class="top">
   <div class="wrap">
@@ -819,6 +832,105 @@ html[lang="th"] .maker h2{font-family:var(--f-text);font-size:clamp(28px,3.4vw,4
       io2.observe(cmp);
     }
   }
+})();
+</script>
+<script>
+// Living background. Three safelight glows drift on slow Lissajous paths (nudged by the pointer,
+// lifting as you scroll), thin rings spread like ripples in a developer tray, and dust floats in
+// the light. Half-resolution canvas, 30 fps, paused in background tabs; a still frame when the
+// visitor prefers reduced motion.
+(function(){
+  var c = document.getElementById('bg');
+  if(!c || !c.getContext) return;
+  var x = c.getContext('2d');
+  if(!x) return;
+  var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var K = 0.5, W = 1, H = 1, TAU = Math.PI * 2;
+  var lights = [
+    {rgb:'226,82,54',  a:.16, s:.62, px:.16, py:.20, ax:.14, ay:.10, fx:1/47, fy:1/61, ph:0},
+    {rgb:'184,60,37',  a:.15, s:.78, px:.86, py:.62, ax:.12, ay:.16, fx:1/59, fy:1/43, ph:2.1},
+    {rgb:'236,150,80', a:.07, s:.55, px:.50, py:1.0, ax:.26, ay:.07, fx:1/73, fy:1/53, ph:4.2}
+  ];
+  var dust = [], rings = [], nextRing = 1.2, mx = .5, my = .4, tx = .5, ty = .4;
+  function size(){
+    W = c.width = Math.max(1, Math.round(innerWidth * K));
+    H = c.height = Math.max(1, Math.round(innerHeight * K));
+    dust = [];
+    var n = Math.round(Math.min(70, Math.max(18, innerWidth * innerHeight / 26000)));
+    for(var i = 0; i < n; i++) dust.push({x:Math.random(), y:Math.random(), z:.25 + Math.random() * .75, ph:Math.random() * TAU});
+  }
+  function draw(t){
+    mx += (tx - mx) * .04; my += (ty - my) * .04;
+    var doc = document.documentElement, span = Math.max(1, doc.scrollHeight - innerHeight);
+    var sy = Math.min(1, Math.max(0, (window.scrollY || doc.scrollTop || 0) / span));
+    var M = Math.max(W, H);
+    x.clearRect(0, 0, W, H);
+    x.globalCompositeOperation = 'lighter';
+    var pos = [];
+    for(var i = 0; i < lights.length; i++){
+      var L = lights[i];
+      var cx = (L.px + L.ax * Math.sin(t * TAU * L.fx + L.ph) + (mx - .5) * .08) * W;
+      var cy = (L.py + L.ay * Math.cos(t * TAU * L.fy + L.ph) + (my - .5) * .06 - sy * .3) * H;
+      var R = L.s * M, g = x.createRadialGradient(cx, cy, 0, cx, cy, R);
+      g.addColorStop(0, 'rgba(' + L.rgb + ',' + L.a + ')');
+      g.addColorStop(.45, 'rgba(' + L.rgb + ',' + (L.a * .32).toFixed(3) + ')');
+      g.addColorStop(1, 'rgba(' + L.rgb + ',0)');
+      x.fillStyle = g;
+      x.fillRect(0, 0, W, H);
+      pos.push([cx, cy, R]);
+    }
+    x.globalCompositeOperation = 'source-over';
+    // ripples: a ring and two echoes, spreading and fading over 11 s
+    if(!reduce && t > nextRing){
+      rings.push({x:.12 + Math.random() * .76, y:.08 + Math.random() * .8, b:t});
+      nextRing = t + 3.5 + Math.random() * 3;
+    }
+    rings = rings.filter(function(r){ return t - r.b < 11; });
+    x.lineWidth = .8;
+    for(var k = 0; k < rings.length; k++){
+      var r = rings[k], age = (t - r.b) / 11;
+      for(var j = 0; j < 3; j++){
+        var q = age - j * .07;
+        if(q <= 0) continue;
+        var e = 1 - Math.pow(1 - q, 3);  // ease out: fast start, slow spread
+        x.strokeStyle = 'rgba(235,229,218,' + (.075 * (1 - q) * (1 - j * .3)).toFixed(4) + ')';
+        x.beginPath();
+        x.arc(r.x * W, r.y * H, e * M * .42, 0, TAU);
+        x.stroke();
+      }
+    }
+    // dust: drifts up and sways, and catches the light near a glow
+    for(var d = 0; d < dust.length; d++){
+      var p = dust[d];
+      var py = ((p.y - t * .007 * p.z) % 1 + 1) % 1, px = p.x + Math.sin(t * .35 * p.z + p.ph) * .012;
+      var X = px * W, Y = (py - sy * .15 * p.z) * H, lit = 0;
+      Y = ((Y % H) + H) % H;
+      for(var m = 0; m < pos.length; m++){
+        var dx = X - pos[m][0], dy = Y - pos[m][1];
+        lit = Math.max(lit, 1 - Math.sqrt(dx * dx + dy * dy) / (pos[m][2] * .7));
+      }
+      var a = .05 + .22 * p.z * (.35 + .65 * Math.max(0, lit));
+      x.fillStyle = 'rgba(245,214,190,' + a.toFixed(3) + ')';
+      var sz = .6 + p.z * 1.1;
+      x.fillRect(X, Y, sz, sz);
+    }
+  }
+  var t0 = performance.now(), last = 0, raf = 0;
+  function loop(now){
+    raf = requestAnimationFrame(loop);
+    if(now - last < 33) return;  // ~30 fps is plenty for drift this slow
+    last = now;
+    draw((now - t0) / 1000);
+  }
+  size();
+  addEventListener('resize', function(){ size(); if(reduce) draw(12); });
+  if(reduce){ draw(12); return; }
+  addEventListener('pointermove', function(e){ tx = e.clientX / innerWidth; ty = e.clientY / innerHeight; }, {passive:true});
+  document.addEventListener('visibilitychange', function(){
+    if(document.hidden){ cancelAnimationFrame(raf); raf = 0; }
+    else if(!raf){ last = 0; raf = requestAnimationFrame(loop); }
+  });
+  raf = requestAnimationFrame(loop);
 })();
 </script>
 </body>
