@@ -42,6 +42,8 @@ if mode == "pending":
     sec = re.sub(r'<b>\d+</b><span>/ \d+</span>', "<b>0</b><span>/ 71</span>", sec)
     sec = re.sub(r'aria-label="\d+ of \d+ antivirus', 'aria-label="0 of 71 antivirus', sec)
     sec = re.sub(r'data-flagged="\d+"', 'data-flagged="0"', sec)
+    sec = re.sub(r'data-total="\d+"', 'data-total="71"', sec)
+    sec = re.sub(r'(<span class="js-checked">)\d+(</span>/)\d+', r'\g<1>71\g<2>71', sec)
     sec = re.sub(r'(<span data-en>flagged</span> )\d+', r'\g<1>0', sec)
     step1 = ('<span data-th>เช็คว่าไฟล์ที่โหลดมาตรงกับที่เราปล่อย</span><span data-en>Check your file matches our release</span>')
     readme = (f"> **ตรวจความปลอดภัย:** เวอร์ชัน {ver} กำลังรอผลสแกน VirusTotal (เวอร์ชัน {prev_ver} ได้ 0/71 "
@@ -63,6 +65,8 @@ else:
     sec = re.sub(r'<b>\d+</b><span>/ \d+</span>', f"<b>{flagged}</b><span>/ {engines}</span>", sec)
     sec = re.sub(r'aria-label="\d+ of \d+ antivirus', f'aria-label="{flagged} of {engines} antivirus', sec)
     sec = re.sub(r'data-flagged="\d+"', f'data-flagged="{flagged}"', sec)
+    sec = re.sub(r'data-total="\d+"', f'data-total="{engines}"', sec)
+    sec = re.sub(r'(<span class="js-checked">)\d+(</span>/)\d+', rf'\g<1>{engines}\g<2>{engines}', sec)
     sec = re.sub(r'(<span data-en>flagged</span> )\d+', rf'\g<1>{flagged}', sec)
     step1 = ('<span data-th>เช็คว่าไฟล์ที่โหลดมาเป็นไฟล์เดียวกับที่สแกน</span><span data-en>Check your file is the one we scanned</span>')
     readme = (f"> **ตรวจความปลอดภัย:** VirusTotal สแกน `CircleRoom.exe` {ver} แล้ว **{flagged}/{engines}** "
