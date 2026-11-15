@@ -8,8 +8,8 @@
 
 > **Download:** https://godpoom.github.io/circle-room/ (or the [Releases](../../releases) page). Get `CircleRoom_Portable.zip` (with AI) or `CircleRoom_Lite.zip` (1.7 MB, no AI), unzip, and run `CircleRoom.exe`. Windows 10/11, 64-bit. No installer, no account.
 >
-> **Safety check:** version 1.3.0 is waiting for its VirusTotal scan (version 1.0.2 scored 0/71, [report](https://www.virustotal.com/gui/file/deae494e4c75c99a45aeaf4f380da7820ab683f253b708cf4629bac1ba6c3604))
-> SHA-256 of `CircleRoom.exe` 1.3.0: `84533589153d3ba2085ca5720e5839ba84dd409efc9fd8e0d117f08a937b7942`. Check yours with `Get-FileHash .\CircleRoom.exe`, and feel free to scan your download yourself.
+> **Safety check:** VirusTotal scanned `CircleRoom.exe` 1.3.0: **0/71** ([report](https://www.virustotal.com/gui/file/84533589153d3ba2085ca5720e5839ba84dd409efc9fd8e0d117f08a937b7942))
+> SHA-256 of `CircleRoom.exe`: `84533589153d3ba2085ca5720e5839ba84dd409efc9fd8e0d117f08a937b7942`. Check yours with `Get-FileHash .\CircleRoom.exe`, and feel free to scan your download yourself.
 
 ## Highlights
 - **Light on your PC:** a 3 MB exe that uses about 12–20 MB of RAM with a 24 MP photo open, and 0% CPU when idle. Every slider renders on the GPU.
