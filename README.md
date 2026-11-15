@@ -1,343 +1,335 @@
 # Circle Room
 
-โปรแกรมแต่งภาพที่เบาเครื่อง เขียนด้วย C++ + OpenGL (ประมวลผลบน GPU) + Dear ImGui พร้อมระบบ AI ที่ทำงานในเครื่อง (ไม่ส่งรูปขึ้นเน็ต)
+**English** · [ภาษาไทย](README.th.md)
 
-> **ดาวน์โหลดไปใช้เลย:** https://godpoom.github.io/circle-room/ (หรือหน้า [Releases](../../releases)) โหลด `CircleRoom_Portable.zip` (มี AI) หรือ `CircleRoom_Lite.zip` (1.4 MB ไม่มี AI) แตกไฟล์แล้วเปิด `CircleRoom.exe` (Windows 10/11 64 บิต)
+**A free, lightweight photo editor for Windows with on-device AI.** Edit with GPU-fast sliders, let AI pick your best shots, remove objects, cut out people, rebuild blown-out skies, and even let AI agents like Claude Code or Codex edit photos for you. Your photos never leave your computer.
+
+![Circle Room editing a photo](docs/assets/app_en.jpg)
+
+> **Download:** https://godpoom.github.io/circle-room/ (or the [Releases](../../releases) page). Get `CircleRoom_Portable.zip` (with AI) or `CircleRoom_Lite.zip` (1.4 MB, no AI), unzip, and run `CircleRoom.exe`. Windows 10/11, 64-bit. No installer, no account.
 >
-> repo นี้เก็บเฉพาะซอร์สโค้ด ไฟล์โมเดล AI (~490 MB) อยู่ในไฟล์ zip ของ Release ถ้าจะ build เอง ให้คัดลอกโฟลเดอร์ `ai\` จาก zip มาไว้ที่ `ai\` ของโปรเจกต์
-> ดูสัญญาอนุญาตของไลบรารีและโมเดลได้ที่ [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) (ข้อความสัญญาฉบับเต็มอยู่ในโฟลเดอร์ [LICENSES](LICENSES))
->
-> **ตรวจความปลอดภัย:** VirusTotal สแกน `CircleRoom.exe` 1.2.1 แล้ว **1/70** ([รายงาน](https://www.virustotal.com/gui/file/7c74c2af89eab72159733097a66b5fc1713e9c4d07110be1fd525ee14cc800f7)) ตัวที่แจ้งคือ SecureAge ซึ่งระบุแค่คำว่า Malicious ไม่มีชื่อมัลแวร์ เป็นการเดาจากลักษณะไฟล์ที่มักเกิดกับโปรแกรมใหม่ที่ยังไม่มีลายเซ็นดิจิทัล ส่วนอีก 69 ตัวไม่พบอะไร รวมถึง Microsoft ที่เคยเตือนผิดในเวอร์ชันก่อน เรากำลังแจ้ง SecureAge ว่าเป็นการแจ้งเตือนผิด (false positive) ถ้ากังวล แนะนำให้สแกนไฟล์ที่โหลดมาเองตามขั้นตอนด้านขวา
-> SHA-256 ของ `CircleRoom.exe`: `7c74c2af89eab72159733097a66b5fc1713e9c4d07110be1fd525ee14cc800f7` ตรวจเองได้ด้วย `Get-FileHash .\CircleRoom.exe` และแนะนำให้สแกนไฟล์ที่โหลดมาอีกครั้งเพื่อความปลอดภัย
+> **Safety check:** VirusTotal scanned `CircleRoom.exe` 1.2.1: **1/70** ([report](https://www.virustotal.com/gui/file/7c74c2af89eab72159733097a66b5fc1713e9c4d07110be1fd525ee14cc800f7)). The one engine is SecureAge, which reports only "Malicious" with no malware name: a generic guess that often hits new programs without a code-signing certificate. The other 69 found nothing, including Microsoft, which wrongly flagged an earlier version. We are reporting it to SecureAge as a false positive.
+> SHA-256 of `CircleRoom.exe`: `7c74c2af89eab72159733097a66b5fc1713e9c4d07110be1fd525ee14cc800f7`. Check yours with `Get-FileHash .\CircleRoom.exe`, and feel free to scan your download yourself.
 
-ได้ไฟล์ `bin\CircleRoom.exe` ขนาดประมาณ 3 MB ไม่ต้องติดตั้งอะไรเพิ่ม
-ระบบ AI ใช้ไฟล์ในโฟลเดอร์ `bin\ai\` เพิ่มอีกประมาณ 466 MB (ถ้าไม่มีโฟลเดอร์นี้ ตัวแก้ไขภาพยังใช้ได้ตามปกติ)
+## Highlights
+- **Light on your PC:** a 3 MB exe that uses about 12–20 MB of RAM with a 24 MP photo open, and 0% CPU when idle. Every slider renders on the GPU.
+- **AI that runs on your computer:** no cloud, no sign-up, nothing uploaded. Models load only while they work, then free their memory.
+- **AI Cull:** scores a whole folder (sharpness, closed eyes, exposure, composition, duplicates) and picks the best shots, about 30 photos per second.
+- **Auto edit:** recognises the scene (portrait, sunset, food, night...) and edits to match, for one photo or a whole folder at once.
+- **Magic eraser:** paint over people, wires or litter and AI fills in the background.
+- **Compose:** stack up to 4 photos as layers, with AI background removal, blend modes and colour matching.
+- **Local adjustments by AI:** brighten just the faces, deepen just the sky, without masking by hand.
+- **Rebuild blown highlights:** AI recreates detail in pure-white areas that sliders alone cannot bring back.
+- **Search photos by text:** "dog on the beach", "person with glasses" (English or Thai).
+- **Works with AI agents (MCP):** Claude Code, Codex, Cursor, Gemini CLI, VS Code and more can use every tool and see each result.
+- **Non-destructive:** originals are never changed; edits are saved next to each photo as a small `.pedit` file.
+- **English and Thai interface**, a built-in tutorial (F1), and in-app updates.
 
-## ผู้สร้าง
-ทำโดย **IAMPOOM** คนเดียวกับที่สร้าง **Circle Zone** โมเดลภาษา AI ขนาดเล็กที่ออกแบบและเทรนเองตั้งแต่ศูนย์ (ไทย/อังกฤษ)
+## Who made it
+Made by **IAMPOOM**, who also built **Circle Zone**, a small Thai/English language model designed and trained from scratch.
 - [CircleZone 2.0 (70M)](https://huggingface.co/IAMPOOM/CircleZone-2.0-70M)
 - [CircleZone 1.0 (33M)](https://huggingface.co/IAMPOOM/CircleZone-1.0-33M)
-- [ผลงานทั้งหมดบน Hugging Face](https://huggingface.co/IAMPOOM)
+- [All work on Hugging Face](https://huggingface.co/IAMPOOM)
 
-## ชื่อและโลโก้
-**Circle Room** โลโก้เป็น "วงกลมในห้อง": กรอบสี่เหลี่ยมมุมมนสีกราไฟต์ (ห้อง) มีวงแหวนสีกระดาษ (เลนส์/หน้าต่าง) และวงกลมสีแดงแบบไฟ safelight อยู่ต่ำข้างใน เหมือนพระอาทิตย์ตกในกรอบหน้าต่าง
-ไฟล์ต้นฉบับสร้างด้วย `tools/make_logo.py` ได้ `res/circleroom.ico` ที่ถูกฝังใน exe ผ่าน `res/circleroom.rc` (ไอคอนในแถบงาน, ข้อมูลไฟล์)
+## Getting started
+- Run `CircleRoom.exe`, then click the frame in the middle (or the folder button at the top), or drag a photo into the window. Supports JPEG, PNG (including 16-bit), BMP, TGA, PSD and GIF.
+- The first launch starts a 12-step tour that highlights each part of the screen. Replay it any time with the **?** button or F1.
+- **EN / TH** at the top right switches the language. **Aa** changes the text size (85–150%).
+- Edits never touch the original. They are saved as `photo.jpg.pedit` next to the photo and come back when you reopen it.
 
-## สอนใช้งานในตัวโปรแกรม (Tutorial)
-- เปิดโปรแกรมครั้งแรกจะมีทัวร์ 12 ขั้นขึ้นมาเอง ไฮไลต์ส่วนที่กำลังอธิบายพร้อมการ์ดคำอธิบาย ไม่ต้องอ่านเอกสารนี้
-  - ครอบคลุม: เปิดภาพ, สารบัญเครื่องมือ, สเกลปรับค่า, AI คลิกเดียว, เทียบก่อน/หลัง, ส่งออก และคัดภาพ AI ทั้ง 3 ขั้น
-  - ปุ่ม ถัดไป / ย้อนกลับ / ข้าม หรือใช้คีย์ ลูกศรซ้ายขวา, Enter และ Esc
-- เปิดดูอีกครั้งได้ทุกเมื่อด้วยปุ่ม **?** มุมขวาบน หรือกด F1
-- ปุ่ม **AI Cull / คัดภาพ AI** ที่แถบบนเป็นปุ่มกรอบสีแดง หน้าเริ่มต้นมีลิงก์ "มีภาพเยอะ? ลองคัดภาพด้วย AI" และหน้าคัดภาพครั้งแรกมีคู่มือ 3 ขั้น
+### The editor
+The look is a darkroom and camera body: warm graphite, paper-coloured text, and a red safelight accent used only for state. Numbers use Bahnschrift, the DIN font that ships with Windows, like the markings on a lens.
 
-## วิธีใช้
-- เปิด `bin\CircleRoom.exe` แล้วคลิกกรอบกลางจอ (หรือปุ่มโฟลเดอร์ด้านบน) หรือลากไฟล์ภาพมาวางในหน้าต่าง (JPEG / PNG / BMP / TGA / PSD / GIF รวมถึง PNG 16-bit)
-- ปุ่ม **EN / ไทย** ที่มุมขวาบนใช้สลับภาษา
-- การแต่งไม่ทับไฟล์ต้นฉบับ ค่าที่ปรับจะบันทึกไว้ในไฟล์ `ชื่อภาพ.jpg.pedit` ข้างภาพ เปิดภาพเดิมอีกครั้งค่าจะกลับมาเอง
-  (ไฟล์ `.pedit` จากเวอร์ชันก่อนยังอ่านได้ และจะถูกเปลี่ยนเป็น `.pedit` ในการบันทึกครั้งถัดไป)
-
-### หน้าตาโปรแกรม
-ธีม "ห้องมืด / ตัวกล้อง": สีกราไฟต์อุ่น ตัวอักษรสีกระดาษ และสีแดงแบบไฟ safelight ในห้องล้างฟิล์ม ใช้เฉพาะจุดที่บอกสถานะ
-ตัวเลขและหัวข้อใช้ฟอนต์ Bahnschrift (ฟอนต์ DIN ที่มากับ Windows) ให้อ่านคล้ายตัวเลขที่พิมพ์บนกล้องและเลนส์
-- **แถบบน:** โลโก้และชื่อ Circle Room, แท็บ แต่งภาพ / คัดภาพ AI, ปุ่มเปิดภาพ เลิกทำ ทำซ้ำ รีเซ็ต และปุ่ม **ส่งออก** (สีกระดาษ)
-- **ขนาดตัวอักษร:** ปุ่ม **Aa** มุมขวาบน เลือกได้ 85% / 100% / 115% / 130% / 150% ทั้งหน้าจอขยายตามสัดส่วน และจำค่าไว้ครั้งหน้า
-- **สารบัญด้านซ้าย:** หน้าเครื่องมือมีเลขกำกับ 01–09 เหมือนสารบัญหนังสือ แสดงทีละหน้า กดเลข 1–9 บนคีย์บอร์ดเพื่อสลับได้
-- **หัวข้อ:** แต่ละหน้าแบ่งเป็นหัวข้อมีเลข (01, 02 …) คั่นด้วยเส้นบาง และมีลิงก์ "รีเซ็ต" ทางขวาสำหรับรีเซ็ตเฉพาะหัวข้อนั้น
-- **สไลเดอร์:** ทำเป็นสเกลแบบที่สลักบนวงแหวนเลนส์ มีขีดทุก 10% ขีดยาวที่ค่าเริ่มต้น และลิ่มชี้ค่าปัจจุบัน
-  - ค่าที่เปลี่ยนจากค่าเริ่มต้นจะเป็นสีแดง พร้อมแถบแดงแสดงว่าห่างจากค่าเริ่มต้นเท่าไร
-  - ดับเบิลคลิกที่ชื่อหรือสเกลเพื่อรีเซ็ต
-  - Ctrl+คลิกที่สเกลเพื่อพิมพ์ตัวเลข
-- **ภาพ:** มีเส้นมุมแบบช่องมองภาพ ใต้ภาพมีชื่อไฟล์ ขนาด และ % ซูม เหมือนตัวอักษรที่พิมพ์ข้างฟิล์ม
-- **แถบใต้ภาพ:** ต้นฉบับ · แบ่งจอ | พอดีจอ · 1:1 | เตือนแสง · ฮิสโตแกรม (ปุ่มที่เปิดอยู่มีขีดแดงใต้คำ)
-- **ฮิสโตแกรม:** อยู่มุมขวาบนของภาพ เส้นสีกระดาษคือความสว่าง จุดที่มุมจะติดเมื่อมีส่วนที่มืด/สว่างจนสุด
-
-### เครื่องมือ (หน้าในแถบซ้าย)
-| หน้า | สิ่งที่ปรับได้ |
+| Page | What you can adjust |
 |---|---|
-| 1 AI | แต่งอัตโนมัติ, กู้ส่วนที่สว่างเกิน, แต่งตามภาพ Reference |
-| 2 แสง | การรับแสง, คอนทราสต์, ไฮไลต์/เงา (แบบ local), จุดขาว/จุดดำ + เส้นโค้ง RGB และแยก R/G/B (monotone spline) พร้อมฮิสโตแกรมด้านหลัง |
-| 3 สี | สมดุลแสงขาว (Bradford), ความสดของสี (ถนอมสีผิว), ความอิ่มตัว, ปรับทีละเฉดสี 8 ช่วง (เฉด/อิ่มตัว/สว่าง), ย้อมโทนสี (วงล้อสีเงา/กลาง/สว่าง/ทั้งภาพ + การผสม/สมดุล) |
-| 4 รายละเอียด | รายละเอียดเล็ก, คอนทราสต์เฉพาะจุด, ลดหมอก, ความคม (ปริมาณ/รัศมี/เฉพาะขอบ), ลดนอยส์ความสว่าง/สี |
-| 5 เอฟเฟกต์ | ขอบมืด, เกรนฟิล์ม |
-| 6 เฉพาะส่วน | ปรับเฉพาะใบหน้า/คน/ท้องฟ้า/ถนน ฯลฯ ที่ AI แยกให้ |
-| 7 ตัดต่อ | วางภาพอื่นซ้อน (เลเยอร์), AI ตัดพื้นหลัง, ยางลบมหัศจรรย์, ยางลบ, โหมดผสม (เปิดจากปุ่ม `ตัดต่อ` ด้านบนได้) |
-| 8 ครอป | ครอปแบบอิสระหรือล็อกสัดส่วน, ปรับให้ตรง ±45° (ครอปจะพอดีภาพเอง), หมุน 90°, พลิกภาพ (เข้าหน้านี้แล้วเข้าโหมดครอปเลย) |
-| 9 ลุค | ลุคสำเร็จรูป 6 แบบ (ชี้เมาส์เพื่อดูตัวอย่างสดบนภาพ) และบันทึกลุคของตัวเองได้ (`presets\*.plook`) |
-| 10 ประวัติ | ทุกขั้นที่แต่ง คลิกเพื่อย้อนกลับไปขั้นนั้น |
+| 1 AI | Auto edit, rebuild blown highlights, edit like reference photos, auto edit many photos |
+| 2 Light | Exposure, contrast, highlights/shadows (local), white/black point, RGB and per-channel curves over the histogram |
+| 3 Colour | White balance (Bradford), vibrance (protects skin), saturation, 8-band hue/saturation/luminance, colour grading wheels for shadows/midtones/highlights/global |
+| 4 Detail | Fine detail, local contrast, haze removal, sharpening (amount/radius/edges only), luminance and colour noise reduction |
+| 5 Effects | Vignette, film grain |
+| 6 Local | Adjust only faces, people, sky, road and other areas the AI finds |
+| 7 Layers | Photo layers, AI cut-outs, magic eraser, eraser, blend modes (also the **Compose** button at the top) |
+| 8 Crop | Free or fixed-ratio crop, straighten ±45° (the crop fits itself), rotate 90°, flip |
+| 9 Looks | 6 built-in looks (hover to preview on the photo) and your own saved looks (`presets\*.plook`) |
+| 10 History | Every step; click one to go back to it |
 
-ส่งออกเป็น JPEG/PNG (ย่อขนาดได้)
+Export to JPEG or PNG, optionally resized.
 
-### คีย์ลัด
-| คีย์ | การทำงาน |
+- **Sliders** look like the scale on a lens ring: ticks every 10%, a long tick at the default, a wedge at the current value. Changed values turn red. Double-click to reset, Ctrl+click to type a number.
+- **Under the photo:** Before · Split | Fit · 1:1 | Clipping warning · Histogram.
+
+### Shortcuts
+| Key | Action |
 |---|---|
-| Ctrl+O / Ctrl+E | เปิดภาพ / ส่งออก |
-| Ctrl+Z / Ctrl+Y | เลิกทำ / ทำซ้ำ |
-| 1 – 9, 0 | สลับหน้าเครื่องมือ (0 = หน้าที่ 10) |
-| [ / ] | ย่อ / ขยายแปรง (ยางลบเลเยอร์) |
-| Ctrl + / Ctrl − / Ctrl 0 | ขยาย / ย่อ / คืนขนาดตัวอักษร 100% |
-| `\` | สลับดูภาพต้นฉบับ |
-| Z หรือดับเบิลคลิกที่ภาพ | สลับพอดีจอ / 100% |
-| ล้อเมาส์ / ลาก | ซูม / เลื่อนภาพ |
-| R / Esc | เข้า / ออกโหมดครอป |
+| Ctrl+O / Ctrl+E | Open / Export |
+| Ctrl+Z / Ctrl+Y | Undo / Redo |
+| 1 – 9, 0 | Switch tool page (0 = page 10) |
+| [ / ] | Smaller / bigger brush (layer eraser) |
+| Ctrl + / Ctrl − / Ctrl 0 | Bigger / smaller / 100% text |
+| `\` | Show the original |
+| Z or double-click the photo | Fit / 100% |
+| Mouse wheel / drag | Zoom / pan |
+| R / Esc | Enter / leave crop mode |
 
-## AI คัดภาพ (แท็บ "คัดภาพ AI")
-1. เลือกโฟลเดอร์ (หรือลากโฟลเดอร์มาวาง) โปรแกรมจะวิเคราะห์ทุกภาพในพื้นหลัง
-2. เลือกจำนวนภาพที่จะแสดง: 10 / 50 / 100 / พิมพ์ตัวเลข / ทั้งหมด
-3. แต่ละภาพจะมีคะแนน 0–100 พร้อมเหตุผล เช่น เบลอ / หลับตา / สว่างเกิน / ภาพเอียง / วัตถุชิดขอบ / องค์ประกอบดี
-   - คะแนนแยกได้ 3 ส่วน: เทคนิค (คม แสง นอยส์), ความสวย และองค์ประกอบภาพ ปรับน้ำหนักแต่ละส่วนได้
-   - ภาพถ่ายรัวที่คล้ายกันจะถูกจัดเป็นกลุ่ม และเลือกเฉพาะใบที่ดีที่สุดของกลุ่ม (ป้าย `x4` = กลุ่มนี้มี 4 ภาพ)
-4. ดับเบิลคลิกที่ภาพ หรือกด Enter เพื่อเปิดแต่งภาพ
-5. **เก็บเฉพาะภาพสวย:** คลิกขวาที่ภาพที่ไม่ชอบเพื่อเอาออก (หรือกด `เอาภาพนี้ออก` ในแผงขวา) แล้วกดปุ่ม **`บันทึกภาพที่คัดแล้ว (N ภาพ)`** เหนือ grid เลือกโฟลเดอร์ปลายทาง
-   - **เป็น JPEG พร้อมที่แต่งไว้:** ภาพที่แต่งไว้ส่งออกเต็มความละเอียด ภาพที่ไม่ได้แต่งคัดลอกไฟล์เดิม
-   - **คัดลอกไฟล์ต้นฉบับ:** ได้ไฟล์เดิมทุกประการ ค่าที่แต่งติดไปเป็นไฟล์ `.pedit`
-   - ไม่ลบ ไม่ย้าย และไม่เขียนทับไฟล์ใดๆ ถ้าชื่อซ้ำจะตั้งชื่อใหม่เป็น `ชื่อ (2).jpg`
-6. **ล้าง cache AI:** ปุ่ม `ล้าง cache AI` ใต้ปุ่มวิเคราะห์ ลบเฉพาะผลวิเคราะห์ ภาพย่อ และผลที่ AI เติมของโฟลเดอร์นั้น (ภาพและไฟล์ `.pedit` ไม่ถูกลบ) แล้ววิเคราะห์ใหม่
+## AI Cull (the "AI Cull" tab)
+1. Choose a folder (or drop one on the window). Every photo is analysed in the background.
+2. Choose how many to show: 10 / 50 / 100 / a number you type / all.
+3. Each photo gets a 0–100 score with reasons such as blurry, eyes closed, overexposed, tilted, subject cut by the edge, good composition.
+   - The score has three parts you can weight: technical (sharpness, light, noise), aesthetics, and composition.
+   - Bursts of similar shots are grouped and only the best of each group is picked (an `x4` badge means 4 similar photos).
+4. Double-click a photo or press Enter to edit it.
+5. **Keep only the good ones:** right-click photos you don't want to leave them out, then click **Save the picks (N)** and choose a folder.
+   - **As JPEG with your edits:** edited photos are exported at full size; unedited ones are copied as they are.
+   - **Copy the original files:** exact copies; any edits go along as `.pedit` files.
+   - Nothing is deleted, moved or overwritten. Name clashes become `name (2).jpg`.
+6. **Clear AI cache** deletes only that folder's analysis, thumbnails and AI fills (never photos or `.pedit` files) and analyses again.
 
-**โหมด "คล้าย Reference":** เพิ่มภาพตัวอย่างอย่างน้อย 5 ภาพ (กดปุ่ม หรือลากไฟล์มาวาง) จะจัดอันดับภาพที่ทั้งดีและคล้ายภาพตัวอย่าง ทั้งด้านฉาก/มุมมองและโทนสี
-- มีสไลเดอร์ "คุณภาพ / ความคล้าย" ให้เลือกว่าจะเน้นด้านไหน
-- กด "บันทึกเป็นสไตล์..." เพื่อเก็บชุด Reference ไว้ใช้ซ้ำ
+**"Like references" mode:** add at least 5 example photos and the ranking favours photos that are both good and similar to them, in scene and in colour. A Quality / Similarity slider sets the balance, and **Save as style...** keeps the set for later.
 
-**ค้นหาภาพด้วยข้อความ (พิมพ์ไทยได้):** พิมพ์ในช่องค้นหาด้านบน grid เช่น "สุนัข", "คนใส่แว่น", "ว่าวที่ชายหาด" แล้วกด Enter
-- ภาษาไทยจะถูกแปลเป็นอังกฤษก่อนในเครื่อง (opus-mt-th-en) แล้วเทียบกับภาพด้วย CLIP โดยใช้ผลวิเคราะห์เดิม ไม่ต้องวิเคราะห์ภาพใหม่
-- สไลเดอร์ "ความเข้มงวด" ใช้ซ่อนภาพที่ตรงน้อย และปุ่ม "หาภาพคล้ายภาพนี้" ในแผงขวาใช้ค้นหาจากภาพแทนข้อความได้
-- ผลค้นหาใช้กับปุ่มคัดลอกหรือปุ่มแต่งทั้งหมดได้เหมือนผลจัดอันดับ
-- โมเดลข้อความ (~170 MB) ถูกปล่อยออกจาก RAM เองหลังไม่ได้ค้นหา 60 วินาที
+**Search by text (English or Thai):** type in the search box above the grid, e.g. "dog", "person with glasses", "kite on the beach", and press Enter.
+- Thai is translated to English on your computer first (opus-mt-th-en), then matched against the photos with CLIP using the existing analysis, so nothing is re-analysed.
+- **Strictness** hides weak matches, and **Find similar photos** in the right panel searches by a photo instead of words.
+- The text models (~170 MB) leave memory after 60 seconds without a search.
 
-## AI แต่งอัตโนมัติ (ไม่ต้องมี Reference)
-- **ในตัวแก้ไข:** เปิดหน้า **01 AI** ในสารบัญซ้าย แล้วกด **แต่งอัตโนมัติ**
-  - AI จะดูว่าเป็นฉากอะไร (บุคคล ภาพหมู่ ทิวทัศน์ พระอาทิตย์ตก กลางคืน อาหาร ชายหาด หิมะ ฯลฯ) แล้วตั้งเป้าโทนตามฉากนั้น
-  - ปรับแสง สมดุลแสงขาว ความสด และเส้นโค้งให้
-  - ถ้าพบท้องฟ้าหรือคน จะเพิ่มการปรับเฉพาะส่วนให้ด้วย (กู้ท้องฟ้าที่สว่างเกิน, ทำให้คนที่มืดสว่างขึ้น)
-  - สร้างผลไว้ 9 แบบ แล้วใช้คะแนนความสวยของ CLIP เลือกแบบที่ดีที่สุด
-  - ผลลัพธ์เป็นค่าสไลเดอร์ทั้งหมด แก้ต่อได้ และมีสไลเดอร์ความแรง
-- **หลายรูปพร้อมกัน (แต่งอัตโนมัติหลายรูป):**
-  - เริ่มได้ 2 ทาง:
-    - หน้า **01 AI** การ์ด `แต่งอัตโนมัติหลายรูป` กด `เลือกรูป...`, `ทั้งโฟลเดอร์...` หรือ `ทุกรูปในโฟลเดอร์ของรูปนี้`
-    - หน้าคัดภาพ กดปุ่ม `แต่งอัตโนมัติ (N ภาพ)` ข้างปุ่มบันทึก ใช้กับภาพที่คัดไว้ (ภาพที่คลิกขวาเอาออกจะไม่ถูกแต่ง)
-  - แต่ละรูปได้การแต่งของตัวเองตามฉาก รวมถึงปรับเฉพาะส่วนและกู้ส่วนที่สว่างเกิน ปรับความแรงได้ 0–150%
-  - **ข้ามรูปที่แต่งไว้แล้ว** (ค่าเริ่มต้น): ไม่ทับงานที่คุณแต่งเอง ถ้าเอาเครื่องหมายออก การแต่งเดิมจะถูกแทนที่ แต่ครอป เลเยอร์ และยางลบมหัศจรรย์ยังอยู่
-  - **บันทึกเป็น JPEG ด้วย:** ส่งออกภาพเต็มความละเอียดไปโฟลเดอร์ที่เลือก ไม่เขียนทับไฟล์เดิม รูปที่ข้ามไปจะส่งออกพร้อมการแต่งเดิมของมัน
-  - งาน AI ทำในเธรดเบื้องหลัง ใช้โปรแกรมต่อได้ระหว่างรอ การ์ดความคืบหน้ามุมขวาล่างกดยกเลิกได้ ถ้ารูปที่เปิดอยู่ถูกแต่งด้วย จะเห็นผลทันทีและ Undo ได้
-  - ไฟล์ต้นฉบับไม่ถูกแก้ ค่าที่แต่งบันทึกเป็น `.pedit` ข้างรูป
+## Auto edit (no references needed)
+- **In the editor:** open page **01 AI** and click **Auto edit**.
+  - The AI recognises the scene (portrait, group, landscape, sunset, night, food, beach, snow...) and aims for a look that suits it.
+  - It sets light, white balance, vibrance and curves, and adds local adjustments when it finds sky or people (recovering a bright sky, lifting dark faces).
+  - It renders 9 candidates and keeps the one CLIP's aesthetic score likes best.
+  - The result is ordinary slider values you can keep editing, plus a strength slider.
+- **Many photos at once:**
+  - Start from the **Auto edit many photos** card on page 01 AI (**Choose photos...**, **Whole folder...** or **All photos in this photo's folder**), or from **Auto edit (N)** in AI Cull, which edits your picks.
+  - Each photo gets its own edit for its scene, including local adjustments and highlight rebuilding, at 0–150% strength.
+  - **Skip photos I already edited** (on by default) keeps your own work. Turn it off to replace the edit; crop, layers and magic-eraser work stay.
+  - **Also save as JPEG** exports full-size files to a folder you choose, never overwriting originals.
+  - The AI runs in the background, so you can keep working; the progress card at the bottom right can cancel. If the open photo is edited, you see it at once and can undo it.
 
-## ให้ AI แต่งรูปด้วย Circle Room (MCP)
-Circle Room เป็น **MCP server** ได้ด้วย AI ที่รองรับ MCP เช่น Claude Code, Codex, OpenCode, MiMo Code, Kimi Code, Qwen Code, DeepSeek TUI, Z Code, Antigravity, Cursor, Claude Desktop, Gemini CLI, Windsurf และ VS Code (Copilot) ใช้เครื่องมือทุกอย่างของโปรแกรมได้ และ**เห็นภาพผลลัพธ์ทุกครั้งที่แก้**
+## Let AI agents edit with Circle Room (MCP)
+Circle Room is also an **MCP server**. AI agents that speak MCP, such as Claude Code, Codex, OpenCode, MiMo Code, Kimi Code, Qwen Code, DeepSeek TUI, Z Code, Antigravity, Cursor, Claude Desktop, Gemini CLI, Windsurf and VS Code (Copilot), can use every tool in the app and **see the result after each step**.
 
-**ตั้งค่า:** กดปุ่ม **เชื่อม AI** มุมขวาบนของโปรแกรม เลือกแท็บของแอป AI ที่ใช้ แล้วกด **คัดลอก** (path ของโปรแกรมใส่ให้แล้ว) ทำครั้งเดียว
+**Setup:** click **Connect AI** at the top right of the app, pick the tab for your AI app, and click **Copy** (the program path is already filled in). You only do this once.
 
-| แอป AI | ตั้งค่าที่ |
+| AI app | Where it goes |
 |---|---|
-| Claude Code | รันคำสั่ง `claude mcp add --scope user circle-room -- "<path>\CircleRoom.exe" --mcp` |
-| Codex (OpenAI) | `[mcp_servers.circle-room]` ใน `%USERPROFILE%\.codex\config.toml` |
-| OpenCode | `"mcp"` ใน `%USERPROFILE%\.config\opencode\opencode.json` (1.x และ 2.x มีให้ทั้งสองแบบ) |
-| MiMo Code (Xiaomi) | `"mcp"` ใน `%USERPROFILE%\.config\mimocode\mimocode.jsonc` |
-| Kimi Code | `kimi mcp add --transport stdio circle-room -- ...` หรือ `%USERPROFILE%\.kimi-code\mcp.json` |
-| Qwen Code | `mcpServers` ใน `%USERPROFILE%\.qwen\settings.json` |
-| DeepSeek TUI (CodeWhale) | `%USERPROFILE%\.deepseek\mcp.json` (รุ่นใหม่ `%USERPROFILE%\.codewhale\mcp.json`) |
-| Z Code (Zhipu) | หน้าตั้งค่า MCP ในโปรแกรม: คำสั่ง `CircleRoom.exe` อาร์กิวเมนต์ `--mcp` |
+| Claude Code | Run `claude mcp add --scope user circle-room -- "<path>\CircleRoom.exe" --mcp` |
+| Codex (OpenAI) | `[mcp_servers.circle-room]` in `%USERPROFILE%\.codex\config.toml` |
+| OpenCode | `"mcp"` in `%USERPROFILE%\.config\opencode\opencode.json` (snippets for 1.x and 2.x) |
+| MiMo Code (Xiaomi) | `"mcp"` in `%USERPROFILE%\.config\mimocode\mimocode.jsonc` |
+| Kimi Code | `kimi mcp add --transport stdio circle-room -- ...` or `%USERPROFILE%\.kimi-code\mcp.json` |
+| Qwen Code | `mcpServers` in `%USERPROFILE%\.qwen\settings.json` |
+| DeepSeek TUI (CodeWhale) | `%USERPROFILE%\.deepseek\mcp.json` (newer: `%USERPROFILE%\.codewhale\mcp.json`) |
+| Z Code (Zhipu) | The app's MCP settings: command `CircleRoom.exe`, argument `--mcp` |
 | Antigravity | Agent panel > ... > MCP Servers > Manage > View raw config (`mcp_config.json`) |
-| Cursor, Claude Desktop, Gemini CLI, Windsurf | `mcpServers` ในไฟล์ตั้งค่า MCP ของแต่ละโปรแกรม |
+| Cursor, Claude Desktop, Gemini CLI, Windsurf | `mcpServers` in each app's MCP settings file |
 | VS Code (Copilot) | `.vscode/mcp.json` |
 
-ถ้าต้องการข้อความตั้งค่าทั้งหมดแบบข้อความล้วน (เช่น ใช้ใน script) รัน `CircleRoom.exe --mcp-config`
+For plain-text setup snippets (for scripts), run `CircleRoom.exe --mcp-config`.
 
-**แล้วสั่งเป็นภาษาปกติได้เลย** เช่น
-- "แต่งรูป D:\Trip\IMG_0012.jpg ให้ท้องฟ้าฟ้าขึ้น หน้าคนสว่างขึ้นนิดหน่อย แล้วครอปเป็น 4:5"
-- "ลบคนที่เดินผ่านทางซ้ายออก"
-- "เลือก 10 รูปที่ดีที่สุดในโฟลเดอร์ D:\Trip แล้วแต่งอัตโนมัติทั้งหมด ส่งออกเป็น JPEG ไปที่ D:\Trip\best"
-- "หารูปที่มีคนใส่แว่นในโฟลเดอร์นี้"
+**Then just ask in plain language**, for example:
+- "Edit D:\Trip\IMG_0012.jpg: bluer sky, slightly brighter faces, crop to 4:5"
+- "Remove the person walking past on the left"
+- "Pick the 10 best photos in D:\Trip, auto edit them all and export JPEGs to D:\Trip\best"
+- "Find the photos with someone wearing glasses in this folder"
 
-**เครื่องมือที่ AI ได้ (20 ตัว):**
-| กลุ่ม | เครื่องมือ |
+**Tools the agent gets (20):**
+| Group | Tools |
 |---|---|
-| ดูภาพ | `open_photo`, `view` (ภาพก่อน/หลังเทียบกัน), `get_info`, `list_adjustments` |
-| แต่ง | `set_adjustments` (ทุกสไลเดอร์ + เส้นโค้ง), `auto_edit`, `apply_look`, `crop_rotate`, `undo` |
-| AI เฉพาะจุด | `find_regions`, `adjust_region` (ใบหน้า, คน, ท้องฟ้า, น้ำ ฯลฯ), `recover_highlights`, `magic_erase` |
-| ตัดต่อ | `layer_add` (AI ตัดพื้นหลัง, ปรับสีให้เข้ากัน), `layer_update`, `layer_remove` |
-| ทั้งโฟลเดอร์ | `cull_folder` (คัดภาพเด่น + แผ่นรวมภาพย่อ), `search_photos` (ค้นด้วยคำ ไทย/อังกฤษ), `batch_auto_edit` |
-| บันทึก | `export` (JPEG/PNG เต็มความละเอียด ไม่ทับไฟล์เดิม) |
+| Look | `open_photo`, `view` (before/after side by side), `get_info`, `list_adjustments` |
+| Edit | `set_adjustments` (every slider and curve), `auto_edit`, `apply_look`, `crop_rotate`, `undo` |
+| Local AI | `find_regions`, `adjust_region` (faces, people, sky, water...), `recover_highlights`, `magic_erase` |
+| Compose | `layer_add` (AI cut-out, colour matching), `layer_update`, `layer_remove` |
+| Folders | `cull_folder` (best shots + contact sheet), `search_photos` (English or Thai), `batch_auto_edit` |
+| Save | `export` (full-size JPEG/PNG, never overwrites) |
 
-**ดูว่า AI กำลังทำอะไรอยู่ในโปรแกรม:** ถ้าเปิด Circle Room ไว้ระหว่างที่ AI ทำงาน
-- ปุ่มมุมขวาบนจะเปลี่ยนเป็นชื่อแอป AI ที่เชื่อมอยู่ (เช่น "Claude Code") จุดสีเขียวคือรอคำสั่ง จุดสีส้มกะพริบคือกำลังทำงาน คลิกเพื่อซ่อนหรือแสดงการ์ด และคลิกขวาเพื่อเปิดหน้าตั้งค่าการเชื่อมต่อ
-- การ์ดมุมขวาล่างแสดงเครื่องมือที่ AI กำลังใช้ (เช่น "กำลังทำ: ปรับแสงและสี") พร้อมรายการขั้นตอนล่าสุดและค่าที่เปลี่ยน (เช่น "การรับแสง 0 → 0.35", "ปรับเฉพาะจุด: ใบหน้า")
-- ภาพที่เปิดอยู่อัปเดตทันทีเมื่อ AI แก้ ขอบภาพจะขึ้นกรอบสีพร้อมป้าย "แก้โดย Claude Code" และแต่ละขั้นตอนย้อนกลับได้ (Ctrl+Z) ในประวัติจะแสดงเป็น "AI แก้ไข"
-- ถ้าเปิดตัวเลือก "เปิดภาพที่ AI กำลังแก้ให้อัตโนมัติ" (เปิดไว้เป็นค่าเริ่มต้น) โปรแกรมจะสลับไปที่ภาพที่ AI กำลังแก้ให้เอง
-- เชื่อมพร้อมกันหลายแอปได้ การ์ดจะแยกแสดงทีละแอป
+**Watch what the AI is doing:** keep Circle Room open while the agent works.
+- The **Connect AI** button turns into the connected app's name (e.g. "Claude Code"): a green dot when it is waiting, a pulsing orange dot when it is working. Click to show or hide the activity card; right-click for the setup dialog.
+- A card at the bottom right shows the tool in use (e.g. "Now: Adjust light & colour") and recent steps with what changed (e.g. "Exposure 0 → 0.35", "Local adjustment: Faces").
+- The open photo updates as the AI edits it, with an outline and an "Edited by Claude Code" label. Each step is one undoable entry in History.
+- With **Open the photo the AI is editing** on (the default), the app follows the agent to the photo it works on.
+- Several agents can be connected at once; each gets its own section on the card.
 
-- เครื่องมือที่แก้ภาพจะส่ง**ภาพตัวอย่าง**และตัวเลข (ความสว่าง, % ส่วนที่สว่างเกินหรือมืดเกิน, โทนสี) กลับไปให้ AI ทุกครั้ง AI จึงตัดสินใจขั้นต่อไปจากภาพจริงได้
-- พิกัด (เช่น จุดที่จะลบ หรือตำแหน่งเลเยอร์) เป็นสัดส่วน 0–1 ของภาพที่ AI เห็น
-- ทุกอย่างไม่ทับต้นฉบับ: ค่าที่แต่งบันทึกเป็น `.pedit` ข้างรูป เปิดดูหรือแก้ต่อใน Circle Room ได้ทันที
-- ทำงานในเครื่องทั้งหมด รูปไม่ถูกส่งไปไหน ยกเว้นภาพตัวอย่างที่ส่งให้แอป AI ที่คุณใช้อยู่ (แอปนั้นอาจส่งต่อไปยังเซิร์ฟเวอร์ของผู้ให้บริการ AI ตามปกติของมัน)
-- ใช้ตัวเต็ม (Portable) เพื่อให้มีเครื่องมือ AI ครบ ถ้าย้ายโฟลเดอร์โปรแกรม ให้คัดลอกการตั้งค่าใหม่
-- คำสั่งเทียบเท่า: `CircleRoom.exe --mcp` (สื่อสารแบบ JSON-RPC ผ่าน stdin/stdout ตามมาตรฐาน MCP)
+More details:
+- Every editing tool returns a **preview image** plus numbers (brightness, % clipped highlights/shadows, colour balance), so the agent decides its next step from the actual photo.
+- Coordinates (spots to erase, layer positions) are 0–1 of the image the agent sees.
+- Nothing overwrites originals: edits go to `.pedit` files you can open and continue in Circle Room.
+- Everything runs locally. The only thing that leaves is the preview images sent to the AI app you use (which may pass them to its provider, as it normally does).
+- Use the Portable build to get all AI tools. If you move the program folder, copy the setup again.
+- Under the hood: `CircleRoom.exe --mcp` speaks JSON-RPC over stdin/stdout as the MCP standard defines.
 
-## AI ปรับเฉพาะส่วน (หน้า "เฉพาะส่วน")
-- เปิดหน้านี้แล้ว AI จะแยกส่วนต่างๆ ในภาพให้ (UperNet-ConvNeXt-T ใช้ประมาณ 2 วินาทีครั้งแรก และทำงานเบื้องหลัง)
-- จะเห็นปุ่มของส่วนที่พบ เช่น `ใบหน้า 2` (จำนวนหน้าที่พบ), `คน 12%`, `ท้องฟ้า 46%`, `ถนน/ทางเดิน 31%`, `อาคาร`, `ต้นไม้/พืช`, `น้ำ/ทะเล`, `ยานพาหนะ`, `สัตว์` และ `พื้นหลัง (ไม่ใช่คน)`
-- **ใบหน้า:** หาตำแหน่งหน้าด้วย YuNet แล้วตัดให้พอดีกับตัวคน จึงปรับเฉพาะหน้าได้ เช่น ทำหน้าให้สว่างขึ้นหรือลดความแดง โดยไม่กระทบเสื้อผ้าและพื้นหลัง กด `กลับด้าน` เพื่อปรับทุกอย่างยกเว้นหน้า
-- คลิกส่วนที่ต้องการเพื่อสร้างชั้นปรับ (สูงสุด 4 ชั้น)
-  - แต่ละชั้นปรับได้: การรับแสง, คอนทราสต์, ไฮไลต์, เงา, อุณหภูมิสี, ทินต์, ความอิ่มตัว, คอนทราสต์เฉพาะจุด, ความนุ่มขอบ
-  - มีปุ่ม "กลับด้าน" และปุ่ม "ลบ"
-  - ไม่ต้องเลือกจากสี เพราะ AI รู้เองว่าส่วนไหนคือคน ถนน หรือท้องฟ้า
-- ชี้เมาส์ที่ชั้นใดชั้นหนึ่งเพื่อดูพื้นที่ (ไฮไลต์เป็นสีแดง)
-- ขอบของพื้นที่ถูกเกลาให้ตรงกับขอบจริงในภาพด้วย guided filter
-- การปรับทั้งหมดอยู่ใน `.pedit` จึง Undo ได้ และส่งออกได้ตามปกติ
+## Local adjustments by AI (page "Local")
+- Opening the page lets the AI find the parts of the photo (UperNet-ConvNeXt-T, about 2 seconds the first time, in the background).
+- Buttons appear for what it found, e.g. `Faces 2`, `People 12%`, `Sky 46%`, `Road & paths 31%`, Buildings, Trees & plants, Water, Vehicles, Animals, and "Background (not people)".
+- **Faces:** YuNet finds each face and the area is trimmed to the person, so you can brighten a face or reduce redness without touching clothes or background. **Invert** adjusts everything except the faces.
+- Click an area to add an adjustment layer (up to 4). Each has exposure, contrast, highlights, shadows, temperature, tint, saturation, local contrast and feather, plus **Invert** and **Remove**.
+- Hover a layer to see its area in red. Edges follow the real edges in the photo (guided filter).
+- Everything is stored in `.pedit`, so it undoes and exports normally.
 
-## ตัดต่อ (ปุ่ม `ตัดต่อ` บนแถบด้านบน)
-โหมดหลักอีกโหมดของโปรแกรม ถัดจาก `แต่งภาพ` และ `คัดภาพ AI` มีแถบเครื่องมือแนวตั้งที่ขอบซ้ายของภาพ เหมือนโปรแกรมแต่งภาพทั่วไป:
+## Compose (the "Compose" button at the top)
+The third main mode next to **Edit** and **AI Cull**, with a vertical toolbox on the left edge of the photo, like a typical image editor:
 
-| เครื่องมือ | คีย์ | ใช้ทำอะไร |
+| Tool | Key | What it does |
 |---|---|---|
-| ย้าย/ย่อขยาย | V | เลือก ย้าย ย่อขยาย หมุนเลเยอร์ |
-| ยางลบมหัศจรรย์ (AI) | J | ระบายทับสิ่งที่ไม่ต้องการบนภาพหลัก AI จะเติมพื้นหลังให้ |
-| ยางลบ | E | ลบบางส่วนของเลเยอร์ที่เลือก |
-| แปรงคืน | B | ระบายส่วนของเลเยอร์ให้กลับมา |
-| + | | เพิ่มภาพซ้อน |
+| Move | V | Select, move, resize and rotate layers |
+| Magic eraser (AI) | J | Paint over something on the main photo and AI fills the background |
+| Eraser | E | Erase part of the selected layer |
+| Restore | B | Paint parts of the layer back |
+| + | | Add a photo on top |
 
-### ยางลบมหัศจรรย์ (AI)
-- ระบายทับสิ่งที่ไม่ต้องการ เช่น คนที่เดินผ่าน สายไฟ ขยะ หรือรอยบนผนัง แล้วปล่อยเมาส์ AI จะเติมพื้นหลังที่กลืนกับรอบข้างให้ (ใช้เวลาราว 1–3 วินาทีต่อครั้ง)
-- ใช้ LaMa (Apache-2.0 ใช้เชิงพาณิชย์ได้) ซึ่งมีอยู่ในโปรแกรมแล้ว ไม่ต้องโหลดโมเดลเพิ่ม
-- ของชิ้นเล็กจะถูกเติมที่ความละเอียดเต็ม ส่วนของชิ้นใหญ่ AI จะดูบริบทกว้างขึ้นแต่รายละเอียดจะนุ่มลง
-- หลัง AI เติมแล้ว โปรแกรมเก็บงานให้เนียนอีก 3 ขั้น:
-  - ปรับโทนสีของส่วนที่เติมให้ต่อกับขอบรอบๆ พอดี
-  - ใส่เกรนให้เท่ากับภาพจริง
-  - แทนที่ทั้งบริเวณที่ระบาย จึงไม่เหลือเงาจางๆ ของวัตถุเดิมที่ขอบ
-- ลบได้หลายครั้ง และครั้งต่อไปจะเห็นผลของครั้งก่อน ทุกครั้ง Undo ได้ และมีปุ่ม `ล้างทั้งหมด`
-- ไม่ทับไฟล์ต้นฉบับ เส้นที่ระบายถูกเก็บใน `.pedit` และผลที่ AI เติมถูกเก็บไว้ใน `.photoeditor_cache` เปิดภาพครั้งหน้าจึงไม่ต้องรันใหม่
+### Magic eraser (AI)
+- Paint over what you don't want, such as passers-by, wires, litter or marks on a wall, and let go. The AI fills in a background that blends with its surroundings (about 1–3 seconds).
+- Uses LaMa (Apache-2.0, fine for commercial use), included in the app.
+- Small objects are filled at full resolution; for large ones the AI looks at a wider area, so detail is softer.
+- After the fill, three clean-up passes: tone matched to the surrounding edge, grain matched to the photo, and the whole painted area replaced so no faint ghost of the object remains.
+- Erase as many times as you like; each pass sees the previous ones. Every pass can be undone, and **Clear all** removes them.
+- Originals stay untouched: strokes live in `.pedit`, AI fills in `.photoeditor_cache`, so reopening needs no re-run.
 
-### เลเยอร์
-วางภาพอื่นซ้อนบนภาพหลักได้สูงสุด 4 เลเยอร์ แบบเดียวกับ Photoshop เช่น เอาคนจากอีกภาพมาวางในฉากใหม่
-- **เพิ่มเลเยอร์:** กด `+ เพิ่มภาพซ้อน` หรือลากไฟล์ภาพมาวางบนภาพ (ตอนอยู่หน้านี้)
-- **ย้าย / ย่อขยาย / หมุน:** ลากเลเยอร์บนภาพเพื่อย้าย ลากมุมเพื่อย่อ/ขยาย ลากจุดกลมด้านบนเพื่อหมุน (กด Shift ค้างเพื่อหมุนทีละ 15°) คลิกที่ภาพเพื่อเลือกเลเยอร์ที่อยู่ใต้เมาส์
-- **ตัดพื้นหลัง (AI):** กด `เก็บแค่ตัวหลักอัตโนมัติ` หรือเลือกส่วนที่จะเก็บเอง เช่น คน, สัตว์, ยานพาหนะ (เลือกได้หลายส่วน) ปรับ `ขอบนุ่ม` ได้
-- **ยางลบ / แปรงคืน:** ระบายเพื่อลบส่วนที่ AI ตัดเกิน หรือระบายให้กลับมา ปรับขนาดแปรงด้วย `[` `]`
-- **การผสมภาพ:** ความทึบ และโหมดผสม 7 แบบ ได้แก่ ปกติ, คูณ, สกรีน, โอเวอร์เลย์, แสงนุ่ม, เลือกส่วนที่มืดกว่า, เลือกส่วนที่สว่างกว่า
-- **ปรับสีให้เข้ากับภาพหลัก:** กดปุ่มอัตโนมัติ หรือปรับการรับแสง/อุณหภูมิสี/ความอิ่มตัวของเลเยอร์เอง
-- เรียงลำดับเลเยอร์ขึ้น/ลง, ซ่อน, กลับด้าน และลบได้ ทุกขั้นตอน Undo ได้
-- การแต่งภาพในหน้าอื่นๆ (แสง สี ครอป ลุค) จะมีผลกับภาพที่ตัดต่อแล้วทั้งภาพ ดังนั้นสีของเลเยอร์จะกลืนไปกับภาพหลัก
-- ไฟล์ต้นฉบับไม่ถูกแก้ไข ตำแหน่งเลเยอร์และเส้นที่ระบายถูกเก็บใน `.pedit` (เก็บเป็นที่อยู่ไฟล์ของภาพเลเยอร์ ถ้าย้ายหรือลบภาพเลเยอร์ เลเยอร์นั้นจะเปิดไม่ได้)
+### Layers
+Stack up to 4 photos on top of the main one, e.g. move a person from one photo into another scene.
+- **Add:** click **+ Add a photo on top**, or drop an image file on the photo while on this page.
+- **Move / resize / rotate:** drag the layer; drag a corner to resize; drag the round handle to rotate (hold Shift for 15° steps). Click the photo to select the layer under the mouse.
+- **Remove the background (AI):** keep only the main subject automatically, or choose which parts to keep (people, animals, vehicles...). Adjust **Edge softness**.
+- **Eraser / Restore:** paint away what the AI kept by mistake, or paint it back. `[` and `]` change the brush size.
+- **Blending:** opacity and 7 blend modes (normal, multiply, screen, overlay, soft light, darken, lighten).
+- **Match to the photo:** automatic, or set the layer's exposure, temperature and saturation yourself.
+- Reorder, hide, invert or remove layers; every step can be undone.
+- Edits on the other pages (light, colour, crop, looks) apply to the whole composite, so layers blend into the main photo.
+- Originals are not modified. Layer positions and strokes are stored in `.pedit` as paths to the layer images; if you move or delete a layer's image, that layer can no longer be opened.
 
-## AI กู้ส่วนที่สว่างเกิน (หน้า "AI")
-ส่วนที่ขาวล้วน (255) ไม่มีข้อมูลเหลือ ลดไฮไลต์/การรับแสงก็ได้แค่สีเทา การ์ดนี้จะสร้างส่วนนั้นขึ้นมาใหม่:
-- การ์ดแสดงสัดส่วนที่ขาวจนหมดรายละเอียด → กด **กู้ด้วย AI** (ทำงานเบื้องหลัง ประมาณ 3–7 วินาที)
-- **สี:** ยืมจากขอบที่ยังไม่ขาวของแต่ละบริเวณ แยกตามส่วนที่ AI แยกไว้ (หน้าได้สีผิว ท้องฟ้าได้สีฟ้า)
-- **ความสว่าง:** ไล่จากขอบเข้าไปให้ยังดูสว่างเป็นธรรมชาติ ส่วนที่ clip แค่บางช่องสีจะคงรายละเอียดเดิมไว้
-- **รายละเอียด:** LaMa inpainting เติมพื้นผิว (ใช้แค่ความสว่าง ไม่ใช้สีของ LaMa) สูงสุด 2 บริเวณใหญ่ต่อภาพ
-- สไลเดอร์ **ความแรง** ปรับได้ทันที ชี้เมาส์ที่การ์ดเพื่อดูพื้นที่ที่กู้ (สีแดง)
-- ผลเป็น overlay ที่ผสมก่อนทุกขั้นตอน สไลเดอร์อื่นจึงใช้กับส่วนที่กู้ได้ เก็บ cache ไว้ใน `.photoeditor_cache\` ข้างภาพ เปิดซ้ำไม่ต้องรันใหม่
-- แต่งอัตโนมัติ (AI) จะเรียกการกู้ให้เองเมื่อพบส่วนที่ขาวเกิน 0.5%
+## Rebuild blown highlights (page "AI")
+Pure white (255) has no data left; lowering highlights or exposure only turns it grey. This card rebuilds those areas:
+- The card shows how much of the photo is blown out. Click **Recover with AI** (runs in the background, about 3–7 seconds).
+- **Colour** comes from the unclipped edge of each area, per region the AI found (faces get skin tones, skies get blue).
+- **Brightness** falls off naturally from the edge inward; areas clipped in only one or two channels keep their own detail.
+- **Detail** comes from LaMa inpainting (its brightness only, not its colour), for up to 2 large areas per photo.
+- The **Strength** slider applies instantly. Hover the card to see the rebuilt areas in red.
+- The result is an overlay blended before every other step, so all sliders still work on it. It is cached in `.photoeditor_cache\` next to the photo.
+- Auto edit calls it automatically when more than 0.5% of the photo is blown out.
 
-## AI แต่งภาพตาม Reference
-- **ในตัวแก้ไข:** หน้า **AI** → การ์ด "แต่งตามภาพ Reference" → เลือกสไตล์ (หรือ "สร้างสไตล์จากภาพ..." โดยเลือกอย่างน้อย 5 ภาพ) → กด **ใช้**
-  - AI จะเลื่อนสไลเดอร์ให้ (แสง / สี / HSL / เกรดสี / เส้นโค้ง) จึงแก้ต่อเองได้ และ Undo ได้
-  - สไลเดอร์ "ความแรง" ปรับผลได้ทันทีโดยไม่ต้องคำนวณใหม่
-- **หลายภาพพร้อมกัน:** ในหน้าคัดภาพ เลือกสไตล์แล้วกด "แต่งภาพที่แสดงตาม Reference" ระบบจะคำนวณแยกทีละภาพ (ภาพมืดจะได้ค่าการรับแสงมากกว่า) และบันทึกเป็นไฟล์ `.pedit` ข้างภาพ เปิดดู/แก้ต่อ/ส่งออกได้ภายหลัง
+## Edit like reference photos
+- **In the editor:** page **AI** → the reference card → pick a style (or **New style from photos...**, choosing at least 5) → **Apply**.
+  - The AI moves the sliders for you (light, colour, HSL, grading, curves), so you can keep editing and undo.
+  - **Strength** changes the result instantly without recomputing.
+- **Many photos:** in AI Cull, pick a style and click **Edit shown photos like references**. Each photo is solved on its own (a darker photo gets more exposure), and saved as `.pedit` next to it.
 
-### AI ทำงานยังไง และทำไมประหยัด
-- **โมเดล:** ใช้ CLIP ViT-B/32 แบบ int8 (85 MB) เพียงตัวเดียว คำนวณภาพละครั้ง แล้วใช้ผลซ้ำได้หลายงาน
-  - ให้คะแนนความสวยด้วย LAION Aesthetic head
-  - ให้คะแนนองค์ประกอบจากประโยคที่คำนวณไว้ล่วงหน้า
-  - หาภาพซ้ำ และเทียบความคล้ายกับ Reference
-- **ใบหน้า:** ใช้ YuNet (0.2 MB) หาใบหน้า เพื่อวัดความคมที่หน้าและตรวจหลับตา
-- **ส่วนที่ไม่ใช้โมเดล:** ความคม, แสง, นอยส์, saliency (กฎสามส่วน / วัตถุชิดขอบ) และความเอียงของภาพ
-- **แต่งตาม Reference:** ไม่ใช่ AI วาดภาพใหม่ แต่เป็นการ optimize ค่าสไลเดอร์บน GPU pipeline เดิม (ประมาณ 300–500 รอบ ภายใน 0.4–0.7 วินาทีต่อภาพ)
-- **ประหยัดหน่วยความจำ:**
-  - ONNX Runtime ถูกโหลดเฉพาะตอนวิเคราะห์ และปล่อยทิ้งทันทีหลังเสร็จ
-  - ถอดรหัส JPEG แบบย่อ 1/8 ตอนอ่านไฟล์ (Windows WIC)
-  - ผลวิเคราะห์เก็บใน `.photoeditor_ai` และ `.photoeditor_thumbs` (ไฟล์ซ่อน) ในโฟลเดอร์ภาพ เปิดซ้ำได้ในไม่ถึง 0.1 วินาที
-- **ผลวัด (CPU, RTX 4060 Laptop):**
-  - 207 ภาพ ใช้ 6.9 วินาที (ประมาณ 30 ภาพต่อวินาที)
-  - RAM สูงสุดระหว่างวิเคราะห์ 290 MB และกลับมาเหลือ 2 MB หลังเสร็จ
-  - DirectML (GPU) ช้ากว่ากับโมเดล int8 นี้ จึงใช้ CPU เป็นค่าเริ่มต้น (ใช้ GPU ได้ด้วย `--gpu`)
+### How the AI works, and why it is light
+- **One main model:** CLIP ViT-B/32 int8 (85 MB) runs once per photo and its result is reused for aesthetics (LAION aesthetic head), composition (pre-computed prompts), duplicates and reference similarity.
+- **Faces:** YuNet (0.2 MB) finds faces to measure face sharpness and detect closed eyes.
+- **No model needed for:** sharpness, exposure, noise, saliency (rule of thirds / subject at the edge) and tilt.
+- **Reference editing** is not AI image generation: it optimises the slider values on the same GPU pipeline (about 300–500 iterations in 0.4–0.7 s per photo).
+- **Memory:**
+  - ONNX Runtime loads only during analysis and is released right after.
+  - JPEGs are decoded at 1/8 scale while reading (Windows WIC).
+  - Results are cached in hidden `.photoeditor_ai` and `.photoeditor_thumbs` files in the photo folder; reopening takes under 0.1 s.
+- **Measured (CPU, RTX 4060 Laptop):** 207 photos in 6.9 s (about 30 per second); peak RAM 290 MB during analysis, back to 2 MB afterwards. DirectML (GPU) is slower with this int8 model, so CPU is the default (`--gpu` to try it).
 
-## ทำไมถึงเบา
-- ถอดรหัสภาพแล้วส่งขึ้น GPU ทันที จากนั้นคืนหน่วยความจำฝั่ง CPU (ไม่เก็บพิกเซลไว้ใน RAM)
-- พรีวิวคำนวณเฉพาะพิกเซลที่เห็นบนจอ และวาดใหม่เฉพาะตอนมีการเปลี่ยนแปลง ถ้าไม่ได้ใช้งาน CPU จะเป็น 0%
-- Undo เก็บแค่ค่าพารามิเตอร์ (ประมาณ 1 KB ต่อขั้น) ไม่เก็บภาพ
-- ส่งออกด้วยการเรนเดอร์ทีละ tile ขนาด 1024² บน GPU
+## In-app updates
+- When it starts, Circle Room asks GitHub whether there is a newer version (at most once a day; a plain request with nothing about you or your photos). If there is, you get a message and an orange **Update x.y.z** button at the top right.
+- Click it to see what's new, then **Update now**. It downloads the zip that matches your build (Portable or Lite) with a progress bar; then click **Restart now** (or later: the next start uses the new version).
+- Safety:
+  - Downloads only over HTTPS from this project's GitHub releases.
+  - The zip must match the SHA-256 in the release's `SHA256SUMS.txt`, or nothing is installed.
+  - Every file in the zip is CRC-checked, and names that try to escape the program folder are refused.
+- Only changed files are replaced. New files are fully unpacked to a staging folder first, then swapped in at once; if any step fails, everything rolls back to the current version. Replaced files are removed on the next start.
+- Photos, `.pedit` files, presets and `settings.ini` are never touched.
+- If the program folder is not writable (e.g. under Program Files), you get a button to the download page instead.
+- Click the version number at the bottom right (e.g. `v1.2.1`) to check any time, turn automatic checks off, or skip a version.
+- Works from the first version that includes it; older versions need one manual download.
 
-ผลวัดบน RTX 4060 Laptop กับภาพ 24 MP (6000×4000):
-- RAM ที่ Task Manager แสดง (private working set) ประมาณ 12–20 MB หลังเปิดภาพ
-- พรีวิว 1600×1000 เมื่อเปิดทุกเครื่องมือ ใช้ 1.1 ms ต่อเฟรม
-- ส่งออกภาพเต็มความละเอียด เรนเดอร์ใช้ 53 ms (ส่วนที่เหลือเป็นเวลาเข้ารหัส JPEG/PNG)
+## Why it is light
+- Images are decoded and uploaded to the GPU right away, then the CPU copy is freed (pixels don't sit in RAM).
+- The preview renders only the pixels on screen, and only when something changes. Idle means 0% CPU.
+- Undo stores parameters (about 1 KB per step), never images.
+- Export renders in 1024² tiles on the GPU.
+
+Measured on an RTX 4060 Laptop with a 24 MP (6000×4000) photo:
+- RAM shown in Task Manager (private working set): about 12–20 MB with the photo open
+- 1600×1000 preview with every tool on: 1.1 ms per frame
+- Full-resolution export: 53 ms of rendering (the rest is JPEG/PNG encoding)
 
 ## Build
-ต้องมี MinGW-w64 (g++), CMake และ Ninja แล้วรัน:
+Needs MinGW-w64 (g++), CMake and Ninja. Then run:
 ```
 powershell -ExecutionPolicy Bypass -File build.ps1
 ```
-สคริปต์จะ build ผ่าน junction ใน `%TEMP%` เพราะ Ninja ใช้กับโฟลเดอร์ที่มีชื่อภาษาไทยไม่ได้
+The script builds through a junction in `%TEMP%`, because Ninja can't handle folders with Thai names.
 
-คำสั่งสำหรับทดสอบ (ไม่เปิดหน้าต่าง):
+Output: `bin\CircleRoom.exe` (about 3 MB, nothing else to install). The AI features use the files in `bin\ai\` (about 466 MB more); without that folder the editor still works.
+
+This repo holds the source only. The AI model files (~490 MB) are in the release zip: to build with AI, copy the `ai\` folder from the zip into the project's `ai\`. Licences for libraries and models are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), with full texts in [LICENSES](LICENSES).
+
+Command-line tools (no window):
 ```
 CircleRoom.exe --export in.jpg settings.pedit out.jpg [--long 2048] [--quality 92]
 CircleRoom.exe --bench in.jpg
-CircleRoom.exe --ai-rank <โฟลเดอร์> [--top N] [--refs <โฟลเดอร์ Reference>] [--all] [--gpu]
-CircleRoom.exe --ai-style <โฟลเดอร์ Reference> in.jpg out.jpg [--strength 0-100]
-CircleRoom.exe --make-style <ชื่อ> <โฟลเดอร์ภาพ>
-CircleRoom.exe --ai-search <โฟลเดอร์> "<ข้อความ>" [--top N]
+CircleRoom.exe --ai-rank <folder> [--top N] [--refs <reference folder>] [--all] [--gpu]
+CircleRoom.exe --ai-style <reference folder> in.jpg out.jpg [--strength 0-100]
+CircleRoom.exe --make-style <name> <photo folder>
+CircleRoom.exe --ai-search <folder> "<text>" [--top N]
 CircleRoom.exe --ai-auto in.jpg out.jpg [--no-layers]
 CircleRoom.exe --ai-recover in.jpg out.jpg [--strength 0-100] [--no-regions]
-CircleRoom.exe --ai-mask in.jpg <หมายเลขส่วน 0=คน 1=ท้องฟ้า 2=ถนน ...> mask.png [--invert] [--feather F]
-CircleRoom.exe --ai-tokcheck <ไฟล์ทดสอบ>   (ตรวจ tokenizer เทียบกับ Python)
+CircleRoom.exe --ai-mask in.jpg <region 0=people 1=sky 2=road ...> mask.png [--invert] [--feather F]
+CircleRoom.exe --ai-tokcheck <test file>   (checks the tokenizers against Python)
+CircleRoom.exe --selftest                  (safety and regression checks)
 ```
-`tools/export_tokenizers.py` ใช้สร้าง `mt_vocab.bin` และ `clip_bpe.bin` ส่วน `tools/make_prompts.py` ใช้สร้าง prompt ของฉากใน `prompts.bin`
+`tools/export_tokenizers.py` builds `mt_vocab.bin` and `clip_bpe.bin`; `tools/make_prompts.py` builds the scene prompts in `prompts.bin`.
 
-### โมเดลทั้งหมด (ใน `ai/`, ทำงานบน CPU และโหลดเฉพาะตอนใช้)
-| ไฟล์ | ขนาด | ใช้ทำอะไร |
+### Models (in `ai/`, run on the CPU and loaded only when used)
+| File | Size | Used for |
 |---|---|---|
-| clip_b32_vision_int8 | 85 MB | วิเคราะห์ภาพ ให้คะแนน หาฉาก |
-| clip_b32_text_int8 + clip_bpe.bin | 63 MB | แปลงคำค้นภาษาอังกฤษเป็น embedding |
-| mt_th_en_encoder/decoder_int8 + mt_vocab.bin | 106 MB | แปลไทย→อังกฤษสำหรับการค้นหา |
-| upernet_convnext_t_ade_fp16 | 115 MB | แยกส่วนภาพ 150 ประเภท (จัดเป็น 13 กลุ่ม) สัญญา MIT สร้างด้วย `tools/export_upernet.py` + `tools/fp16_onnx.py` |
-| lama_inpaint | 89 MB | ยางลบมหัศจรรย์ และเติมรายละเอียดส่วนที่สว่างเกิน (LaMa จาก OpenCV Zoo ผ่าน `tools/prepare_lama.py`) |
-| yunet | 0.2 MB | หาใบหน้า |
-| onnxruntime.dll (+ DirectML.dll) | 32 MB | ตัวรันโมเดล |
-ไฟล์ AI อยู่ใน `ai/` และถูกคัดลอกไปที่ `bin\ai\` ตอน build ส่วน `tools/convert_head.py` กับ `tools/make_prompts.py` ใช้สร้าง `aesthetic_b32.bin` และ `prompts.bin` ใหม่ (ต้องใช้ Python + onnxruntime + tokenizers)
+| clip_b32_vision_int8 | 85 MB | Photo analysis, scores, scene detection |
+| clip_b32_text_int8 + clip_bpe.bin | 63 MB | English search text to embeddings |
+| mt_th_en_encoder/decoder_int8 + mt_vocab.bin | 106 MB | Thai→English translation for search |
+| upernet_convnext_t_ade_fp16 | 115 MB | 150-class segmentation, grouped into 13 regions (MIT; built with `tools/export_upernet.py` + `tools/fp16_onnx.py`) |
+| lama_inpaint | 89 MB | Magic eraser and highlight detail (LaMa from OpenCV Zoo via `tools/prepare_lama.py`) |
+| yunet | 0.2 MB | Face detection |
+| onnxruntime.dll (+ DirectML.dll) | 32 MB | Model runtime |
 
-## โครงสร้าง
-- `src/shaders.h`: pipeline สีทั้งหมด (GLSL) แบ่งเป็น Pass A (โทน/สี) และ Pass B (ความคม/นอยส์/ขอบมืด/เกรน)
-- `src/renderer.*`: texture, FBO, geometry (ครอป/หมุน/EXIF) และการส่งออกแบบ tile
-- `src/ui_panels.*`, `src/ui_icons.*`, `src/main.cpp`: UI (ธีม, หัวข้อ, สไลเดอร์แบบสเกล, ไอคอนเส้นที่วาดด้วยโค้ด ไม่ใช้ไฟล์ภาพหรือฟอนต์ไอคอน)
-- `src/mcp_server.*`, `src/mcp_json.h`: MCP server (`--mcp`) ให้ AI ภายนอกใช้เครื่องมือทั้งหมด
-- `src/agent_log.*`, `src/ui_agent.*`: บันทึกการทำงานของ AI (`%LOCALAPPDATA%\CircleRoom\agents`) และการ์ดในโปรแกรมที่แสดงว่า AI ตัวไหนเชื่อมอยู่และกำลังทำอะไร
-- `src/ui_batch.*`: แต่งอัตโนมัติหลายรูป (เธรดเบื้องหลัง + การ์ดความคืบหน้า)
-- `src/heal.*`: ยางลบมหัศจรรย์ (เส้นที่ระบาย, งาน LaMa เบื้องหลัง, cache ผลลัพธ์) ส่วนการวางผลบนภาพทำบน GPU ใน `kPatchShader`
-- `src/layers.*`: เลเยอร์ภาพ (โหลดภาพ, AI ตัดพื้นหลัง, เส้นยางลบ, ปรับสีให้เข้ากัน) ส่วนการรวมภาพทำบน GPU ใน `kComposeShader`
-- `src/params.*`, `src/history.*`, `src/curves.*`, `src/i18n.*`: ค่าพารามิเตอร์ ประวัติ เส้นโค้ง และคำแปล
+The AI files live in `ai/` and are copied to `bin\ai\` by the build. `tools/convert_head.py` and `tools/make_prompts.py` rebuild `aesthetic_b32.bin` and `prompts.bin` (needs Python, onnxruntime and tokenizers).
+
+## Project layout
+- `src/shaders.h`: the whole colour pipeline (GLSL): Pass A (tone/colour) and Pass B (sharpening/noise/vignette/grain)
+- `src/renderer.*`: textures, FBOs, geometry (crop/rotate/EXIF) and tiled export
+- `src/ui_panels.*`, `src/ui_icons.*`, `src/main.cpp`: UI (theme, sections, scale sliders, line icons drawn in code with no image or icon fonts)
+- `src/mcp_server.*`, `src/mcp_json.h`: the MCP server (`--mcp`) that gives AI agents every tool
+- `src/agent_log.*`, `src/ui_agent.*`: the agents' activity log (`%LOCALAPPDATA%\CircleRoom\agents`) and the in-app card showing which AI is connected and what it is doing
+- `src/updater.*`, `src/ui_update.*`: checking and installing updates from GitHub releases (WinHTTP, SHA-256 via BCrypt, own zip reader)
+- `src/version.h`: the single version number (the exe, the updater and MCP read it; `tools/package_release.py` refuses to package a different one)
+- `src/ui_batch.*`: auto edit many photos (background thread + progress card)
+- `src/heal.*`: magic eraser (strokes, background LaMa jobs, result cache); compositing on the GPU in `kPatchShader`
+- `src/layers.*`: photo layers (loading, AI cut-outs, eraser strokes, colour matching); compositing on the GPU in `kComposeShader`
+- `src/params.*`, `src/history.*`, `src/curves.*`, `src/i18n.*`: parameters, history, curves and translations
 - `third_party/`: GLFW 3.4, Dear ImGui 1.91.8, stb_image
 
-## ความปลอดภัยของไฟล์ที่เปิด
-ไฟล์ภาพ, `.pedit`, cache และภาพย่อในโฟลเดอร์ อาจมาจากคนอื่นหรือเสียหาย โปรแกรมจึงตรวจก่อนใช้เสมอ:
-- **cache / ภาพย่อ:** ตรวจจำนวนรายการ ขนาด และตำแหน่งข้อมูลเทียบกับขนาดไฟล์จริงก่อนจองหน่วยความจำ ถ้าเสียหายจะวิเคราะห์ใหม่แทน
-- **ภาพ:** ปฏิเสธไฟล์ที่อ้างขนาดเกิน 500 ล้านพิกเซลหรือด้านยาวเกิน 131,072 px ก่อนจองหน่วยความจำ
-- **`.pedit`:**
-  - ค่า NaN, ค่าอนันต์ และค่าที่เกินช่วงถูกแก้ให้อยู่ในช่วงที่ใช้ได้
-  - ครอปถูกบังคับให้อยู่ในภาพ
-  - จำกัดจำนวนเส้นแปรงและจำนวนจุด
-  - ไฟล์ที่ใหญ่เกิน 32 MB ถูกข้าม
-- **เลเยอร์:** เปิดได้เฉพาะไฟล์ภาพในเครื่อง ไม่เปิด network share (`\\host\share`) เพราะการเปิดจะส่งข้อมูลยืนยันตัวตนของ Windows ให้เครื่องนั้น
-- **DLL:** ONNX Runtime และ DLL ที่ใช้ร่วม โหลดจากโฟลเดอร์ `ai\` และ System32 เท่านั้น ไม่โหลดจากโฟลเดอร์ปัจจุบันหรือ PATH
-- **การเขียนไฟล์:** `.pedit` และภาพที่ส่งออกถูกเขียนลงไฟล์ชั่วคราวก่อน แล้วสลับเข้าที่เมื่อเขียนครบ ถ้าดิสก์เต็มหรือไฟดับ ไฟล์เดิมจะไม่เสีย
-- ทดสอบเองได้ด้วย `CircleRoom.exe --selftest` (สร้างไฟล์เสียหายหรือดัดแปลงหลายแบบ แล้วตรวจว่าโปรแกรมปฏิเสธได้โดยไม่ล่ม)
+## Name and logo
+**Circle Room**: the logo is "a circle in a room": a rounded graphite square (the room) with a paper-coloured ring (lens or window) and a low red safelight circle inside, like a sunset seen through a window. It is generated by `tools/make_logo.py` into `res/circleroom.ico`, embedded in the exe through `res/circleroom.rc`.
 
-## ข้อจำกัด
-- ยังไม่รองรับไฟล์ RAW (CR2/NEF/ARW/DNG)
-- ImGui ไม่มี text shaping สำหรับภาษาไทย ถ้าคำมีทั้งสระบนและวรรณยุกต์ ตัวอักษรอาจซ้อนกันเล็กน้อย
-- คะแนนความสวยเป็นค่าประมาณทางสถิติ (จากชุดข้อมูล LAION/AVA) ไม่ใช่รสนิยมของคุณโดยตรง ถ้าอยากได้ภาพตามรสนิยม ให้ใช้โหมด Reference
-- การตรวจภาพเอียงต้องอาศัยเส้นตรงในภาพ (เส้นขอบฟ้า, ตึก) ถ้าเป็นภาพธรรมชาติที่ไม่มีเส้นตรงจะตรวจไม่ค่อยได้
-- การแต่งตาม Reference จะได้ผลดีที่สุดเมื่อ Reference เป็นฉากคล้ายกับภาพที่จะแต่ง ถ้า Reference เป็นฉากต่างกันมาก สีของเนื้อหาในภาพ (เช่น ท้องฟ้าสีฟ้าหรือน้ำสีเขียวอมฟ้า) อาจถูกตีความว่าเป็นสไตล์ได้บางส่วน
-- **แยกส่วนภาพ:**
-  - ทำได้ระดับประเภท เช่น คนทุกคนในภาพจะถูกรวมเป็นส่วนเดียว ยังเลือกคนเดียวไม่ได้
-  - mask สร้างที่ 1536 px ถ้าดูภาพใหญ่ที่ 100% ขอบจะนุ่มเล็กน้อย
-  - ครั้งแรกที่เปิดภาพใช้เวลาประมาณ 3 วินาที ส่วนใหญ่เป็นเวลาโหลดโมเดล
-- **ค้นหาภาษาไทย:** ต้องผ่านการแปลก่อน ถ้าคำแปลไม่ตรง ผลอาจพลาดได้ เช่น "คนกำลังวิ่ง" ยังได้ภาพไม่ตรงนัก ส่วนคำค้นภาษาอังกฤษจะเข้าตรงไปที่ CLIP เลย
-- **แต่งอัตโนมัติ:** ใช้เกณฑ์ทั่วไปตามฉาก ภาพที่มีสีอมจัดมากจะถูกแก้สีได้แค่บางส่วน
-- **กู้ส่วนที่สว่างเกิน:**
-  - AI "สร้าง" รายละเอียดที่เข้ากับรอบข้าง ไม่ใช่ข้อมูลจริง (เมฆหรือลายผิวอาจไม่ตรงกับของจริง)
-  - บริเวณใหญ่มาก (เช่น ท้องฟ้าขาวครึ่งภาพ) จะได้ไล่สีนุ่มๆ มากกว่ารายละเอียดคม
-  - จุดสะท้อนแสงเล็กๆ (แสงในตา, ประกายบนน้ำ) ตั้งใจปล่อยไว้ขาว
-  - สีมาจากขอบของบริเวณ ถ้าขอบเป็นสีอุ่น (เช่น ท้องฟ้าตอนเย็น) ส่วนที่กู้จะอุ่นตาม
-  - ระหว่างกู้ใช้ RAM ชั่วคราวประมาณ 560 MB ไม่กี่วินาที แล้วคืนทั้งหมด
-- **Bitdefender:** ถ้า build แล้วขึ้น `Permission denied` แสดงว่า Bitdefender กำลังสแกนหรือกันการเขียนทับ `CircleRoom.exe` ให้เพิ่มโฟลเดอร์โปรเจกต์ และ `%TEMP%\circleroom_build` ใน exclusion ของ Bitdefender หรือรอให้สแกนเสร็จ
-- ต้องมี Visual C++ Runtime (มีในเครื่อง Windows ส่วนใหญ่อยู่แล้ว) เพื่อใช้ ONNX Runtime ถ้าไม่มี ระบบคัดภาพจะใช้ได้เฉพาะคะแนนแบบไม่ใช้โมเดล
+## Safety of the files you open
+Photos, `.pedit` files, caches and thumbnails may come from someone else or be damaged, so they are always checked before use:
+- **Caches / thumbnails:** entry counts, sizes and offsets are checked against the real file size before allocating memory; damaged ones are re-analysed.
+- **Images:** files claiming more than 500 megapixels or a side over 131,072 px are refused before allocating memory.
+- **`.pedit`:** NaN, infinite and out-of-range values are clamped; crops are kept inside the photo; strokes and points are capped; files over 32 MB are ignored.
+- **Layers:** only local image files open. Network shares (`\\host\share`) are refused, because opening them sends your Windows credentials to that machine.
+- **DLLs:** ONNX Runtime and its dependencies load only from `ai\` and System32, never from the current folder or PATH.
+- **Writing files:** `.pedit` files and exports are written to a temporary file first and swapped in when complete, so a full disk or power cut never corrupts the old file.
+- Check it yourself with `CircleRoom.exe --selftest`, which builds many damaged or tampered files and checks the program refuses them without crashing.
+
+## Limitations
+- RAW files (CR2/NEF/ARW/DNG) are not supported yet.
+- ImGui has no Thai text shaping, so words with both an upper vowel and a tone mark may overlap slightly.
+- Aesthetic scores are a statistical estimate (from LAION/AVA data), not your taste. For your taste, use reference mode.
+- Tilt detection needs straight lines (horizon, buildings); it is weak on nature shots without them.
+- Reference editing works best when the references are similar scenes. Very different scenes can make content colours (blue sky, teal water) partly read as style.
+- **Segmentation:**
+  - Works by category: all people in a photo form one area; you can't pick a single person yet.
+  - Masks are built at 1536 px, so edges look slightly soft at 100% on large photos.
+  - The first photo takes about 3 seconds, mostly loading the model.
+- **Thai search** goes through translation first, so a poor translation can miss (e.g. "คนกำลังวิ่ง", "a person running", is not great yet). English goes straight to CLIP.
+- **Auto edit** uses general rules per scene; strong colour casts are only partly corrected.
+- **Rebuilding highlights:**
+  - The AI *creates* plausible detail, not the real data (clouds or skin texture may differ from reality).
+  - Very large areas (e.g. half the sky blown out) get soft gradients more than sharp detail.
+  - Small specular highlights (catchlights, glints on water) are deliberately left white.
+  - Colour comes from the area's edge, so a warm edge (an evening sky) gives a warm result.
+  - It uses about 560 MB of RAM for a few seconds, then frees it all.
+- **Bitdefender:** if the build fails with `Permission denied`, Bitdefender is scanning or blocking the overwrite of `CircleRoom.exe`. Add the project folder and `%TEMP%\circleroom_build` to its exclusions, or wait for the scan to finish.
+- The Visual C++ Runtime (already on most Windows PCs) is needed for ONNX Runtime; without it, AI Cull falls back to the non-model scores.

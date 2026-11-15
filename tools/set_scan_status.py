@@ -11,7 +11,7 @@ import sys
 
 mode, ver, exe, full, lite = sys.argv[1:6]
 rest = sys.argv[6:]
-SITE, README = "docs/index.html", "README.md"
+SITE, README_TH, README_EN = "docs/index.html", "README.th.md", "README.md"
 s = open(SITE, encoding="utf-8").read()
 
 a = s.index('<section class="safe" id="safety">')
@@ -50,6 +50,10 @@ if mode == "pending":
               f"[รายงาน](https://www.virustotal.com/gui/file/{prev_exe}))\n"
               f"> SHA-256 ของ `CircleRoom.exe` {ver}: `{exe}` ตรวจเองได้ด้วย `Get-FileHash .\\CircleRoom.exe` "
               f"และแนะนำให้สแกนไฟล์ที่โหลดมาอีกครั้งเพื่อความปลอดภัย\n")
+    readme_en = (f"> **Safety check:** version {ver} is waiting for its VirusTotal scan (version {prev_ver} scored 0/71, "
+                 f"[report](https://www.virustotal.com/gui/file/{prev_exe}))\n"
+                 f"> SHA-256 of `CircleRoom.exe` {ver}: `{exe}`. Check yours with `Get-FileHash .\\CircleRoom.exe`, "
+                 f"and feel free to scan your download yourself.\n")
 else:
     flagged, engines, date_th, date_en = rest[:4]
     note_th, note_en = (rest[4], rest[5]) if len(rest) >= 6 else ("", "")
@@ -73,6 +77,10 @@ else:
               f"([รายงาน](https://www.virustotal.com/gui/file/{exe})){(' ' + note_th) if note_th else ''}\n"
               f"> SHA-256 ของ `CircleRoom.exe`: `{exe}` ตรวจเองได้ด้วย `Get-FileHash .\\CircleRoom.exe` "
               f"และแนะนำให้สแกนไฟล์ที่โหลดมาอีกครั้งเพื่อความปลอดภัย\n")
+    readme_en = (f"> **Safety check:** VirusTotal scanned `CircleRoom.exe` {ver}: **{flagged}/{engines}** "
+                 f"([report](https://www.virustotal.com/gui/file/{exe})){(' ' + note_en) if note_en else ''}\n"
+                 f"> SHA-256 of `CircleRoom.exe`: `{exe}`. Check yours with `Get-FileHash .\\CircleRoom.exe`, "
+                 f"and feel free to scan your download yourself.\n")
 pend_start = sec.find('      <p class="pending">')
 if 0 <= pend_start < head_start:
     head_start = pend_start
@@ -88,7 +96,11 @@ if ".pending{" not in s:
 s = re.sub(r'<span class="js-ver">v[\d.]+</span>', f'<span class="js-ver">v{ver}</span>', s)
 open(SITE, "w", encoding="utf-8").write(s)
 
-r = open(README, encoding="utf-8").read()
-r = re.sub(r"> \*\*ตรวจความปลอดภัย:\*\*.*\n> SHA-256 ของ `CircleRoom\.exe`.*\n", readme.replace("\\", "\\\\"), r)
-open(README, "w", encoding="utf-8").write(r)
+for path, pattern, text in (
+        (README_TH, r"> \*\*ตรวจความปลอดภัย:\*\*.*\n> SHA-256 ของ `CircleRoom\.exe`.*\n", readme),
+        (README_EN, r"> \*\*Safety check:\*\*.*\n> SHA-256 of `CircleRoom\.exe`.*\n", readme_en)):
+    r = open(path, encoding="utf-8").read()
+    r2 = re.sub(pattern, text.replace("\\", "\\\\"), r)
+    assert r2 != r or text in r, f"safety lines not found in {path}"
+    open(path, "w", encoding="utf-8").write(r2)
 print("ok", mode, ver)
