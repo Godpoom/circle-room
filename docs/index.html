@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Circle Room: โปรแกรมแต่งภาพฟรีพร้อม AI ในเครื่อง</title>
-<meta name="description" content="โปรแกรมแต่งภาพฟรีสำหรับ Windows เบาเครื่อง มี AI คัดภาพ แต่งอัตโนมัติหลายรูปพร้อมกัน ยางลบมหัศจรรย์ และเชื่อมกับ AI อย่าง Claude Code หรือ Codex ได้ ทำงานในเครื่องทั้งหมด">
+<meta name="description" content="โปรแกรมแต่งภาพฟรีสำหรับ Windows เบาเครื่อง เปิดไฟล์ RAW จากกล้องได้ มี AI คัดภาพ แต่งอัตโนมัติหลายรูปพร้อมกัน ยางลบมหัศจรรย์ และเชื่อมกับ AI อย่าง Claude Code หรือ Codex ได้ ทำงานในเครื่องทั้งหมด">
 <link rel="canonical" href="https://godpoom.github.io/circle-room/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Circle Room">
@@ -370,21 +370,21 @@ html[lang="th"] .maker h2{ font-family:var(--font-body); font-size:clamp(1.75rem
 <section class="sec newv" id="new">
   <div class="wrap split">
     <div>
-      <h2><span data-th>ใหม่ในเวอร์ชัน 1.3.0</span><span data-en>New in 1.3.0</span></h2>
-      <p class="intro"><span data-th>อัปเดตใหญ่ที่สุดตั้งแต่เปิดตัว ตั้งแต่เวอร์ชันนี้ไป โปรแกรมจะแจ้งเมื่อมีเวอร์ชันใหม่ และอัปเดตได้ในคลิกเดียว <a href="https://github.com/Godpoom/circle-room/releases/latest" rel="noopener">อ่านรายละเอียดทั้งหมด</a></span><span data-en>The biggest update since launch. From this version on, the app tells you when a new one is out and updates in one click. <a href="https://github.com/Godpoom/circle-room/releases/latest" rel="noopener">Read the full release notes</a></span></p>
+      <h2><span data-th>ใหม่ในเวอร์ชัน 1.3</span><span data-en>New in 1.3</span></h2>
+      <p class="intro"><span data-th>1.3.1 เปิดไฟล์ RAW จากกล้องได้ ต่อจากอัปเดตใหญ่ 1.3.0 ที่เพิ่มการแต่งหลายรูป การเชื่อม AI และอัปเดตในโปรแกรม ตั้งแต่ 1.3.0 ไป โปรแกรมจะแจ้งเมื่อมีเวอร์ชันใหม่และอัปเดตได้ในคลิกเดียว <a href="https://github.com/Godpoom/circle-room/releases/latest" rel="noopener">อ่านรายละเอียดทั้งหมด</a></span><span data-en>1.3.1 opens camera RAW files, on top of 1.3.0, the biggest update since launch: batch editing, AI agents and in-app updates. From 1.3.0 on, the app tells you when a new version is out and updates in one click. <a href="https://github.com/Godpoom/circle-room/releases/latest" rel="noopener">Read the full release notes</a></span></p>
     </div>
     <ul class="ledger">
+      <li>
+        <h3><span data-th>ไฟล์ RAW จากกล้อง (1.3.1)</span><span data-en>Camera RAW files (1.3.1)</span></h3>
+        <p><span data-th>เปิด CR2, CR3, NEF, ARW, DNG, RAF, ORF, RW2 และอื่นๆ กว่า 1,200 รุ่นกล้อง แต่งบนข้อมูลเต็มจากเซนเซอร์แบบ 16 บิต จึงดึงรายละเอียดส่วนสว่างและส่วนมืดได้มากกว่า JPEG ใช้ได้ทั้งการคัดภาพ AI และแต่งหลายรูป</span><span data-en>Open CR2, CR3, NEF, ARW, DNG, RAF, ORF, RW2 and more, over 1,200 cameras. Edits run on the full 16-bit sensor data, so highlights and shadows hold far more than a JPEG. AI Cull and batch editing take RAW too.</span></p>
+      </li>
       <li>
         <h3><span data-th>แต่งอัตโนมัติหลายรูปพร้อมกัน</span><span data-en>Auto edit many photos at once</span></h3>
         <p><span data-th>เลือกรูป ทั้งโฟลเดอร์ หรือภาพที่ AI คัดไว้ แต่ละรูปได้การแต่งตามฉากของตัวเอง ข้ามรูปที่คุณแต่งไว้แล้ว และส่งออก JPEG ได้ ทำงานเบื้องหลัง</span><span data-en>Pick photos, a folder or your AI Cull picks. Each one gets an edit for its own scene, skips what you already edited, and can export JPEGs, all in the background.</span></p>
       </li>
       <li>
-        <h3><span data-th>ให้ AI แต่งรูปแทนคุณ</span><span data-en>Let AI agents edit for you</span></h3>
-        <p><span data-th>Claude Code, Codex, Cursor, Gemini CLI และอีกกว่า 10 แอป สั่ง Circle Room ได้ด้วยภาษาปกติ ใช้ได้ 20 เครื่องมือ และเห็นภาพทุกขั้น <a href="#agents">ดูวิธีใช้</a></span><span data-en>Claude Code, Codex, Cursor, Gemini CLI and 10+ more can drive Circle Room in plain language, with 20 tools and a preview after every step. <a href="#agents">See how</a></span></p>
-      </li>
-      <li>
-        <h3><span data-th>ดูว่า AI กำลังทำอะไร</span><span data-en>Watch what the AI does</span></h3>
-        <p><span data-th>ระหว่างที่ AI ทำงาน โปรแกรมบอกว่าแอปไหนเชื่อมอยู่ ใช้เครื่องมืออะไร เปลี่ยนค่าอะไรบ้าง ภาพอัปเดตทันทีและย้อนกลับได้ทุกขั้น</span><span data-en>The app shows which AI is connected, the tool it is using and every value it changed. The photo updates live and every step can be undone.</span></p>
+        <h3><span data-th>ให้ AI แต่งรูปแทนคุณ และดูได้ทุกขั้น</span><span data-en>AI agents edit, you watch every step</span></h3>
+        <p><span data-th>Claude Code, Codex, Cursor, Gemini CLI และอีกกว่า 10 แอป สั่ง Circle Room ได้ด้วยภาษาปกติ ใช้ได้ 20 เครื่องมือ ระหว่างนั้นโปรแกรมบอกว่าแอปไหนเชื่อมอยู่ ใช้เครื่องมืออะไร และเปลี่ยนค่าอะไร ย้อนกลับได้ทุกขั้น <a href="#agents">ดูวิธีใช้</a></span><span data-en>Claude Code, Codex, Cursor, Gemini CLI and 10+ more drive Circle Room in plain language with 20 tools, while the app shows which AI is connected, the tool in use and every value it changed. Every step can be undone. <a href="#agents">See how</a></span></p>
       </li>
       <li>
         <h3><span data-th>อัปเดตในตัวโปรแกรม</span><span data-en>In-app updates</span></h3>
@@ -432,41 +432,46 @@ html[lang="th"] .maker h2{ font-family:var(--font-body); font-size:clamp(1.75rem
     </div>
     <div class="row">
       <span class="n">02</span>
+      <h3><span data-th>ไฟล์ RAW จากกล้อง</span><span data-en>Camera RAW</span></h3>
+      <p><span data-th>เปิดไฟล์ RAW ของ Canon, Nikon, Sony, Fujifilm, Olympus, Panasonic, Pentax, Leica และ DNG ได้โดยตรง แต่งบนข้อมูล 16 บิตเต็มจากเซนเซอร์พร้อมสมดุลแสงขาวของกล้อง ไฟล์ RAW เดิมไม่ถูกแก้</span><span data-en>Open RAW files from Canon, Nikon, Sony, Fujifilm, Olympus, Panasonic, Pentax, Leica and any DNG. Edits run on the full 16-bit sensor data with the camera’s white balance; the RAW itself is never changed.</span></p>
+    </div>
+    <div class="row">
+      <span class="n">03</span>
       <h3><span data-th>แต่งอัตโนมัติ ทีละรูปหรือทั้งโฟลเดอร์</span><span data-en>Auto edit, one photo or a folder</span></h3>
       <p><span data-th>ดูออกว่าเป็นภาพคน ทิวทัศน์ อาหาร หรือกลางคืน แล้วปรับให้เหมาะกับฉาก ทำทีละรูปหรือหลายร้อยรูปพร้อมกันในเบื้องหลัง ผลที่ได้เป็นค่าสไลเดอร์ธรรมดา แก้ต่อเองได้ทุกค่า</span><span data-en>Tells a portrait from a landscape, food or a night shot and tunes for the scene, for one photo or hundreds in the background. The result is plain slider values you can keep editing.</span></p>
     </div>
     <div class="row">
-      <span class="n">03</span>
+      <span class="n">04</span>
       <h3><span data-th>ยางลบมหัศจรรย์ + ตัดต่อ</span><span data-en>Magic eraser + compose</span></h3>
       <p><span data-th>ระบายทับคนหรือของที่ไม่ต้องการ แล้ว AI เติมพื้นหลังให้เนียน วางภาพอื่นซ้อนได้ 4 เลเยอร์ AI ตัดพื้นหลังในคลิกเดียว ย้าย ย่อขยาย หมุน เลือกโหมดผสม และปรับสีให้กลืนกับภาพหลัก</span><span data-en>Paint over a stranger or a stray wire and AI fills in the background. Stack up to four photos, cut them out in one click, move, resize, rotate, blend and colour-match.</span></p>
     </div>
     <div class="row">
-      <span class="n">04</span>
+      <span class="n">05</span>
       <h3><span data-th>ปรับเฉพาะส่วน</span><span data-en>Adjust one part</span></h3>
       <p><span data-th>AI แยกใบหน้า คน ท้องฟ้า ถนน ต้นไม้ น้ำ ให้เอง คลิกเดียวแล้วปรับแสงเฉพาะท้องฟ้า หรือทำให้หน้าสว่างขึ้นโดยไม่กระทบเสื้อผ้าและพื้นหลัง</span><span data-en>AI separates faces, people, sky, road, trees and water. One click to darken just the sky or brighten just the faces.</span></p>
     </div>
     <div class="row">
-      <span class="n">05</span>
+      <span class="n">06</span>
       <h3><span data-th>กู้ส่วนที่สว่างเกิน</span><span data-en>Rebuild blown highlights</span></h3>
       <p><span data-th>ท้องฟ้าหรือหน้าที่ขาวจนไม่มีรายละเอียด ลดไฮไลต์ยังไงก็ได้แค่สีเทา ตัวนี้สร้างสีและพื้นผิวขึ้นมาใหม่ให้เข้ากับรอบข้าง</span><span data-en>When a sky or a face clips to pure white, sliders only turn it grey. This rebuilds colour and texture that match the surroundings.</span></p>
     </div>
     <div class="row">
-      <span class="n">06</span>
+      <span class="n">07</span>
       <h3><span data-th>เชื่อมกับ AI (MCP)</span><span data-en>Works with AI agents (MCP)</span></h3>
       <p><span data-th>Claude Code, Codex, Cursor และอีกหลายแอป ใช้ทุกเครื่องมือของโปรแกรมได้ และคุณเห็นทุกขั้นที่ AI ทำในหน้าจอ <a href="#agents">ดูเพิ่ม</a></span><span data-en>Claude Code, Codex, Cursor and more can use every tool, and you see each step the AI takes on screen. <a href="#agents">More</a></span></p>
     </div>
     <div class="row">
-      <span class="n">07</span>
+      <span class="n">08</span>
       <h3><span data-th>เบาจริง</span><span data-en>Actually light</span></h3>
       <p><span data-th>ตัวโปรแกรมราว 4 MB เปิดภาพ 24 ล้านพิกเซลแล้วใช้ RAM ราว 20 MB ไม่ได้ใช้งานก็ไม่กิน CPU พรีวิวทุกเครื่องมือเปิดพร้อมกันใช้แค่ประมาณ 1 มิลลิวินาทีต่อเฟรม</span><span data-en>A program of about 4 MB. About 20 MB of RAM with a 24-megapixel photo open, zero CPU when idle, and about 1 ms per frame with every tool switched on.</span></p>
     </div>
     <div class="row">
-      <span class="n">08</span>
+      <span class="n">09</span>
       <h3><span data-th>ไม่ทับไฟล์ต้นฉบับ</span><span data-en>Your originals stay untouched</span></h3>
       <p><span data-th>ค่าที่แต่งเก็บเป็นไฟล์เล็กๆ ข้างรูป เปิดรูปเดิมเมื่อไหร่ก็แต่งต่อได้ ย้อนกลับได้ทุกขั้นในหน้า ประวัติ</span><span data-en>Edits live in a tiny file beside the photo. Reopen any time and carry on, or step back through History.</span></p>
     </div>
     <div class="row">
-      <span class="n">09</span>
+      <span class="n">10</span>
       <h3><span data-th>ไทยและอังกฤษ พร้อมสอนใช้</span><span data-en>Thai and English, with a tour</span></h3>
       <p><span data-th>สลับภาษาได้ในคลิกเดียว ครั้งแรกที่เปิดมีทัวร์สอนใช้ 12 ขั้น และปรับขนาดตัวอักษรได้ถึง 150%</span><span data-en>Switch language in one click. A 12-step tour runs the first time, and text scales up to 150%.</span></p>
     </div>
@@ -600,7 +605,11 @@ html[lang="th"] .maker h2{ font-family:var(--font-body); font-size:clamp(1.75rem
       </details>
       <details>
         <summary><span data-th>อัปเดตยังไง</span><span data-en>How do I update?</span></summary>
-        <p><span data-th>ตั้งแต่ 1.3.0 เมื่อมีเวอร์ชันใหม่ จะมีปุ่มสีส้ม “อัปเดต” มุมขวาบน กดแล้วโปรแกรมดาวน์โหลด ตรวจ SHA-256 และติดตั้งให้เอง ถ้าใช้ 1.2.1 หรือเก่ากว่า ให้โหลด 1.3.0 จากหน้านี้หนึ่งครั้ง แล้วแตกไฟล์ทับโฟลเดอร์เดิมได้เลย การตั้งค่าและสไตล์ยังอยู่</span><span data-en>From 1.3.0 on, an orange “Update” button appears at the top right when a new version is out; it downloads, checks SHA-256 and installs for you. On 1.2.1 or older, download 1.3.0 here once and unzip it over the old folder; your settings and styles are kept.</span></p>
+        <p><span data-th>ตั้งแต่ 1.3.0 เมื่อมีเวอร์ชันใหม่ จะมีปุ่มสีส้ม “อัปเดต” มุมขวาบน กดแล้วโปรแกรมดาวน์โหลด ตรวจ SHA-256 และติดตั้งให้เอง ถ้าใช้ 1.2.1 หรือเก่ากว่า ให้โหลดเวอร์ชันล่าสุดจากหน้านี้หนึ่งครั้ง แล้วแตกไฟล์ทับโฟลเดอร์เดิมได้เลย การตั้งค่าและสไตล์ยังอยู่</span><span data-en>From 1.3.0 on, an orange “Update” button appears at the top right when a new version is out; it downloads, checks SHA-256 and installs for you. On 1.2.1 or older, download the latest version here once and unzip it over the old folder; your settings and styles are kept.</span></p>
+      </details>
+      <details>
+        <summary><span data-th>เปิดไฟล์ RAW ได้ไหม</span><span data-en>Does it open RAW files?</span></summary>
+        <p><span data-th>ได้ ตั้งแต่ 1.3.1 รองรับ CR2, CR3, NEF, ARW, DNG, RAF, ORF, RW2 และอื่นๆ กว่า 1,200 รุ่นกล้อง ทั้งตัวเต็มและรุ่นเล็ก RAW ยังไม่ผ่านการปรับโทนของกล้อง ตอนเปิดจึงดูมืดและจืดกว่า JPEG จากกล้อง กด “แต่งอัตโนมัติ” ได้เลย</span><span data-en>Yes. Since 1.3.1, CR2, CR3, NEF, ARW, DNG, RAF, ORF, RW2 and more (over 1,200 cameras), in both Full and Lite. A RAW has no camera tone curve yet, so it opens darker and flatter than the camera’s JPEG; “Auto edit” brings it up.</span></p>
       </details>
       <details>
         <summary><span data-th>ต่อกับ AI ตัวไหนได้บ้าง</span><span data-en>Which AI apps can connect?</span></summary>
