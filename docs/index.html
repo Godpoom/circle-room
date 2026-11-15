@@ -533,12 +533,11 @@ html[lang="th"] .maker h2{ font-family:var(--font-body); font-size:clamp(1.75rem
         <b>0</b><span>/ 71</span>
       </div>
       <p class="scan" aria-hidden="true"><span data-th>ตรวจแล้ว</span><span data-en>checked</span> <span class="js-checked">71</span>/71, <span data-th>พบ</span><span data-en>flagged</span> 0</p>
-      <p class="pending"><span data-th>เวอร์ชัน 1.3.1 กำลังรอผลสแกน</span><span data-en>Version 1.3.1: scan pending</span></p>
-      <h2><span data-th>เวอร์ชันก่อนหน้า ไม่มีแอนตี้ไวรัสตัวไหนแจ้ง</span><span data-en>The previous version: nothing flagged</span></h2>
-      <p><span data-th>ผล 0/71 นี้เป็นของ <b>CircleRoom.exe 1.3.0</b> (สแกนวันที่ 15 พ.ย. 2026) ส่วนเวอร์ชันล่าสุด 1.3.1 เพิ่งออก กำลังรอผลสแกน ระหว่างนี้แนะนำให้สแกนไฟล์ที่คุณโหลดมาเองตามขั้นตอนด้านขวา</span>
-         <span data-en>This 0/71 is for <b>CircleRoom.exe 1.3.0</b> (scanned 15 Nov 2026). Version 1.3.1 has just shipped and its scan is pending; until then, please scan your download yourself using the steps on the right.</span></p>
-      <a class="vt" href="https://www.virustotal.com/gui/file/84533589153d3ba2085ca5720e5839ba84dd409efc9fd8e0d117f08a937b7942" target="_blank" rel="noopener">
-        <span data-th>ดูรายงานของ 1.3.0 บน VirusTotal</span><span data-en>Open the 1.3.0 report on VirusTotal</span>
+      <h2><span data-th>ไม่มีแอนตี้ไวรัสตัวไหนแจ้งว่าอันตราย</span><span data-en>No antivirus engine flagged it</span></h2>
+      <p><span data-th>เราส่ง <b>CircleRoom.exe</b> เวอร์ชัน 1.3.1 ให้ VirusTotal สแกนด้วยแอนตี้ไวรัส 71 ตัว ผลคือพบ 0 (สแกนวันที่ 15 พ.ย. 2026)</span>
+         <span data-en>We sent <b>CircleRoom.exe</b> 1.3.1 to VirusTotal, which ran it past 71 antivirus engines: 0 flagged it (scanned 15 Nov 2026).</span></p>
+      <a class="vt" href="https://www.virustotal.com/gui/file/22431ed7e907661509357a201c75bd3601eb30e86d873e8b631ad4aebbe923b4" target="_blank" rel="noopener">
+        <span data-th>ดูรายงานบน VirusTotal</span><span data-en>Open the VirusTotal report</span>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg>
       </a>
     </div>
@@ -546,7 +545,7 @@ html[lang="th"] .maker h2{ font-family:var(--font-body); font-size:clamp(1.75rem
       <p class="checks-h"><span data-th>อย่าเชื่อเราอย่างเดียว ตรวจเองได้ใน 1 นาที</span><span data-en>Don’t just take our word for it</span></p>
       <ol class="checks">
         <li><div>
-          <h3><span data-th>เช็คว่าไฟล์ที่โหลดมาตรงกับที่เราปล่อย</span><span data-en>Check your file matches our release</span></h3>
+          <h3><span data-th>เช็คว่าไฟล์ที่โหลดมาเป็นไฟล์เดียวกับที่สแกน</span><span data-en>Check your file is the one we scanned</span></h3>
           <p><span data-th>แตกไฟล์ zip แล้วคลิกขวาในโฟลเดอร์ เลือก “Open in Terminal” แล้ววางคำสั่งนี้ ตัวเลขที่ได้ต้องตรงกับ SHA-256 ด้านล่างทุกตัว</span>
              <span data-en>Unzip, right-click inside the folder, choose “Open in Terminal” and paste this. The result must match the SHA-256 below exactly.</span></p>
           <div class="hash"><span class="k">PowerShell</span><code>Get-FileHash .\CircleRoom.exe</code><button class="copy" type="button" data-copy="Get-FileHash .\CircleRoom.exe">copy</button></div>

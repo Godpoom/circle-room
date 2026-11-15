@@ -9,8 +9,8 @@
 > repo นี้เก็บเฉพาะซอร์สโค้ด ไฟล์โมเดล AI (~490 MB) อยู่ในไฟล์ zip ของ Release ถ้าจะ build เอง ให้คัดลอกโฟลเดอร์ `ai\` จาก zip มาไว้ที่ `ai\` ของโปรเจกต์
 > ดูสัญญาอนุญาตของไลบรารีและโมเดลได้ที่ [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) (ข้อความสัญญาฉบับเต็มอยู่ในโฟลเดอร์ [LICENSES](LICENSES))
 >
-> **ตรวจความปลอดภัย:** เวอร์ชัน 1.3.1 กำลังรอผลสแกน VirusTotal (เวอร์ชัน 1.3.0 ได้ 0/71 [รายงาน](https://www.virustotal.com/gui/file/84533589153d3ba2085ca5720e5839ba84dd409efc9fd8e0d117f08a937b7942))
-> SHA-256 ของ `CircleRoom.exe` 1.3.1: `22431ed7e907661509357a201c75bd3601eb30e86d873e8b631ad4aebbe923b4` ตรวจเองได้ด้วย `Get-FileHash .\CircleRoom.exe` และแนะนำให้สแกนไฟล์ที่โหลดมาอีกครั้งเพื่อความปลอดภัย
+> **ตรวจความปลอดภัย:** VirusTotal สแกน `CircleRoom.exe` 1.3.1 แล้ว **0/71** ([รายงาน](https://www.virustotal.com/gui/file/22431ed7e907661509357a201c75bd3601eb30e86d873e8b631ad4aebbe923b4))
+> SHA-256 ของ `CircleRoom.exe`: `22431ed7e907661509357a201c75bd3601eb30e86d873e8b631ad4aebbe923b4` ตรวจเองได้ด้วย `Get-FileHash .\CircleRoom.exe` และแนะนำให้สแกนไฟล์ที่โหลดมาอีกครั้งเพื่อความปลอดภัย
 
 ได้ไฟล์ `bin\CircleRoom.exe` ขนาดประมาณ 3 MB ไม่ต้องติดตั้งอะไรเพิ่ม
 ระบบ AI ใช้ไฟล์ในโฟลเดอร์ `bin\ai\` เพิ่มอีกประมาณ 466 MB (ถ้าไม่มีโฟลเดอร์นี้ ตัวแก้ไขภาพยังใช้ได้ตามปกติ)
