@@ -397,6 +397,38 @@
   X(T_AgentOpenPhoto, "Open", "เปิดภาพ") \
   X(T_AgentAdded, "added", "เพิ่ม") \
   X(T_AgentChanged, "changed", "เปลี่ยนแล้ว") \
+  X(T_UpdTitle, "Update Circle Room", "อัปเดต Circle Room") \
+  X(T_UpdCurrent, "Your version: %s", "เวอร์ชันที่ใช้อยู่: %s") \
+  X(T_UpdChecking, "Checking for a new version...", "กำลังตรวจหาเวอร์ชันใหม่...") \
+  X(T_UpdUpToDate, "You have the latest version.", "คุณใช้เวอร์ชันล่าสุดแล้ว") \
+  X(T_UpdAvailable, "Version %s is available", "มีเวอร์ชันใหม่ %s แล้ว") \
+  X(T_UpdSize, "Download size %.0f MB", "ขนาดดาวน์โหลด %.0f MB") \
+  X(T_UpdWhatsNew, "What's new", "มีอะไรใหม่") \
+  X(T_UpdNow, "Update now", "อัปเดตเลย") \
+  X(T_UpdLater, "Later", "ภายหลัง") \
+  X(T_UpdSkip, "Skip this version", "ข้ามเวอร์ชันนี้") \
+  X(T_UpdDownloading, "Downloading %.0f / %.0f MB", "กำลังดาวน์โหลด %.0f / %.0f MB") \
+  X(T_UpdInstalling, "Checking the file and installing...", "กำลังตรวจสอบไฟล์และติดตั้ง...") \
+  X(T_UpdReady, "Installed. Restart Circle Room to use version %s.", "ติดตั้งเสร็จแล้ว เปิดโปรแกรมใหม่เพื่อใช้เวอร์ชัน %s") \
+  X(T_UpdRestart, "Restart now", "เปิดโปรแกรมใหม่ตอนนี้") \
+  X(T_UpdRestartBusy, "Wait for the export to finish first", "รอให้ส่งออกภาพเสร็จก่อน") \
+  X(T_UpdCheckAgain, "Check again", "ตรวจอีกครั้ง") \
+  X(T_UpdRetry, "Try again", "ลองอีกครั้ง") \
+  X(T_UpdOpenPage, "Open download page", "เปิดหน้าดาวน์โหลด") \
+  X(T_UpdAuto, "Check for updates when Circle Room starts", "ตรวจหาอัปเดตอัตโนมัติเมื่อเปิดโปรแกรม") \
+  X(T_UpdPrivacy, "Asks GitHub for the latest version at most once a day. Nothing about you or your photos is sent.", "ถาม GitHub ว่ามีเวอร์ชันใหม่หรือไม่ วันละไม่เกินหนึ่งครั้ง ไม่มีการส่งข้อมูลของคุณหรือรูปภาพ") \
+  X(T_UpdSafe, "Your photos, edits, presets and settings are kept.", "รูป ค่าที่แต่ง สไตล์ และการตั้งค่าของคุณจะอยู่ครบ") \
+  X(T_UpdBadge, "Update %s", "อัปเดต %s") \
+  X(T_UpdFound, "Circle Room %s is available: click Update at the top right", "Circle Room %s มาแล้ว: กดปุ่มอัปเดตมุมขวาบน") \
+  X(T_UpdErrNetwork, "Could not reach GitHub. Check the internet connection.", "เชื่อมต่อ GitHub ไม่ได้ ตรวจสอบอินเทอร์เน็ต") \
+  X(T_UpdErrHttp, "GitHub answered with an error. Try again later.", "GitHub ตอบกลับผิดพลาด ลองใหม่ภายหลัง") \
+  X(T_UpdErrNoWrite, "Cannot write to the program folder. Download the new version by hand.", "เขียนไฟล์ในโฟลเดอร์โปรแกรมไม่ได้ ให้ดาวน์โหลดเวอร์ชันใหม่เอง") \
+  X(T_UpdErrHash, "The download did not match its published SHA-256, so nothing was installed.", "ไฟล์ที่ดาวน์โหลดไม่ตรงกับค่า SHA-256 ที่ประกาศไว้ จึงไม่ได้ติดตั้ง") \
+  X(T_UpdErrZip, "The update file is damaged, so nothing was installed.", "ไฟล์อัปเดตเสียหาย จึงไม่ได้ติดตั้ง") \
+  X(T_UpdErrInstall, "Installing failed; the current version was kept.", "ติดตั้งไม่สำเร็จ ยังใช้เวอร์ชันเดิมอยู่") \
+  X(T_UpdErrCancelled, "Cancelled.", "ยกเลิกแล้ว") \
+  X(T_UpdErrFeed, "Could not read the release information.", "อ่านข้อมูลเวอร์ชันไม่ได้") \
+  X(T_UpdErrNoAsset, "This version has to be downloaded from the website.", "เวอร์ชันนี้ต้องดาวน์โหลดเองจากหน้าเว็บ") \
   X(T_ConnectAi, "Connect AI","เชื่อม AI") \
   X(T_ConnectAiTip, "Let AI agents (Claude Code, Codex, Antigravity, Cursor...) edit photos with Circle Room (MCP)", "ให้ AI (Claude Code, Codex, Antigravity, Cursor ฯลฯ) แต่งรูปด้วย Circle Room ผ่าน MCP") \
   X(T_McpTitle, "Connect Circle Room to AI (MCP)", "เชื่อม Circle Room กับ AI (MCP)") \

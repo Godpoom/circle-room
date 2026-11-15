@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "agent_log.h"
+#include "updater.h"
 #include "ai/cache.h"
 #include "ai/wic_decode.h"
 #include "image_io.h"
@@ -276,6 +277,69 @@ void testAgentLog() {
         "MCP client names are shown by product name");
 }
 
+// A stored (uncompressed) zip, built by hand: enough to test the reader without a zip library.
+std::vector<uint8_t> storedZip(const std::vector<std::pair<std::string, std::string>>& files) {
+  std::vector<uint8_t> z, cd;
+  auto p16 = [](std::vector<uint8_t>& v, uint32_t x) { v.push_back(x & 255); v.push_back(x >> 8 & 255); };
+  auto p32 = [&](std::vector<uint8_t>& v, uint32_t x) { p16(v, x & 0xFFFF); p16(v, x >> 16); };
+  for (const auto& f : files) {
+    uint32_t off = (uint32_t)z.size(), crc = crc32Of(f.second.data(), f.second.size()), n = (uint32_t)f.second.size();
+    p32(z, 0x04034b50); p16(z, 20); p16(z, 0); p16(z, 0); p32(z, 0); p32(z, crc); p32(z, n); p32(z, n);
+    p16(z, (uint32_t)f.first.size()); p16(z, 0);
+    z.insert(z.end(), f.first.begin(), f.first.end());
+    z.insert(z.end(), f.second.begin(), f.second.end());
+    p32(cd, 0x02014b50); p16(cd, 20); p16(cd, 20); p16(cd, 0); p16(cd, 0); p32(cd, 0); p32(cd, crc); p32(cd, n);
+    p32(cd, n); p16(cd, (uint32_t)f.first.size()); p16(cd, 0); p16(cd, 0); p16(cd, 0); p16(cd, 0); p32(cd, 0); p32(cd, off);
+    cd.insert(cd.end(), f.first.begin(), f.first.end());
+  }
+  uint32_t cdOff = (uint32_t)z.size();
+  z.insert(z.end(), cd.begin(), cd.end());
+  p32(z, 0x06054b50); p16(z, 0); p16(z, 0); p16(z, (uint32_t)files.size()); p16(z, (uint32_t)files.size());
+  p32(z, (uint32_t)cd.size()); p32(z, cdOff); p16(z, 0);
+  return z;
+}
+
+void testUpdater(const std::string& dir) {
+  check(compareVersions("1.3.0", "1.2.1") > 0 && compareVersions("1.2.10", "1.2.9") > 0 &&
+            compareVersions("1.2", "1.2.0") == 0 && compareVersions("1.2.1", "1.10.0") < 0,
+        "versions compare by number, not by text");
+  check(sha256Hex("abc", 3) == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", "SHA-256 is correct");
+  check(crc32Of("123456789", 9) == 0xCBF43926u, "CRC-32 is correct");
+  std::string rel;
+  check(zipEntryPath("CircleRoom/ai/model.onnx", rel) && rel == "ai\\model.onnx", "release zip paths map into the program folder");
+  check(!zipEntryPath("CircleRoom/../evil.exe", rel) && !zipEntryPath("CircleRoom/ai/../../x", rel) &&
+            !zipEntryPath("Other/x.exe", rel) && !zipEntryPath("CircleRoom/C:/x", rel) &&
+            !zipEntryPath("CircleRoom/a\\..\\x", rel),
+        "zip entries cannot escape the program folder");
+  check(!zipEntryPath("CircleRoom/settings.ini", rel) && !zipEntryPath("CircleRoom/presets/mine.plook", rel),
+        "an update never overwrites settings or presets");
+  ReleaseInfo r;
+  std::string err;
+  const char* feed =
+      "{\"tag_name\":\"v1.3.0\",\"html_url\":\"https://github.com/Godpoom/circle-room/releases/tag/v1.3.0\","
+      "\"body\":\"## New\\n- **Batch** edit\",\"assets\":[{\"name\":\"CircleRoom_Lite.zip\",\"size\":10,"
+      "\"browser_download_url\":\"https://x/lite.zip\"},{\"name\":\"CircleRoom_Portable.zip\",\"size\":20,"
+      "\"browser_download_url\":\"https://x/full.zip\"},{\"name\":\"SHA256SUMS.txt\",\"browser_download_url\":\"https://x/s\"}]}";
+  check(parseRelease(feed, false, r, err) && r.version == "1.3.0" && r.assetUrl == "https://x/full.zip" &&
+            r.assetSize == 20 && r.sumsUrl == "https://x/s" && r.notes.find("Batch edit") != std::string::npos,
+        "release info picks the Portable zip for the full build");
+  check(parseRelease(feed, true, r, err) && r.assetUrl == "https://x/lite.zip", "and the Lite zip for Lite");
+  check(!parseRelease("{\"tag_name\":\"v1.3.0; rm\"}", false, r, err), "a malformed version is refused");
+  std::string zp = dir + "\\upd.zip";
+  std::vector<uint8_t> zb = storedZip({{"CircleRoom/CircleRoom.exe", "new exe"}, {"CircleRoom/ai/m.onnx", "model"}});
+  writeBytes(zp, zb);
+  std::vector<ZipEntry> es;
+  std::vector<uint8_t> data;
+  check(zipList(zp, es, err) && es.size() == 2 && zipRead(zp, es[1], data, err) &&
+            std::string(data.begin(), data.end()) == "model",
+        "zip reader lists and extracts");
+  zb[30 + 25 + 1] ^= 0xFF;  // flip a byte of the first file's data (after its 30-byte header and name)
+  writeBytes(zp, zb);
+  check(zipList(zp, es, err) && !zipRead(zp, es[0], data, err), "a corrupted zip entry fails its CRC check");
+  writeBytes(zp, std::vector<uint8_t>(100, 0));
+  check(!zipList(zp, es, err), "a file that is not a zip is refused");
+}
+
 }  // namespace
 
 int runSelfTest(const std::vector<std::string>& args) {
@@ -290,6 +354,7 @@ int runSelfTest(const std::vector<std::string>& args) {
   testPaths(dir);
   testWrites(dir);
   testAgentLog();
+  testUpdater(dir);
   printf("%d passed, %d failed\n", g_pass, g_fail);
   return g_fail ? 1 : 0;
 }

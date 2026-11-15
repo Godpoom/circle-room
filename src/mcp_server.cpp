@@ -26,6 +26,7 @@
 #include "ai/style_match.h"
 #include "ai/text_query.h"
 #include "agent_log.h"
+#include "version.h"
 #include "heal.h"
 #include "i18n.h"
 #include "image_io.h"
@@ -1351,7 +1352,7 @@ int mcpServe(std::string& err) {
       Json info = Json::object();
       info.set("name", "circle-room");
       info.set("title", "Circle Room photo editor");
-      info.set("version", "1.3.0");
+      info.set("version", CR_VERSION_STR);
       r.set("serverInfo", info);
       r.set("instructions", kInstructions);
       send(reply(id, r));

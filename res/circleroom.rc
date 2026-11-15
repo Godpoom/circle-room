@@ -2,9 +2,11 @@
 GLFW_ICON ICON "circleroom.ico"
 MAINICON ICON "circleroom.ico"
 
+#include "../src/version.h"
+
 1 VERSIONINFO
-FILEVERSION 1,2,1,0
-PRODUCTVERSION 1,2,1,0
+FILEVERSION CR_VER_MAJOR,CR_VER_MINOR,CR_VER_PATCH,0
+PRODUCTVERSION CR_VER_MAJOR,CR_VER_MINOR,CR_VER_PATCH,0
 BEGIN
   BLOCK "StringFileInfo"
   BEGIN
@@ -13,7 +15,8 @@ BEGIN
       VALUE "ProductName", "Circle Room"
       VALUE "FileDescription", "Circle Room photo editor"
       VALUE "OriginalFilename", "CircleRoom.exe"
-      VALUE "FileVersion", "1.2.1"
+      VALUE "FileVersion", CR_VERSION_STR
+      VALUE "ProductVersion", CR_VERSION_STR
     END
   END
   BLOCK "VarFileInfo"

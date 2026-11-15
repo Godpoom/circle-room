@@ -35,6 +35,10 @@ def main():
     vc_dir = sys.argv[3] if len(sys.argv) > 3 else default_vc_dir()
     assert vc_dir and all(os.path.isfile(os.path.join(vc_dir, f)) for f in VC), f"VC redist not found: {vc_dir}"
     root = os.getcwd()
+    # The in-app updater compares against the version built into the exe: they must agree.
+    vh = open(os.path.join(root, "src", "version.h"), encoding="utf-8").read()
+    built = vh.split('CR_VERSION_STR "', 1)[1].split('"', 1)[0]
+    assert built == version, f"src/version.h says {built}, not {version}: bump it and rebuild first"
     exe = os.path.join(root, "bin", "CircleRoom.exe")
     ai_dir = os.path.join(root, "bin", "ai")
     ai_files = sorted(f for f in os.listdir(ai_dir) if not f.lower().startswith("segformer") and f.lower() not in VC)

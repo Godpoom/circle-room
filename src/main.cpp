@@ -35,6 +35,9 @@
 #include "selftest.h"
 #include "ui_agent.h"
 #include "ui_batch.h"
+#include "ui_update.h"
+#include "updater.h"
+#include "version.h"
 #include "ui_cull.h"
 #include "ui_icons.h"
 #include "ui_panels.h"
@@ -56,6 +59,9 @@ struct Settings {
   int expPng = 0, expQuality = 92, expResize = 0, expLong = 2048;
   int tutorialDone = 0;
   int textPct = 100;  // text size, % of the system DPI scale
+  bool updAuto = true;      // check GitHub for a new version at start
+  long long updLast = 0;    // when we last checked (unix seconds)
+  std::string updSkip;      // version the user chose to skip
 };
 
 static std::string settingsPath() { return exeDir() + "\\settings.ini"; }
@@ -85,6 +91,9 @@ static void loadSettings(Settings& s) {
     else if (k == "expLong") s.expLong = std::max(64, iv);
     else if (k == "tutorialDone") s.tutorialDone = iv;
     else if (k == "textPct") s.textPct = iv;
+    else if (k == "updAuto") s.updAuto = iv != 0;
+    else if (k == "updLast") s.updLast = atoll(v.c_str());
+    else if (k == "updSkip") s.updSkip = v.substr(0, 20);
   }
 }
 
@@ -93,7 +102,9 @@ static void saveSettings(const Settings& s) {
   snprintf(buf, sizeof(buf), "lang=%d\nwinW=%d\nwinH=%d\nmaximized=%d\nexpPng=%d\nexpQuality=%d\nexpResize=%d\nexpLong=%d\ntutorialDone=%d\ntextPct=%d\n",
            s.lang, s.winW, s.winH, s.maximized, s.expPng, s.expQuality, s.expResize, s.expLong, s.tutorialDone,
            s.textPct);
-  writeTextFile(settingsPath(), std::string(buf) + "lastDir=" + s.lastDir + "\n");
+  std::string upd = "updAuto=" + std::to_string(s.updAuto ? 1 : 0) + "\nupdLast=" + std::to_string(s.updLast) +
+                    "\nupdSkip=" + s.updSkip + "\n";
+  writeTextFile(settingsPath(), std::string(buf) + upd + "lastDir=" + s.lastDir + "\n");
 }
 
 // ---------------------------------------------------------------- app state
@@ -245,6 +256,8 @@ struct App {
   AgentPanel agent;      // live card: which AI is connected, what it is doing, what changed
   double agentFlash = 0; // glfw time until which the canvas shows "edited by <agent>"
   std::string agentWho;
+  Updater upd;  // new versions from GitHub releases
+  bool openUpdate = false, updAnnounced = false;
 };
 
 static App* g_app = nullptr;
@@ -1976,6 +1989,29 @@ static void drawTopBar(App& a, float barH) {
       else a.openMcp = true;
     }
   }
+  {  // a new version: filled badge left of "Connect AI" (also shows download progress)
+    Updater::State us = a.upd.state();
+    ReleaseInfo ri = a.upd.latest();
+    bool show = (us == Updater::Available && (ri.version != a.S.updSkip || a.upd.wasManual())) ||
+                us == Updater::Downloading || us == Updater::Installing || us == Updater::Ready;
+    if (show) {
+      char what[32], ub[96];
+      if (us == Updater::Downloading) snprintf(what, sizeof(what), "%d%%", (int)(a.upd.progress() * 100));
+      else if (us == Updater::Installing) snprintf(what, sizeof(what), "...");
+      else snprintf(what, sizeof(what), "%s", ri.version.c_str());
+      snprintf(ub, sizeof(ub), tr(T_UpdBadge), what);
+      float uw = ImGui::CalcTextSize(ub).x + 28.f * s;
+      cx -= uw + 10.f * s;
+      ImGui::SetCursorPos(ImVec2(cx, std::floor((barH - fh) * 0.5f)));
+      ImVec2 p0 = ImGui::GetCursorScreenPos();
+      if (ImGui::InvisibleButton("##update", ImVec2(uw, fh))) a.openUpdate = true;
+      bool hov = ImGui::IsItemHovered();
+      dl->AddRectFilled(p0, ImVec2(p0.x + uw, p0.y + fh), hov ? IM_COL32(240, 100, 72, 255) : pal::kAccent, 3.f * s);
+      if (us == Updater::Downloading)
+        dl->AddRectFilled(ImVec2(p0.x, p0.y + fh - 3.f * s), ImVec2(p0.x + uw * a.upd.progress(), p0.y + fh), pal::kOnAccent, 0.f);
+      dl->AddText(ImVec2(p0.x + 14.f * s, p0.y + (fh - ImGui::GetTextLineHeight()) * 0.5f), pal::kOnAccent, ub);
+    }
+  }
   if (a.mode == 0) {
     float expW = std::max(104.f * s, ImGui::CalcTextSize(tr(T_Export)).x + 52.f * s);
     float ex = cx - 18.f * s - expW;
@@ -2794,6 +2830,18 @@ static void drawStatusBar(App& a) {
   char right[256];
   snprintf(right, sizeof(right), "RAM %.0f MB   /   %s", processPrivateWorkingSet() / (1024.0 * 1024.0), a.gpuName.c_str());
   float tw = ImGui::CalcTextSize(right).x;
+  // Version, clickable: opens the update dialog (check now, auto check on/off).
+  const char* ver = "v" CR_VERSION_STR;
+  float vw = ImGui::CalcTextSize(ver).x;
+  ImGui::SameLine(ImGui::GetWindowWidth() - tw - vw - 40 * a.scale);
+  ImVec2 vp0 = ImGui::GetCursorScreenPos();
+  if (ImGui::InvisibleButton("##version", ImVec2(vw, ImGui::GetTextLineHeight()))) {
+    a.openUpdate = true;
+    if (!a.upd.working() && a.upd.state() != Updater::Ready && a.upd.state() != Updater::Available) a.upd.check(true);
+  }
+  bool vh = ImGui::IsItemHovered();
+  if (vh) ImGui::SetTooltip("%s", tr(T_UpdTitle));
+  ImGui::GetWindowDrawList()->AddText(vp0, vh ? pal::kText : pal::kFaint, ver);
   ImGui::SameLine(ImGui::GetWindowWidth() - tw - 14 * a.scale);
   ImGui::TextUnformatted(right);
   ImGui::PopStyleColor();
@@ -3089,6 +3137,18 @@ static void buildUI(App& a) {
   ImGui::PopStyleColor();
   drawPopups(a);
   drawMcpDialog(a);
+  {
+    UpdateHost uh;
+    uh.scale = s;
+    uh.autoCheck = &a.S.updAuto;
+    uh.skip = &a.S.updSkip;
+    uh.canRestart = a.exp.stage == 0 && !a.batch.busy();
+    uh.restart = [&a]() {
+      saveSettings(a.S);
+      if (a.upd.restart(a.hasImage ? a.path : std::string())) glfwSetWindowShouldClose(a.win, 1);
+    };
+    drawUpdateDialog(a.upd, uh, a.openUpdate);
+  }
   {
     BatchHost bh = batchHost(a);
     a.batch.draw(bh);
@@ -3802,6 +3862,14 @@ int main(int, char**) {
   loadPresets(a);
   a.styles.reload();
   a.agent.watch.start([]() { glfwPostEmptyEvent(); });  // AI agents working over MCP
+  Updater::cleanupOld();  // files replaced by the last update
+  {
+    long long now = (long long)time(nullptr);
+    if (a.S.updAuto && (now - a.S.updLast > 20 * 3600 || now < a.S.updLast)) {
+      a.S.updLast = now;
+      a.upd.check(false);
+    }
+  }
 
   for (size_t i = 1; i < args.size(); i++)
     if (args[i].rfind("--", 0) != 0) {
@@ -3818,7 +3886,7 @@ int main(int, char**) {
   while (!glfwWindowShouldClose(a.win)) {
     bool busy = a.load.active || a.exp.stage != 0 || (!a.toast.empty() && Clock::now() < a.toastUntil) ||
                 a.cull.busy() || a.styles.creating() || a.segJob.active || a.recJob.active || a.batch.busy() ||
-                a.agent.animating() || glfwGetTime() < a.agentFlash;
+                a.agent.animating() || glfwGetTime() < a.agentFlash || a.upd.working();
     if (framesLeft > 0) glfwPollEvents();
     else if (busy) glfwWaitEventsTimeout(0.05);
     else glfwWaitEvents();  // idle: no CPU/GPU use until something happens
@@ -3830,6 +3898,21 @@ int main(int, char**) {
     }
 
     if (a.load.active && a.load.done) finishLoad(a);
+    a.upd.poll();
+    {
+      static bool updWasBusy = false;  // hand back the network stack's memory once a check is over
+      bool ub = a.upd.working();
+      if (updWasBusy && !ub) trimWorkingSet();
+      updWasBusy = ub;
+    }
+    if (!a.updAnnounced && !a.upd.wasManual() && a.upd.state() == Updater::Available &&
+        a.upd.latest().version != a.S.updSkip) {  // found by the start-up check: say so once
+      a.updAnnounced = true;
+      char ub[200];
+      snprintf(ub, sizeof(ub), tr(T_UpdFound), a.upd.latest().version.c_str());
+      showToast(a, ub);
+      a.toastUntil = Clock::now() + std::chrono::seconds(8);
+    }
     {
       std::vector<AgentEvent> fin;
       if (a.agent.watch.poll(glfwGetTime(), fin)) framesLeft = std::max(framesLeft, 1);
@@ -3886,6 +3969,7 @@ int main(int, char**) {
   if (a.recJob.th.joinable()) a.recJob.th.join();
   a.batch.shutdown();
   a.agent.watch.stop();
+  a.upd.shutdown();
   a.cull.shutdown();
   if (a.aiR) {
     a.aiR->shutdown();
