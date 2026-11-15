@@ -4,9 +4,11 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <process.h>
 #include <string>
 #include <vector>
 
+#include "agent_log.h"
 #include "ai/cache.h"
 #include "ai/wic_decode.h"
 #include "image_io.h"
@@ -240,6 +242,40 @@ void testWrites(const std::string& dir) {
   check(!readSidecar(photo, t), "oversized sidecar is ignored");
 }
 
+// The MCP server's activity log, read back the way the app's AI card reads it.
+void testAgentLog() {
+  AgentWatch w;  // not started: poll() reads the folder directly
+  std::vector<AgentEvent> fin;
+  w.poll(0, fin);
+  fin.clear();
+  {
+    AgentLog log;
+    log.open("claude-code");
+    log.call(1, "set_adjustments", "C:\\p\\a.jpg", "exposure=0.3");
+    w.refresh();
+    w.poll(1, fin);
+    const AgentSession* s = nullptr;
+    for (const AgentSession& x : w.sessions())
+      if (x.alive && x.client == "Claude Code") s = &x;
+    check(s && s->current() && s->current()->tool == "set_adjustments", "agent card sees the connected client and its running tool");
+    log.done(1, "set_adjustments", true, "C:\\p\\a.jpg", {{"exposure", "0", "0.3"}}, "Applied.");
+    w.refresh();
+    w.poll(2, fin);
+    check(fin.size() == 1 && fin[0].changes.size() == 1 && fin[0].changes[0].after == "0.3" && !fin[0].running,
+          "finished step carries what changed");
+  }  // destructor says bye
+  w.refresh();
+  w.poll(3, fin);
+  bool gone = true;
+  for (const AgentSession& x : w.sessions()) gone &= !x.alive;
+  check(gone && !fileExists(agentLogDir() + "\\" + std::to_string(_getpid()) + ".log"),
+        "disconnect is shown and the log file removed");
+  w.poll(20, fin);
+  check(w.sessions().empty(), "disconnected agent leaves the card after a few seconds");
+  check(agentClientName("codex-mcp-client") == "Codex" && agentClientName("Visual Studio Code") == "VS Code",
+        "MCP client names are shown by product name");
+}
+
 }  // namespace
 
 int runSelfTest(const std::vector<std::string>& args) {
@@ -253,6 +289,7 @@ int runSelfTest(const std::vector<std::string>& args) {
   testStrokes();
   testPaths(dir);
   testWrites(dir);
+  testAgentLog();
   printf("%d passed, %d failed\n", g_pass, g_fail);
   return g_fail ? 1 : 0;
 }

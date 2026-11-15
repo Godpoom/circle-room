@@ -33,6 +33,7 @@
 #include "renderer.h"
 #include "mcp_server.h"
 #include "selftest.h"
+#include "ui_agent.h"
 #include "ui_batch.h"
 #include "ui_cull.h"
 #include "ui_icons.h"
@@ -241,6 +242,9 @@ struct App {
   int editPage = 1;  // page the Edit tab returns to after Compose
   AutoBatch batch;   // auto edit many photos (worker thread + progress card)
   bool openMcp = false;  // "Connect AI" dialog (MCP client setup)
+  AgentPanel agent;      // live card: which AI is connected, what it is doing, what changed
+  double agentFlash = 0; // glfw time until which the canvas shows "edited by <agent>"
+  std::string agentWho;
 };
 
 static App* g_app = nullptr;
@@ -472,6 +476,70 @@ static BatchHost batchHost(App& a) {
     a.keyValid = false;
   };
   return h;
+}
+
+static bool samePhoto(const std::string& x, const std::string& y) {
+  if (x.size() != y.size()) return false;
+  for (size_t i = 0; i < x.size(); i++) {
+    char p = x[i] == '/' ? '\\' : (char)tolower((unsigned char)x[i]);
+    char q = y[i] == '/' ? '\\' : (char)tolower((unsigned char)y[i]);
+    if (p != q) return false;
+  }
+  return true;
+}
+
+// An AI agent rewrote the open photo's .pedit: show its edit now, as one undoable step.
+static void reloadFromAgent(App& a) {
+  std::string sc;
+  if (!readSidecar(a.path, sc)) sc.clear();
+  std::string mine = isDefault(a.params) ? std::string()
+                                         : serializeParams(a.params, true) + a.layers.serializeStrokes(a.params) +
+                                               a.heal.serialize(a.params);
+  if (sc == mine) return;
+  EditParams p;
+  if (!sc.empty()) deserializeParams(sc, p, true);
+  a.layers.clear(a.R);
+  a.layers.parseStrokes(sc);
+  a.heal.clear(a.R);
+  a.heal.parse(sc);
+  if (a.selLayer >= 0 && !p.img[a.selLayer].enabled) a.selLayer = -1;
+  a.layerDrag = 0;
+  a.params = p;
+  a.hist.push(p, T_AgentEdit, a.agentWho);
+  storeCropUser(a);
+  a.keyValid = false;
+  a.histValid = false;
+  if (p.recover > 0 && a.recPath != a.path) {
+    ai::Recovery rec;
+    if (ai::loadRecoverCache(a.path, rec)) {
+      a.R.setRecover(rec.rgba.data(), rec.w, rec.h);
+      a.recPath = a.path;
+    } else {
+      startRecover(a);
+    }
+  }
+  if (anyLayer(p)) startSegmentation(a);
+  a.agentFlash = glfwGetTime() + 1.6;
+}
+
+// Tool calls an agent finished: follow it to the photo it works on, or show the new edit.
+static void agentFinished(App& a, const std::vector<AgentEvent>& fin) {
+  a.agentWho = a.agent.clientName();
+  if (a.agentWho.empty()) a.agentWho = "AI";
+  if (a.agent.follow && a.mode == 0 && !a.load.active && !ImGui::IsAnyItemActive()) {
+    for (auto it = fin.rbegin(); it != fin.rend(); ++it) {
+      const AgentEvent& e = *it;
+      if (!e.ok || e.photo.empty() || (e.tool != "open_photo" && e.changes.empty())) continue;
+      if (a.hasImage && samePhoto(e.photo, a.path)) break;
+      if (!isDirectory(e.photo) && fileExists(e.photo)) {
+        openImage(a, e.photo);  // its .pedit (with the agent's edit) loads with it
+        a.agentFlash = glfwGetTime() + 2.5;
+        return;
+      }
+      break;
+    }
+  }
+  if (a.hasImage && !a.load.active) reloadFromAgent(a);
 }
 
 // Editor AI page: start a batch from chosen files, a folder, or the open photo's folder.
@@ -1878,19 +1946,35 @@ static void drawTopBar(App& a, float barH) {
     ImGui::PopStyleVar();
   }
   // Connect AI: how to drive Circle Room from Claude Code, Codex, Antigravity... (MCP)
-  float cw = ImGui::CalcTextSize(tr(T_ConnectAi)).x + 44.f * s;
+  // While an agent is connected the button shows it (live dot) and toggles the activity card;
+  // right click still opens the setup dialog.
+  bool agentOn = a.agent.connected();
+  std::string cLabel = agentOn ? a.agent.clientName() : std::string(tr(T_ConnectAi));
+  float cw = ImGui::CalcTextSize(cLabel.c_str()).x + 44.f * s;
   float cx = ax - 12.f * s - cw;
   ImGui::SetCursorPos(ImVec2(cx, std::floor((barH - fh) * 0.5f)));
   {
     ImVec2 p0 = ImGui::GetCursorScreenPos();
-    bool clicked = ImGui::InvisibleButton("##connectai", ImVec2(cw, fh));
+    bool clicked = ImGui::InvisibleButton("##connectai", ImVec2(cw, fh), ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight);
+    bool right = clicked && ImGui::IsMouseReleased(ImGuiMouseButton_Right);
     bool hov = ImGui::IsItemHovered();
-    ImU32 col = hov ? pal::kText : pal::kMuted;
-    dl->AddRect(p0, ImVec2(p0.x + cw, p0.y + fh), hov ? pal::kAccent : pal::kFrame, 3.f * s, 0, 1.f);
-    drawIcon(dl, IC_AI, ImVec2(p0.x + 16.f * s, p0.y + fh * 0.5f), 13.f * s, pal::kAccent);
-    dl->AddText(ImVec2(p0.x + 30.f * s, p0.y + (fh - ImGui::GetTextLineHeight()) * 0.5f), col, tr(T_ConnectAi));
-    if (hov) ImGui::SetTooltip("%s", tr(T_ConnectAiTip));
-    if (clicked) a.openMcp = true;
+    ImU32 col = hov || agentOn ? pal::kText : pal::kMuted;
+    dl->AddRect(p0, ImVec2(p0.x + cw, p0.y + fh), hov || agentOn ? pal::kAccent : pal::kFrame, 3.f * s, 0, 1.f);
+    ImVec2 ic(p0.x + 16.f * s, p0.y + fh * 0.5f);
+    if (agentOn) {
+      float pulse = 0.5f + 0.5f * std::sin((float)ImGui::GetTime() * 4.f);
+      bool working = a.agent.animating();
+      if (working) dl->AddCircleFilled(ic, 4.f * s + 4.f * s * pulse, IM_COL32(226, 82, 54, 60));
+      dl->AddCircleFilled(ic, 4.f * s, working ? pal::kAccent : IM_COL32(110, 190, 120, 255));
+    } else {
+      drawIcon(dl, IC_AI, ic, 13.f * s, pal::kAccent);
+    }
+    dl->AddText(ImVec2(p0.x + 30.f * s, p0.y + (fh - ImGui::GetTextLineHeight()) * 0.5f), col, cLabel.c_str());
+    if (hov) ImGui::SetTooltip("%s", agentOn ? tr(T_AgentShowPanel) : tr(T_ConnectAiTip));
+    if (clicked) {
+      if (agentOn && !right) a.agent.toggle();
+      else a.openMcp = true;
+    }
   }
   if (a.mode == 0) {
     float expW = std::max(104.f * s, ImGui::CalcTextSize(tr(T_Export)).x + 52.f * s);
@@ -2447,6 +2531,19 @@ static void drawCanvas(App& a) {
 static void drawCanvasOverlays(App& a, ImVec2 c0, ImVec2 sz) {
   if (!a.hasImage) return;
   float s = a.scale;
+  double flashLeft = a.agentFlash - glfwGetTime();
+  if (flashLeft > 0) {  // an AI agent just changed this photo: outline the canvas and say who
+    int al = (int)(255 * std::min(1.0, flashLeft / 0.6));
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    ImU32 acc = (pal::kAccent & 0x00FFFFFF) | ((ImU32)al << 24);
+    dl->AddRect(ImVec2(c0.x + 2, c0.y + 2), ImVec2(c0.x + sz.x - 2, c0.y + sz.y - 2), acc, 0.f, 0, 3.f * s);
+    char b[160];
+    snprintf(b, sizeof(b), tr(T_AgentEditedBy), a.agentWho.c_str());
+    ImVec2 ts = ImGui::CalcTextSize(b), tp(c0.x + 16.f * s, c0.y + 14.f * s);
+    dl->AddRectFilled(ImVec2(tp.x - 10 * s, tp.y - 6 * s), ImVec2(tp.x + ts.x + 10 * s, tp.y + ts.y + 6 * s),
+                      (pal::kAccent & 0x00FFFFFF) | ((ImU32)al << 24), 3.f * s);
+    dl->AddText(tp, (pal::kOnAccent & 0x00FFFFFF) | ((ImU32)al << 24), b);
+  }
   if (a.showHisto && !a.cropMode) {
     float hw = std::min(232.f * s, sz.x * 0.4f), hh = 84.f * s;
     ImGui::SetCursorScreenPos(ImVec2(c0.x + sz.x - hw - 16.f * s, c0.y + 16.f * s));
@@ -2996,6 +3093,17 @@ static void buildUI(App& a) {
     BatchHost bh = batchHost(a);
     a.batch.draw(bh);
   }
+  {
+    AgentHost ah;
+    ah.scale = s;
+    ah.bottomGap = a.batch.busy() ? 118.f * s : 0.f;
+    ah.openPath = a.hasImage ? a.path : std::string();
+    ah.openPhoto = [&a](const std::string& p) {
+      a.mode = 0;
+      openImage(a, p);
+    };
+    a.agent.draw(ah);
+  }
   ImGui::End();
   drawTour(a);
 
@@ -3047,7 +3155,7 @@ static ImFont* addUiFont(const std::string& dir, const char* latin, const char* 
     m.OversampleV = 1;
     io.Fonts->AddFontFromFileTTF(th.c_str(), size * 1.05f, &m, io.Fonts->GetGlyphRangesThai());
   }
-  static const ImWchar extra[] = {0x00B0, 0x00B7, 0x00D7, 0x00D7, 0x2026, 0x2026, 0};  // ° · × …
+  static const ImWchar extra[] = {0x00B0, 0x00B7, 0x00D7, 0x00D7, 0x2026, 0x2026, 0x2192, 0x2192, 0};  // ° · × … →
   ImFontConfig e;
   e.MergeMode = true;
   io.Fonts->AddFontFromFileTTF((dir + latin).c_str(), size, &e, extra);
@@ -3693,6 +3801,7 @@ int main(int, char**) {
   ImGui_ImplOpenGL3_Init("#version 330");
   loadPresets(a);
   a.styles.reload();
+  a.agent.watch.start([]() { glfwPostEmptyEvent(); });  // AI agents working over MCP
 
   for (size_t i = 1; i < args.size(); i++)
     if (args[i].rfind("--", 0) != 0) {
@@ -3708,7 +3817,8 @@ int main(int, char**) {
   int framesLeft = 3;
   while (!glfwWindowShouldClose(a.win)) {
     bool busy = a.load.active || a.exp.stage != 0 || (!a.toast.empty() && Clock::now() < a.toastUntil) ||
-                a.cull.busy() || a.styles.creating() || a.segJob.active || a.recJob.active || a.batch.busy();
+                a.cull.busy() || a.styles.creating() || a.segJob.active || a.recJob.active || a.batch.busy() ||
+                a.agent.animating() || glfwGetTime() < a.agentFlash;
     if (framesLeft > 0) glfwPollEvents();
     else if (busy) glfwWaitEventsTimeout(0.05);
     else glfwWaitEvents();  // idle: no CPU/GPU use until something happens
@@ -3720,6 +3830,11 @@ int main(int, char**) {
     }
 
     if (a.load.active && a.load.done) finishLoad(a);
+    {
+      std::vector<AgentEvent> fin;
+      if (a.agent.watch.poll(glfwGetTime(), fin)) framesLeft = std::max(framesLeft, 1);
+      if (!fin.empty()) agentFinished(a, fin);
+    }
     if (a.segJob.active && a.segJob.done) finishSegmentation(a);
     if (a.recJob.active && a.recJob.done) finishRecover(a);
     updateMasks(a);
@@ -3770,6 +3885,7 @@ int main(int, char**) {
   if (a.segJob.th.joinable()) a.segJob.th.join();
   if (a.recJob.th.joinable()) a.recJob.th.join();
   a.batch.shutdown();
+  a.agent.watch.stop();
   a.cull.shutdown();
   if (a.aiR) {
     a.aiR->shutdown();

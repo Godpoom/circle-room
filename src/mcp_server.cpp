@@ -25,6 +25,7 @@
 #include "ai/segment.h"
 #include "ai/style_match.h"
 #include "ai/text_query.h"
+#include "agent_log.h"
 #include "heal.h"
 #include "i18n.h"
 #include "image_io.h"
@@ -249,6 +250,82 @@ std::string describeEdits(const EditParams& p) {
   while (std::getline(sa, line))
     if (b.find(line + "\n") == std::string::npos && line.compare(0, 3, "img") != 0) out += "  " + line + "\n";
   return out.empty() ? "  (no edits)\n" : out;
+}
+
+// ---------------------------------------------------------------- activity shown in the app
+std::map<std::string, std::string> keyValues(const EditParams& p) {
+  std::map<std::string, std::string> m;
+  std::stringstream ss(serializeParams(p, true));
+  std::string line;
+  while (std::getline(ss, line)) {
+    size_t eq = line.find('=');
+    if (eq != std::string::npos) m[line.substr(0, eq)] = line.substr(eq + 1);
+  }
+  return m;
+}
+
+// What one tool call changed, sliders one by one and the rest as groups.
+std::vector<AgentChange> editChanges(const EditParams& a, const EditParams& b) {
+  std::map<std::string, std::string> A = keyValues(a), B = keyValues(b);
+  std::vector<AgentChange> out;
+  std::vector<std::string> groups;
+  auto group = [](const std::string& k) -> std::string {
+    if (k.rfind("hsl", 0) == 0) return "hsl";
+    if (k.rfind("curve", 0) == 0) return "curve";
+    if (k.rfind("grade", 0) == 0) return "grade";
+    if (k.rfind("crop", 0) == 0 || k == "straighten" || k == "rotate90" || k == "flipH" || k == "flipV") return "crop";
+    if (k.rfind("layer", 0) == 0) return "region";
+    if (k.rfind("img", 0) == 0) return "layer";
+    return "";
+  };
+  std::map<std::string, std::string> keys = A;
+  keys.insert(B.begin(), B.end());
+  for (const auto& kvp : keys) {
+    const std::string& k = kvp.first;
+    std::string va = A.count(k) ? A[k] : "", vb = B.count(k) ? B[k] : "";
+    if (va == vb) continue;
+    std::string g = group(k);
+    if (g.empty()) out.push_back({k, va, vb});
+    else if (std::find(groups.begin(), groups.end(), g) == groups.end()) groups.push_back(g);
+  }
+  for (const std::string& g : groups) {
+    AgentChange c{g, "", ""};
+    if (g == "region") {  // which areas have their own adjustment now
+      for (int i = 0; i < kMaxLayers; i++)
+        if (b.layers[i].enabled && b.layers[i].region >= 0 && b.layers[i].region < ai::REG_COUNT)
+          c.after += (c.after.empty() ? "" : ", ") + std::string(kRegions[b.layers[i].region]);
+    } else if (g == "layer") {  // photo layers on top, by file name
+      int na = 0;
+      for (int i = 0; i < kMaxImgLayers; i++) na += a.img[i].enabled;
+      c.before = std::to_string(na);
+      for (int i = 0; i < kMaxImgLayers; i++)
+        if (b.img[i].enabled) c.after += (c.after.empty() ? "" : ", ") + fileName(b.img[i].path);
+    }
+    out.push_back(c);
+  }
+  return out;
+}
+
+// Cuts at a character boundary so Thai and other UTF-8 text never ends mid-letter.
+std::string clip(const std::string& s, size_t n) {
+  if (s.size() <= n) return s;
+  while (n > 0 && ((unsigned char)s[n] & 0xC0) == 0x80) n--;
+  return s.substr(0, n) + "...";
+}
+
+// The arguments in one short line ("exposure=0.3, contrast=12"), for the app's activity list.
+std::string argSummary(const Json& a) {
+  std::string out;
+  for (const auto& kv : a.o) {
+    if (kv.first == "path") continue;
+    std::string v;
+    if (kv.second.isNum()) v = fmt("%.3g", kv.second.n);
+    else if (kv.second.isStr()) v = clip(kv.second.s.find('\\') != std::string::npos ? fileName(kv.second.s) : kv.second.s, 48);
+    else if (kv.second.t == Json::Bool) v = kv.second.b ? "true" : "false";
+    else v = clip(json::dump(kv.second), 60);
+    out += (out.empty() ? "" : ", ") + kv.first + "=" + v;
+  }
+  return clip(out, 200);
 }
 
 Json schemaObj() {
@@ -1246,6 +1323,8 @@ int mcpServe(std::string& err) {
   Session S;
   if (!S.R.init(err)) return 4;
   std::vector<Tool> T = tools();
+  AgentLog activity;  // lets the open Circle Room window show what we are doing
+  int callNo = 0;
   std::string buf, line;
   while (readLine(buf, line)) {
     if (line.empty()) continue;
@@ -1276,6 +1355,8 @@ int mcpServe(std::string& err) {
       r.set("serverInfo", info);
       r.set("instructions", kInstructions);
       send(reply(id, r));
+      const Json* ci = params->get("clientInfo");
+      activity.open(ci && ci->isObj() ? ci->str("name") : std::string());
     } else if (method == "ping") {
       send(reply(id, Json::object()));
     } else if (method == "tools/list") {
@@ -1303,11 +1384,25 @@ int mcpServe(std::string& err) {
         send(replyErr(id, -32602, "unknown tool: " + name));
         continue;
       }
+      int callId = ++callNo;
+      EditParams before = S.p;
+      std::string beforePath = S.path;
+      std::string target = args->str("path");
+      if (target.empty() || name == "cull_folder" || name == "search_photos" || name == "batch_auto_edit") target = S.path;
+      activity.call(callId, name, target, argSummary(*args));
       Result res;
       try {
         res = tool->run(S, *args);
       } catch (const std::exception& e) {
         res = fail(std::string("internal error: ") + e.what());
+      }
+      {
+        // A tool that opened another photo compares against that photo as it was loaded.
+        const EditParams& from = S.path == beforePath ? before : (S.undo.empty() ? S.p : S.undo.front());
+        std::vector<AgentChange> changes;
+        if (S.loaded() && !res.error) changes = editChanges(from, S.p);
+        std::string first = res.text.substr(0, res.text.find('\n'));
+        activity.done(callId, name, !res.error, S.loaded() ? S.path : target, changes, clip(first, 220));
       }
       Json content = Json::array();
       Json t = Json::object();
@@ -1329,6 +1424,7 @@ int mcpServe(std::string& err) {
       send(replyErr(id, -32601, "method not found: " + method));
     }
   }
+  activity.close();
   S.heal.clear(S.R);
   S.layers.clear(S.R);
   S.R.shutdown();

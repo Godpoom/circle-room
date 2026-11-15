@@ -382,7 +382,22 @@
   X(T_BatchSaveStage, "saving JPEG", "กำลังบันทึก JPEG") \
   X(T_BatchDone, "Auto edited %d \xc2\xb7 skipped %d \xc2\xb7 failed %d", "แต่งแล้ว %d \xc2\xb7 ข้าม %d \xc2\xb7 ไม่สำเร็จ %d") \
   X(T_BatchExported, "JPEGs saved", "บันทึก JPEG แล้ว") \
-  X(T_ConnectAi, "Connect AI", "เชื่อม AI") \
+  X(T_AgentConnected, "connected", "เชื่อมต่ออยู่") \
+  X(T_AgentGone, "disconnected", "ตัดการเชื่อมต่อแล้ว") \
+  X(T_AgentNow, "Now", "กำลังทำ") \
+  X(T_AgentIdle, "Waiting for the next step", "รอคำสั่งถัดไป") \
+  X(T_AgentRecent, "Recent steps", "ขั้นตอนล่าสุด") \
+  X(T_AgentNoChange, "photo unchanged", "ภาพไม่เปลี่ยน") \
+  X(T_AgentFollow, "Open the photo the AI is editing", "เปิดภาพที่ AI กำลังแก้ให้อัตโนมัติ") \
+  X(T_AgentEdit, "AI agent", "AI แก้ไข") \
+  X(T_AgentEditedBy, "Edited by %s", "แก้โดย %s") \
+  X(T_AgentFailed, "failed", "ไม่สำเร็จ") \
+  X(T_AgentMore, "+%d more", "และอีก %d รายการ") \
+  X(T_AgentShowPanel, "Show what the AI is doing", "ดูว่า AI กำลังทำอะไร") \
+  X(T_AgentOpenPhoto, "Open", "เปิดภาพ") \
+  X(T_AgentAdded, "added", "เพิ่ม") \
+  X(T_AgentChanged, "changed", "เปลี่ยนแล้ว") \
+  X(T_ConnectAi, "Connect AI","เชื่อม AI") \
   X(T_ConnectAiTip, "Let AI agents (Claude Code, Codex, Antigravity, Cursor...) edit photos with Circle Room (MCP)", "ให้ AI (Claude Code, Codex, Antigravity, Cursor ฯลฯ) แต่งรูปด้วย Circle Room ผ่าน MCP") \
   X(T_McpTitle, "Connect Circle Room to AI (MCP)", "เชื่อม Circle Room กับ AI (MCP)") \
   X(T_McpIntro, "Circle Room can be a tool for AI agents: they open photos, edit them with every tool (auto edit, light and colour, face/sky regions, crop, looks, magic eraser, layers, export), pick the best shots in a folder and batch-edit, and they see the photo after every step. Add the setting below to your AI app once, then just ask it, e.g. \"edit the photos in D:\\Trip, make the sky bluer and remove the person on the left\".", "Circle Room เป็นเครื่องมือให้ AI ใช้ได้ AI จะเปิดรูป แต่งด้วยเครื่องมือทุกอย่าง (แต่งอัตโนมัติ, แสงและสี, ปรับเฉพาะหน้า/ท้องฟ้า, ครอป, ลุค, ยางลบมหัศจรรย์, เลเยอร์, ส่งออก) คัดรูปเด่นในโฟลเดอร์ แต่งทีละหลายรูป และเห็นภาพทุกครั้งที่แก้ ตั้งค่าในแอป AI ครั้งเดียวตามด้านล่าง แล้วสั่งได้เลย เช่น \"แต่งรูปในโฟลเดอร์ D:\\Trip ให้ท้องฟ้าฟ้าขึ้น และลบคนทางซ้ายออก\"") \
