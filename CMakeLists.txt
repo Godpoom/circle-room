@@ -32,6 +32,8 @@ file(GLOB APP_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/*.cpp ${CMAKE_SO
 set(APP_RC "")
 if(WIN32)
   set(APP_RC ${CMAKE_SOURCE_DIR}/res/circleroom.rc)  # icon + version info
+  # windres does not report the #include, so a version bump must rebuild the resource explicitly
+  set_source_files_properties(${APP_RC} PROPERTIES OBJECT_DEPENDS ${CMAKE_SOURCE_DIR}/src/version.h)
 endif()
 add_executable(CircleRoom WIN32 ${APP_SOURCES} ${APP_RC})
 target_include_directories(CircleRoom PRIVATE src third_party/stb third_party/onnxruntime/include)
