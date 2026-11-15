@@ -9,6 +9,7 @@ texts are in the [`LICENSES/`](LICENSES) folder**, which also ships inside every
 | [GLFW 3.4](https://www.glfw.org/) | zlib/libpng | `LICENSES/GLFW-zlib.md` |
 | [Dear ImGui 1.91.8](https://github.com/ocornut/imgui) | MIT | `LICENSES/DearImGui-MIT.txt` |
 | [stb_image / stb_image_write](https://github.com/nothings/stb) | MIT or public domain | `LICENSES/stb-MIT-or-PublicDomain.txt` |
+| [LibRaw 0.22.3](https://www.libraw.org/) (camera RAW decoding, compiled into `CircleRoom.exe`) | CDDL-1.0 (LibRaw is dual-licensed LGPL-2.1 / CDDL-1.0; Circle Room uses it under CDDL-1.0). Its unmodified source is in `third_party/libraw` of this repository and at https://github.com/LibRaw/LibRaw | `LICENSES/LibRaw-CDDL-1.0.txt`, `LICENSES/LibRaw-COPYRIGHT.txt` |
 | [ONNX Runtime](https://github.com/microsoft/onnxruntime) (`onnxruntime.dll`) | MIT, plus its own third-party notices | `LICENSES/ONNXRuntime-MIT.txt`, `LICENSES/ONNXRuntime-ThirdPartyNotices.txt` |
 | [DirectML](https://www.nuget.org/packages/Microsoft.AI.DirectML) (`DirectML.dll`) | Microsoft DirectML license (redistribution in Windows apps allowed, section 1a) | `LICENSES/DirectML-*.txt` |
 | Microsoft Visual C++ runtime 14.44 (`ai/msvcp140.dll`, `ai/msvcp140_1.dll`, `ai/vcruntime140.dll`, `ai/vcruntime140_1.dll`) | Visual Studio 2022 Community licence, "Distributable Code" | see note below |

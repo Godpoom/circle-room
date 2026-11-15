@@ -32,10 +32,17 @@ Made by **IAMPOOM**, who also built **Circle Zone**, a small Thai/English langua
 - [All work on Hugging Face](https://huggingface.co/IAMPOOM)
 
 ## Getting started
-- Run `CircleRoom.exe`, then click the frame in the middle (or the folder button at the top), or drag a photo into the window. Supports JPEG, PNG (including 16-bit), BMP, TGA, PSD and GIF.
+- Run `CircleRoom.exe`, then click the frame in the middle (or the folder button at the top), or drag a photo into the window. Supports JPEG, PNG (including 16-bit), BMP, TGA, PSD, GIF and camera RAW (see below).
 - The first launch starts a 12-step tour that highlights each part of the screen. Replay it any time with the **?** button or F1.
 - **EN / TH** at the top right switches the language. **Aa** changes the text size (85–150%).
 - Edits never touch the original. They are saved as `photo.jpg.pedit` next to the photo and come back when you reopen it.
+
+### Camera RAW
+Open RAW files straight from the camera: Canon (CR2, CR3, CRW), Nikon (NEF, NRW), Sony (ARW, SR2, SRF), Fujifilm (RAF), Olympus/OM System (ORF), Panasonic (RW2), Pentax (PEF), Leica, Hasselblad, Phase One, Samsung, Sigma and any DNG, more than 1,200 cameras in all through [LibRaw](https://www.libraw.org/).
+- The editor works on the full sensor data in 16-bit linear light with the camera's white balance, so highlights and shadows hold far more detail than a JPEG. A 21 MP file opens in about 2 seconds.
+- A RAW has no camera tone curve yet, so it first looks darker and flatter than the camera's JPEG; **Auto edit** or the Light page brings it up.
+- AI Cull, search, batch auto edit and the MCP tools read the preview JPEG the camera stored inside the file, so a folder of RAWs is analysed as fast as JPEGs.
+- Edits are saved next to the RAW as `IMG_0001.CR2.pedit`, like any photo; the RAW itself is never changed. Export makes a JPEG or PNG.
 
 ### The editor
 The look is a darkroom and camera body: warm graphite, paper-coloured text, and a red safelight accent used only for state. Numbers use Bahnschrift, the DIN font that ships with Windows, like the markings on a lens.
@@ -297,6 +304,7 @@ The AI files live in `ai/` and are copied to `bin\ai\` by the build. `tools/conv
 - `src/ui_batch.*`: auto edit many photos (background thread + progress card)
 - `src/heal.*`: magic eraser (strokes, background LaMa jobs, result cache); compositing on the GPU in `kPatchShader`
 - `src/layers.*`: photo layers (loading, AI cut-outs, eraser strokes, colour matching); compositing on the GPU in `kComposeShader`
+- `src/raw_decode.*`: camera RAW through LibRaw (`third_party/libraw`): full 16-bit decode for the editor, embedded preview for the AI
 - `src/params.*`, `src/history.*`, `src/curves.*`, `src/i18n.*`: parameters, history, curves and translations
 - `third_party/`: GLFW 3.4, Dear ImGui 1.91.8, stb_image
 
@@ -314,7 +322,6 @@ Photos, `.pedit` files, caches and thumbnails may come from someone else or be d
 - Check it yourself with `CircleRoom.exe --selftest`, which builds many damaged or tampered files and checks the program refuses them without crashing.
 
 ## Limitations
-- RAW files (CR2/NEF/ARW/DNG) are not supported yet.
 - ImGui has no Thai text shaping, so words with both an upper vowel and a tone mark may overlap slightly.
 - Aesthetic scores are a statistical estimate (from LAION/AVA data), not your taste. For your taste, use reference mode.
 - Tilt detection needs straight lines (horizon, buildings); it is weak on nature shots without them.

@@ -16,6 +16,7 @@
 #include <new>
 
 #include "platform_win.h"
+#include "raw_decode.h"
 
 namespace ai {
 
@@ -128,6 +129,23 @@ static const uint64_t kMaxDecodeBytes = 1024ull << 20;
 
 static bool decodeScaledImpl(const std::string& path, int maxDim, SmallImage& out, DecodeInfo* info, std::string& err) {
   maxDim = std::max(1, maxDim);
+  if (isRawFile(path)) {  // camera RAW: its embedded preview, or a half-size decode
+    RawPreview rp;
+    if (!loadRawPreview(path, maxDim, rp, err)) return false;
+    SmallImage im;
+    im.w = rp.w;
+    im.h = rp.h;
+    im.rgb.swap(rp.rgb);
+    applyOrientation(im, rp.orientation);
+    fitLongEdge(im, maxDim, out);
+    if (info) {
+      bool turn = rp.orientation >= 5;
+      info->origW = turn ? rp.fullH : rp.fullW;
+      info->origH = turn ? rp.fullW : rp.fullH;
+      info->shotTime = rp.shotTime;
+    }
+    return true;
+  }
   WicScope wic;
   IWICImagingFactory* f = wic.f;
   if (!f) { err = "WIC unavailable"; return false; }

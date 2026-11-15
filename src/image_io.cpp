@@ -7,6 +7,7 @@
 #include <new>
 
 #include "platform_win.h"
+#include "raw_decode.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_NO_HDR
@@ -92,6 +93,7 @@ static void halve(std::vector<T>& px, int& w, int& h) {
 }
 
 static bool loadImageImpl(const std::string& path, int maxDim, ImageData& out, std::string& err) {
+  if (isRawFile(path)) return loadRawImage(path, maxDim, out, err);  // camera RAW through LibRaw
   unsigned long long fsize = 0;
   long long mtime = 0;
   if (fileInfo(path, fsize, mtime) && fsize > (unsigned long long)INT_MAX) { err = "file too large"; return false; }

@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "agent_log.h"
+#include "raw_decode.h"
 #include "updater.h"
 #include "ai/cache.h"
 #include "ai/wic_decode.h"
@@ -299,6 +300,29 @@ std::vector<uint8_t> storedZip(const std::vector<std::pair<std::string, std::str
   return z;
 }
 
+// Camera RAW files come from anywhere: damaged or crafted ones must fail cleanly.
+void testRaw(const std::string& dir) {
+  check(isRawFile("C:\\p\\IMG_0001.CR2") && isRawFile("a.nef") && isRawFile("b.Dng") && isRawFile("c.cr3") &&
+            !isRawFile("a.jpg") && !isRawFile("folder.nef\\photo.jpg") && !isRawFile("noext"),
+        "RAW files are recognised by extension");
+  ImageData img;
+  std::string err;
+  std::string junk = dir + "\\junk.nef";
+  writeBytes(junk, std::vector<uint8_t>(4096, 0x5A));
+  check(!loadImage(junk, 8192, img, err) && img.px16.empty(), ("a non-RAW file named .nef is refused: " + err).c_str());
+  ai::SmallImage si;
+  check(!ai::decodeScaled(junk, 512, si, nullptr, err), "the AI decoder refuses it too");
+  // A TIFF header (what CR2, NEF, ARW and DNG start with) whose first directory points past the end.
+  std::vector<uint8_t> tiff = {'I', 'I', 42, 0, 0xF0, 0xFF, 0xFF, 0x7F};
+  tiff.resize(2048, 0);
+  std::string fake = dir + "\\truncated.dng";
+  writeBytes(fake, tiff);
+  check(!loadImage(fake, 8192, img, err), "a truncated TIFF-based RAW fails cleanly");
+  std::string empty = dir + "\\empty.cr2";
+  writeBytes(empty, std::vector<uint8_t>());
+  check(!loadImage(empty, 8192, img, err), "an empty RAW file fails cleanly");
+}
+
 void testUpdater(const std::string& dir) {
   check(compareVersions("1.3.0", "1.2.1") > 0 && compareVersions("1.2.10", "1.2.9") > 0 &&
             compareVersions("1.2", "1.2.0") == 0 && compareVersions("1.2.1", "1.10.0") < 0,
@@ -355,6 +379,7 @@ int runSelfTest(const std::vector<std::string>& args) {
   testWrites(dir);
   testAgentLog();
   testUpdater(dir);
+  testRaw(dir);
   printf("%d passed, %d failed\n", g_pass, g_fail);
   return g_fail ? 1 : 0;
 }

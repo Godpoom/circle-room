@@ -10,6 +10,7 @@
 #include "gl_loader.h"
 #include "image_io.h"
 #include "platform_win.h"
+#include "raw_decode.h"
 #include "renderer.h"
 
 void (*g_layerWake)() = nullptr;
@@ -99,6 +100,7 @@ bool layerPathAllowed(const std::string& path, std::string& why) {
   static const char* kExt[] = {"jpg", "jpeg", "jpe", "png", "bmp", "tif", "tiff", "gif", "tga", "psd"};
   bool known = false;
   for (const char* e : kExt) known |= ext == e;
+  known |= isRawFile(path);  // camera RAW photos can be layers too
   if (!known) {
     why = "not an image file";
     return false;

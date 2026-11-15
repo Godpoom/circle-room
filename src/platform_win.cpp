@@ -119,7 +119,7 @@ std::string openImageDialog(void* hwnd, const std::string& initialDir) {
   OPENFILENAMEW ofn = {};
   ofn.lStructSize = sizeof(ofn);
   ofn.hwndOwner = (HWND)hwnd;
-  ofn.lpstrFilter = L"Images (*.jpg;*.jpeg;*.png;*.bmp;*.tga;*.psd;*.gif)\0*.jpg;*.jpeg;*.png;*.bmp;*.tga;*.psd;*.gif\0All files\0*.*\0";
+  ofn.lpstrFilter = L"Images and camera RAW\0*.jpg;*.jpeg;*.png;*.bmp;*.tga;*.psd;*.gif;*.3fr;*.arw;*.cr2;*.cr3;*.crw;*.dcr;*.dng;*.erf;*.fff;*.iiq;*.kdc;*.mef;*.mos;*.mrw;*.nef;*.nrw;*.orf;*.pef;*.raf;*.rw2;*.rwl;*.sr2;*.srf;*.srw;*.x3f\0Camera RAW\0*.3fr;*.arw;*.cr2;*.cr3;*.crw;*.dcr;*.dng;*.erf;*.fff;*.iiq;*.kdc;*.mef;*.mos;*.mrw;*.nef;*.nrw;*.orf;*.pef;*.raf;*.rw2;*.rwl;*.sr2;*.srf;*.srw;*.x3f\0All files\0*.*\0";
   ofn.lpstrFile = file;
   ofn.nMaxFile = (DWORD)(sizeof(file) / sizeof(file[0]));
   ofn.lpstrInitialDir = dir.empty() ? nullptr : dir.c_str();
@@ -196,7 +196,10 @@ size_t processPrivateWorkingSet() {
 void trimWorkingSet() { SetProcessWorkingSetSize(GetCurrentProcess(), (SIZE_T)-1, (SIZE_T)-1); }
 
 std::vector<std::string> listImages(const std::string& dir) {
-  static const char* exts[] = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".webp", ".heic", ".heif", ".jxr"};
+  static const char* exts[] = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".webp", ".heic", ".heif", ".jxr",
+                               // camera RAW (decoded by raw_decode.cpp)
+                               ".3fr", ".arw", ".cr2", ".cr3", ".crw", ".dcr", ".dng", ".erf", ".fff", ".iiq", ".kdc", ".mef",
+                               ".mos", ".mrw", ".nef", ".nrw", ".orf", ".pef", ".raf", ".rw2", ".rwl", ".sr2", ".srf", ".srw", ".x3f"};
   std::vector<std::string> out;
   WIN32_FIND_DATAW fd;
   HANDLE h = FindFirstFileW(utf8ToWide(dir + "\\*").c_str(), &fd);
@@ -254,7 +257,7 @@ std::vector<std::string> openImagesDialog(void* hwnd, const std::string& initial
   OPENFILENAMEW ofn = {};
   ofn.lStructSize = sizeof(ofn);
   ofn.hwndOwner = (HWND)hwnd;
-  ofn.lpstrFilter = L"Images\0*.jpg;*.jpeg;*.png;*.tif;*.tiff;*.bmp;*.webp;*.heic\0All files\0*.*\0";
+  ofn.lpstrFilter = L"Images and camera RAW\0*.jpg;*.jpeg;*.png;*.tif;*.tiff;*.bmp;*.webp;*.heic;*.3fr;*.arw;*.cr2;*.cr3;*.crw;*.dcr;*.dng;*.erf;*.fff;*.iiq;*.kdc;*.mef;*.mos;*.mrw;*.nef;*.nrw;*.orf;*.pef;*.raf;*.rw2;*.rwl;*.sr2;*.srf;*.srw;*.x3f\0Camera RAW\0*.3fr;*.arw;*.cr2;*.cr3;*.crw;*.dcr;*.dng;*.erf;*.fff;*.iiq;*.kdc;*.mef;*.mos;*.mrw;*.nef;*.nrw;*.orf;*.pef;*.raf;*.rw2;*.rwl;*.sr2;*.srf;*.srw;*.x3f\0All files\0*.*\0";
   ofn.lpstrFile = buf.data();
   ofn.nMaxFile = (DWORD)buf.size();
   ofn.lpstrInitialDir = dir.empty() ? nullptr : dir.c_str();

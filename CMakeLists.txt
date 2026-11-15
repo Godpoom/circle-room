@@ -27,6 +27,14 @@ target_include_directories(imgui PUBLIC ${IMGUI_DIR} ${IMGUI_DIR}/backends)
 target_compile_definitions(imgui PUBLIC IMGUI_DISABLE_OBSOLETE_FUNCTIONS)
 target_link_libraries(imgui PUBLIC glfw)
 
+# --- LibRaw 0.22.3 (RAW camera files; used under CDDL-1.0, see third_party/libraw/LICENSE.CDDL) ---
+file(GLOB_RECURSE LIBRAW_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/third_party/libraw/src/*.cpp)
+add_library(libraw STATIC ${LIBRAW_SOURCES})
+target_include_directories(libraw PUBLIC ${CMAKE_SOURCE_DIR}/third_party/libraw)
+target_compile_definitions(libraw PUBLIC LIBRAW_NODLL)
+target_compile_options(libraw PRIVATE -w -O2)
+target_link_libraries(libraw PUBLIC ws2_32)
+
 # --- App ---
 file(GLOB APP_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/*.cpp ${CMAKE_SOURCE_DIR}/src/ai/*.cpp)
 set(APP_RC "")
@@ -37,7 +45,7 @@ if(WIN32)
 endif()
 add_executable(CircleRoom WIN32 ${APP_SOURCES} ${APP_RC})
 target_include_directories(CircleRoom PRIVATE src third_party/stb third_party/onnxruntime/include)
-target_link_libraries(CircleRoom PRIVATE imgui glfw comdlg32 shell32 ole32 oleaut32 uuid windowscodecs psapi winhttp bcrypt)
+target_link_libraries(CircleRoom PRIVATE imgui glfw libraw comdlg32 shell32 ole32 oleaut32 uuid windowscodecs psapi winhttp bcrypt)
 if(MINGW)
   target_compile_options(CircleRoom PRIVATE -Wall -Wno-unused-function)
   target_link_options(CircleRoom PRIVATE -static -static-libgcc -static-libstdc++ $<$<CONFIG:Release>:-s>)
