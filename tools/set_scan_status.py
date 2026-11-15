@@ -94,6 +94,7 @@ if ".pending{" not in s:
                   "font-family:var(--f-mono);font-size:12.5px;letter-spacing:.08em;color:var(--red)}\n"
                   "/* ---------- before / after ---------- */", 1)
 s = re.sub(r'<span class="js-ver">v[\d.]+</span>', f'<span class="js-ver">v{ver}</span>', s)
+s = re.sub(r'"softwareVersion":"[\d.]+"', f'"softwareVersion":"{ver}"', s)  # search-engine metadata
 open(SITE, "w", encoding="utf-8").write(s)
 
 for path, pattern, text in (
