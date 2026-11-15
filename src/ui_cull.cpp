@@ -318,21 +318,7 @@ void CullView::pump(CullHost& h, StyleLibrary& lib) {
   if (batchActive_) {  // one photo per frame: decode small + GPU solve (~0.5 s)
     if (batchPos_ >= batchItems_.size()) {
       batchActive_ = false;
-      if (batchAuto_) {
-        autoModels_.release();
-        ai::ortUnload();
-      }
       h.toast(std::string(tr(T_Styled)) + " " + std::to_string(batchItems_.size()) + " " + tr(T_PhotosUnit));
-    } else if (batchAuto_) {
-      const ai::PhotoInfo& p = photos_[batchItems_[batchPos_++]];
-      Renderer* r = h.aiRenderer();
-      EditParams base;
-      std::string sc, err;
-      if (readSidecar(p.path, sc)) deserializeParams(sc, base, true);
-      ai::AutoResult res;
-      if (r && aiAutoEditFile(*r, autoModels_, p.path, p.hasAi ? p.emb : nullptr, nullptr, nullptr, 0, 0, true, base, res,
-                              err, true))
-        writeSidecar(p.path, serializeParams(res.params, true));
     } else {
       const ai::PhotoInfo& p = photos_[batchItems_[batchPos_++]];
       Renderer* r = h.aiRenderer();
@@ -529,7 +515,6 @@ void CullView::drawControls(CullHost& h, StyleLibrary& lib) {
     batchSource_ = haveRefs ? cur - 1 : cur;
     weightSlider(T_Strength, "bstr", &batchStrength_, 80);
     if (ImGui::Button(trId(T_StyleTop, "styletop"), ImVec2(-FLT_MIN, 0))) {
-      batchAuto_ = false;
       batchSet_ = batchSource_ < 0 ? ai::StyleSet::fromPhotos("refs", refs_) : lib.sets()[batchSource_];
       batchItems_.clear();
       for (int i = 0; i < shown; i++) batchItems_.push_back(ranked_[i].idx);
@@ -537,17 +522,10 @@ void CullView::drawControls(CullHost& h, StyleLibrary& lib) {
       batchActive_ = !batchSet_.refs.empty();
     }
   }
-  if (ImGui::Button(trId(T_AutoTop, "autotop"), ImVec2(-FLT_MIN, 0))) {
-    std::string err;
-    if (autoModels_.load(err)) {
-      batchAuto_ = true;
-      batchItems_.clear();
-      for (int i = 0; i < shown; i++) batchItems_.push_back(ranked_[i].idx);
-      batchPos_ = 0;
-      batchActive_ = true;
-    } else {
-      h.toast(std::string(tr(T_AiUnavailable)) + ": " + err);
-    }
+  if (ImGui::Button(trId(T_AutoTop, "autotop"), ImVec2(-FLT_MIN, 0)) && h.autoEdit) {
+    std::vector<std::string> paths;
+    for (int i : picks()) paths.push_back(photos_[i].path);
+    h.autoEdit(paths);
   }
   ImGui::EndDisabled();
   if (batchActive_) {
@@ -588,7 +566,7 @@ std::vector<int> CullView::picks() const {
 }
 
 // "name.jpg" -> "name (2).jpg" ... until the name is free: saving never overwrites anything.
-static std::string freePath(const std::string& dir, const std::string& stem, const std::string& ext) {
+std::string freePath(const std::string& dir, const std::string& stem, const std::string& ext) {
   std::string p = dir + "\\" + stem + ext;
   for (int k = 2; fileExists(p) && k < 10000; k++) p = dir + "\\" + stem + " (" + std::to_string(k) + ")" + ext;
   return p;
@@ -601,7 +579,7 @@ static std::string extOf(const std::string& name) {
 
 // Full-size render of an edited photo, the same way the editor exports it: AI region masks,
 // highlight recovery, magic-eraser patches and photo layers included.
-static bool renderEdited(Renderer& R, const std::string& path, const EditParams& p, const std::string& sc,
+bool renderEdited(Renderer& R, const std::string& path, const EditParams& p, const std::string& sc,
                          ImageData& img, std::vector<uint8_t>& rgb, int& w, int& h, std::string& err) {
   if (!R.upload(img, err)) return false;
   R.clearMask();
@@ -758,6 +736,14 @@ void CullView::drawSaveBar(CullHost& h) {
   snprintf(label, sizeof(label), tr(T_SavePicks), (int)pk.size());
   ImGui::BeginDisabled(pk.empty() || batchActive_);
   if (uiPrimaryButton((std::string(label) + "###savepicks").c_str(), ImVec2(0, 0))) openSave_ = true;
+  ImGui::SameLine();
+  char autoLabel[96];
+  snprintf(autoLabel, sizeof(autoLabel), tr(T_BatchPicks), (int)pk.size());
+  if (ImGui::Button((std::string(autoLabel) + "###autopicks").c_str()) && h.autoEdit) {
+    std::vector<std::string> paths;
+    for (int i : pk) paths.push_back(photos_[i].path);
+    h.autoEdit(paths);
+  }
   ImGui::EndDisabled();
   ImGui::SameLine();
   ImGui::AlignTextToFramePadding();

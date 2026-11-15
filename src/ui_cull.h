@@ -24,6 +24,7 @@ struct CullHost {
   std::function<void(const std::string&)> openInEditor;
   std::function<void(const std::string&)> toast;
   std::function<Renderer*()> aiRenderer;  // small, lazily created renderer for style matching
+  std::function<void(std::vector<std::string>)> autoEdit;  // opens "auto edit many photos" for these
 };
 
 // Saved styles (reference sets), shared by the cull screen and the editor's AI Style panel.
@@ -64,6 +65,12 @@ bool aiAutoEditFile(Renderer& r, AutoModels& m, const std::string& path, const f
                     const std::vector<float>* guide, int gw, int gh, bool wantLayers, const EditParams& base,
                     ai::AutoResult& out, std::string& err, bool recover = false);
 const char* sceneName(int scene);
+// "<dir>\<stem><ext>", or "<stem> (2)<ext>" ... when taken: saving never overwrites anything.
+std::string freePath(const std::string& dir, const std::string& stem, const std::string& ext);
+// Full-size render of an edited photo exactly as the editor exports it (regions, highlight
+// rebuild, magic-eraser patches, photo layers). img is uploaded and released; rgb gets w*h*3.
+bool renderEdited(Renderer& R, const std::string& path, const EditParams& p, const std::string& sidecar,
+                  ImageData& img, std::vector<uint8_t>& rgb, int& w, int& h, std::string& err);
 
 class CullView {
  public:
@@ -133,8 +140,6 @@ class CullView {
   int batchSource_ = -1;  // -1 = current references, else library index
   float batchStrength_ = 80.f;
   ai::StyleSet batchSet_;
-  bool batchAuto_ = false;  // batch runs "auto edit" instead of a reference style
-  AutoModels autoModels_;
   // text / similarity search
   std::vector<ai::RankEntry> qualityRanked_, allRanked_;
   char query_[256] = {};

@@ -31,7 +31,9 @@
 #include "params.h"
 #include "platform_win.h"
 #include "renderer.h"
+#include "mcp_server.h"
 #include "selftest.h"
+#include "ui_batch.h"
 #include "ui_cull.h"
 #include "ui_icons.h"
 #include "ui_panels.h"
@@ -237,6 +239,8 @@ struct App {
   HealStore heal;
   HealStroke healPend;
   int editPage = 1;  // page the Edit tab returns to after Compose
+  AutoBatch batch;   // auto edit many photos (worker thread + progress card)
+  bool openMcp = false;  // "Connect AI" dialog (MCP client setup)
 };
 
 static App* g_app = nullptr;
@@ -446,7 +450,46 @@ static CullHost cullHost(App& a) {
   };
   h.toast = [&a](const std::string& m) { showToast(a, m); };
   h.aiRenderer = [&a]() { return aiRenderer(a); };
+  h.autoEdit = [&a](std::vector<std::string> paths) { a.batch.open(std::move(paths)); };
   return h;
+}
+
+static BatchHost batchHost(App& a) {
+  BatchHost h;
+  h.hwnd = glfwGetWin32Window(a.win);
+  h.scale = a.scale;
+  h.lastDir = a.S.lastDir;
+  h.renderer = [&a]() { return aiRenderer(a); };
+  h.toast = [&a](const std::string& m) { showToast(a, m); };
+  // The open photo was auto edited: show the new edit, as one undoable step.
+  h.edited = [&a](const std::string& path) {
+    if (!a.hasImage || path != a.path) return;
+    std::string sc;
+    EditParams p;
+    if (readSidecar(path, sc)) deserializeParams(sc, p, true);
+    a.params = p;
+    a.hist.push(p, T_AutoEdit);
+    a.keyValid = false;
+  };
+  return h;
+}
+
+// Editor AI page: start a batch from chosen files, a folder, or the open photo's folder.
+static void drawBatchCard(App& a) {
+  uiHint(tr(T_BatchCardHint));
+  ImGui::Dummy(ImVec2(0, 2.f * a.scale));
+  ImGui::BeginDisabled(a.batch.busy());
+  float w = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
+  if (ImGui::Button(trId(T_BatchPickFiles, "bfiles"), ImVec2(w, 0)))
+    a.batch.open(openImagesDialog(glfwGetWin32Window(a.win), a.S.lastDir));
+  ImGui::SameLine();
+  if (ImGui::Button(trId(T_BatchPickFolder, "bfolder"), ImVec2(w, 0))) {
+    std::string dir = pickFolderDialog(glfwGetWin32Window(a.win), a.S.lastDir);
+    if (!dir.empty()) a.batch.open(listImages(dir));
+  }
+  if (a.hasImage && ImGui::Button(trId(T_BatchThisFolder, "bhere"), ImVec2(-FLT_MIN, 0)))
+    a.batch.open(listImages(dirOf(a.path)));
+  ImGui::EndDisabled();
 }
 
 // Embedding for the open photo: folder cache, else a one-off CLIP run (~1 s).
@@ -1834,9 +1877,24 @@ static void drawTopBar(App& a, float barH) {
     }
     ImGui::PopStyleVar();
   }
+  // Connect AI: how to drive Circle Room from Claude Code, Codex, Antigravity... (MCP)
+  float cw = ImGui::CalcTextSize(tr(T_ConnectAi)).x + 44.f * s;
+  float cx = ax - 12.f * s - cw;
+  ImGui::SetCursorPos(ImVec2(cx, std::floor((barH - fh) * 0.5f)));
+  {
+    ImVec2 p0 = ImGui::GetCursorScreenPos();
+    bool clicked = ImGui::InvisibleButton("##connectai", ImVec2(cw, fh));
+    bool hov = ImGui::IsItemHovered();
+    ImU32 col = hov ? pal::kText : pal::kMuted;
+    dl->AddRect(p0, ImVec2(p0.x + cw, p0.y + fh), hov ? pal::kAccent : pal::kFrame, 3.f * s, 0, 1.f);
+    drawIcon(dl, IC_AI, ImVec2(p0.x + 16.f * s, p0.y + fh * 0.5f), 13.f * s, pal::kAccent);
+    dl->AddText(ImVec2(p0.x + 30.f * s, p0.y + (fh - ImGui::GetTextLineHeight()) * 0.5f), col, tr(T_ConnectAi));
+    if (hov) ImGui::SetTooltip("%s", tr(T_ConnectAiTip));
+    if (clicked) a.openMcp = true;
+  }
   if (a.mode == 0) {
     float expW = std::max(104.f * s, ImGui::CalcTextSize(tr(T_Export)).x + 52.f * s);
-    float ex = ax - 18.f * s - expW;
+    float ex = cx - 18.f * s - expW;
     ImGui::SetCursorPos(ImVec2(ex, std::floor((barH - fh) * 0.5f)));
     if (a.exp.stage != 0) {
       float prog = a.exp.stage == 1 ? a.R.exportProgress() * 0.8f : 0.9f;
@@ -2108,6 +2166,9 @@ static void drawToolPanel(App& a) {
       uiCardEnd();
       uiCardBegin("##aistyle", tr(T_AiStyle), false);
       drawAiStylePanel(a);
+      uiCardEnd();
+      uiCardBegin("##batch", tr(T_BatchCard), false);
+      drawBatchCard(a);
       uiCardEnd();
       break;
     case PG_LIGHT: {
@@ -2800,6 +2861,67 @@ static void handleShortcuts(App& a) {
   }
 }
 
+// Copy-paste setup for each AI client; the exe path is filled in.
+static void drawMcpDialog(App& a) {
+  float s = a.scale;
+  if (a.openMcp) {
+    ImGui::OpenPopup("###mcpdlg");
+    a.openMcp = false;
+  }
+  ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+  ImGui::SetNextWindowSize(ImVec2(960 * s, 0));
+  if (!ImGui::BeginPopupModal(trId(T_McpTitle, "mcpdlg"), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
+  static std::vector<McpClient> clients = mcpClients();
+  static int sel = 0;
+  float W = 940 * s;
+  ImGui::PushTextWrapPos(W);
+  ImGui::TextUnformatted(tr(T_McpIntro));
+  ImGui::PopTextWrapPos();
+  ImGui::Dummy(ImVec2(0, 6 * s));
+  float listW = 300 * s, bodyH = 330 * s;
+  ImGui::BeginChild("##mcplist", ImVec2(listW, bodyH), ImGuiChildFlags_Borders);
+  for (int i = 0; i < (int)clients.size(); i++) {
+    bool on = i == sel;
+    if (on) ImGui::PushStyleColor(ImGuiCol_Header, IM_COL32(226, 82, 54, 70));
+    if (ImGui::Selectable(clients[i].name.c_str(), on, 0, ImVec2(0, ImGui::GetTextLineHeight() + 10 * s))) sel = i;
+    if (on) ImGui::PopStyleColor();
+  }
+  ImGui::EndChild();
+  ImGui::SameLine();
+  ImGui::BeginChild("##mcpbody", ImVec2(W - listW - 8 * s, bodyH), ImGuiChildFlags_None);
+  const McpClient& c = clients[sel];
+  ImGui::PushFont(g_fontBold);
+  ImGui::TextUnformatted(c.name.c_str());
+  ImGui::PopFont();
+  ImGui::PushTextWrapPos(W - listW - 20 * s);
+  uiHint(tr(c.how));
+  ImGui::PopTextWrapPos();
+  for (size_t k = 0; k < c.snippets.size(); k++) {
+    const std::string& text = c.snippets[k];
+    int lines = 1;
+    for (char ch : text) lines += ch == '\n';
+    std::string buf = text, id = "##snip" + std::to_string(sel) + "_" + std::to_string(k);
+    ImGui::Dummy(ImVec2(0, 4 * s));
+    ImGui::PushFont(g_fontMono);
+    ImGui::InputTextMultiline(id.c_str(), buf.data(), buf.size() + 1,
+                              ImVec2(-FLT_MIN, (std::min(lines, 12) + 0.6f) * ImGui::GetTextLineHeight()),
+                              ImGuiInputTextFlags_ReadOnly);
+    ImGui::PopFont();
+    if (uiPrimaryButton((std::string(tr(T_Copy)) + id).c_str(), ImVec2(150 * s, 0))) {
+      ImGui::SetClipboardText(text.c_str());
+      showToast(a, tr(T_Copied));
+    }
+  }
+  ImGui::EndChild();
+  ImGui::Dummy(ImVec2(0, 6 * s));
+  ImGui::PushTextWrapPos(W);
+  uiHint(tr(T_McpTools));
+  ImGui::PopTextWrapPos();
+  ImGui::Dummy(ImVec2(0, 4 * s));
+  if (ImGui::Button(trId(T_Close, "mcpclose"), ImVec2(120 * s, 0))) ImGui::CloseCurrentPopup();
+  ImGui::EndPopup();
+}
+
 static void buildUI(App& a) {
   a.er = EditResult();
   tourClear();
@@ -2869,6 +2991,11 @@ static void buildUI(App& a) {
   ImGui::EndChild();
   ImGui::PopStyleColor();
   drawPopups(a);
+  drawMcpDialog(a);
+  {
+    BatchHost bh = batchHost(a);
+    a.batch.draw(bh);
+  }
   ImGui::End();
   drawTour(a);
 
@@ -3093,6 +3220,21 @@ static int runHeadless(const std::vector<std::string>& args) {
 }
 
 // CircleRoom.exe --ai-tokcheck <tests.txt>: compares C++ tokenizers with reference ids (tab separated)
+// CircleRoom.exe --mcp: Model Context Protocol server on stdin/stdout for AI agents.
+static int runMcp() {
+  if (!glfwInit()) return 3;
+  std::string err;
+  GLFWwindow* win = createWindow(64, 64, false, err);  // hidden: only the GL context is used
+  int rc = 3;
+  if (win) {
+    rc = mcpServe(err);
+    glfwDestroyWindow(win);
+  }
+  if (rc) fprintf(stderr, "circle-room mcp: %s\n", err.c_str());
+  glfwTerminate();
+  return rc;
+}
+
 static int runTokCheck(const std::vector<std::string>& args) {
   attachParentConsole();
   ai::UnigramTokenizer mt;
@@ -3485,6 +3627,15 @@ int main(int, char**) {
   if (args.size() >= 2 && args[1] == "--ai-recover") return runAiRecover(args);
   if (args.size() >= 2 && args[1] == "--ai-tokcheck") return runTokCheck(args);
   if (args.size() >= 2 && args[1] == "--selftest") return runSelfTest(args);
+  if (args.size() >= 2 && args[1] == "--mcp") return runMcp();
+  if (args.size() >= 2 && args[1] == "--mcp-config") {  // every client's setup, for scripts and docs
+    attachParentConsole();
+    for (const McpClient& c : mcpClients()) {
+      printf("=== %s\n", c.name.c_str());
+      for (const std::string& snip : c.snippets) printf("%s\n---\n", snip.c_str());
+    }
+    return 0;
+  }
   if (args.size() >= 2 && (args[1] == "--export" || args[1] == "--bench")) return runHeadless(args);
 
   App a;
@@ -3557,7 +3708,7 @@ int main(int, char**) {
   int framesLeft = 3;
   while (!glfwWindowShouldClose(a.win)) {
     bool busy = a.load.active || a.exp.stage != 0 || (!a.toast.empty() && Clock::now() < a.toastUntil) ||
-                a.cull.busy() || a.styles.creating() || a.segJob.active || a.recJob.active;
+                a.cull.busy() || a.styles.creating() || a.segJob.active || a.recJob.active || a.batch.busy();
     if (framesLeft > 0) glfwPollEvents();
     else if (busy) glfwWaitEventsTimeout(0.05);
     else glfwWaitEvents();  // idle: no CPU/GPU use until something happens
@@ -3588,6 +3739,8 @@ int main(int, char**) {
     {
       CullHost host = cullHost(a);
       a.cull.pump(host, a.styles);
+      BatchHost bh = batchHost(a);
+      a.batch.pump(bh);
       std::string serr;
       if (a.styles.pump(serr)) showToast(a, std::string(tr(T_Saved)) + ": " + a.styles.sets()[a.styles.selected].name);
       else if (!serr.empty()) showToast(a, serr);
@@ -3616,6 +3769,7 @@ int main(int, char**) {
   if (a.load.active) a.load.th.join();
   if (a.segJob.th.joinable()) a.segJob.th.join();
   if (a.recJob.th.joinable()) a.recJob.th.join();
+  a.batch.shutdown();
   a.cull.shutdown();
   if (a.aiR) {
     a.aiR->shutdown();
