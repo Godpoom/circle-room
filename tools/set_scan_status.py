@@ -30,7 +30,7 @@ head_start = sec.index('      <h2>')
 head_end = sec.index('      </a>', head_start) + len('      </a>')
 if mode == "pending":
     prev_ver, prev_exe, prev_th, prev_en = rest
-    head = f'''      <p class="pending"><span data-th>เวอร์ชัน {ver} · กำลังรอผลสแกน</span><span data-en>Version {ver} · scan pending</span></p>
+    head = f'''      <p class="pending"><span data-th>เวอร์ชัน {ver} กำลังรอผลสแกน</span><span data-en>Version {ver}: scan pending</span></p>
       <h2><span data-th>เวอร์ชันก่อนหน้า ไม่มีแอนตี้ไวรัสตัวไหนแจ้ง</span><span data-en>The previous version: nothing flagged</span></h2>
       <p><span data-th>ผล 0/71 นี้เป็นของ <b>CircleRoom.exe {prev_ver}</b> (สแกนวันที่ {prev_th}) ส่วนเวอร์ชันล่าสุด {ver} เพิ่งออก กำลังรอผลสแกน ระหว่างนี้แนะนำให้สแกนไฟล์ที่คุณโหลดมาเองตามขั้นตอนด้านขวา</span>
          <span data-en>This 0/71 is for <b>CircleRoom.exe {prev_ver}</b> (scanned {prev_en}). Version {ver} has just shipped and its scan is pending; until then, please scan your download yourself using the steps on the right.</span></p>
