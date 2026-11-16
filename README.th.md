@@ -4,13 +4,13 @@
 
 โปรแกรมแต่งภาพที่เบาเครื่อง เขียนด้วย C++ + OpenGL (ประมวลผลบน GPU) + Dear ImGui พร้อมระบบ AI ที่ทำงานในเครื่อง (ไม่ส่งรูปขึ้นเน็ต) และมีเครื่องมือ "สร้างด้วย AI" ผ่าน OpenRouter ให้เลือกใช้ด้วย API key ของคุณเอง (ส่งภาพเฉพาะตอนกด สร้าง)
 
-> **ดาวน์โหลดไปใช้เลย:** https://godpoom.github.io/circle-room/ (หรือหน้า [Releases](../../releases)) โหลด `CircleRoom_Portable.zip` (มี AI) หรือ `CircleRoom_Lite.zip` (2.1 MB ไม่มี AI) แตกไฟล์แล้วเปิด `CircleRoom.exe` (Windows 10/11 64 บิต)
+> **ดาวน์โหลดไปใช้เลย:** https://godpoom.github.io/circle-room/ (หรือหน้า [Releases](../../releases)) โหลด `CircleRoom_Portable.zip` (มี AI) หรือ `CircleRoom_Lite.zip` (2.4 MB ไม่มี AI) แตกไฟล์แล้วเปิด `CircleRoom.exe` (Windows 10/11 64 บิต)
 >
 > repo นี้เก็บเฉพาะซอร์สโค้ด ไฟล์โมเดล AI (~490 MB) อยู่ในไฟล์ zip ของ Release ถ้าจะ build เอง ให้คัดลอกโฟลเดอร์ `ai\` จาก zip มาไว้ที่ `ai\` ของโปรเจกต์
 > ดูสัญญาอนุญาตของไลบรารีและโมเดลได้ที่ [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) (ข้อความสัญญาฉบับเต็มอยู่ในโฟลเดอร์ [LICENSES](LICENSES))
 >
-> **ตรวจความปลอดภัย:** VirusTotal สแกน `CircleRoom.exe` 1.3.1 แล้ว **0/71** ([รายงาน](https://www.virustotal.com/gui/file/22431ed7e907661509357a201c75bd3601eb30e86d873e8b631ad4aebbe923b4))
-> SHA-256 ของ `CircleRoom.exe`: `22431ed7e907661509357a201c75bd3601eb30e86d873e8b631ad4aebbe923b4` ตรวจเองได้ด้วย `Get-FileHash .\CircleRoom.exe` และแนะนำให้สแกนไฟล์ที่โหลดมาอีกครั้งเพื่อความปลอดภัย
+> **ตรวจความปลอดภัย:** VirusTotal สแกน `CircleRoom.exe` 1.3.2 Beta แล้ว **0/71** ([รายงาน](https://www.virustotal.com/gui/file/3bf468de8a27335d7dc3e4733b92b3c92fb6a185d6b77decd702c483f3a2ffcd))
+> SHA-256 ของ `CircleRoom.exe`: `3bf468de8a27335d7dc3e4733b92b3c92fb6a185d6b77decd702c483f3a2ffcd` ตรวจเองได้ด้วย `Get-FileHash .\CircleRoom.exe` และแนะนำให้สแกนไฟล์ที่โหลดมาอีกครั้งเพื่อความปลอดภัย
 
 ได้ไฟล์ `bin\CircleRoom.exe` ขนาดประมาณ 3 MB ไม่ต้องติดตั้งอะไรเพิ่ม
 ระบบ AI ใช้ไฟล์ในโฟลเดอร์ `bin\ai\` เพิ่มอีกประมาณ 466 MB (ถ้าไม่มีโฟลเดอร์นี้ ตัวแก้ไขภาพยังใช้ได้ตามปกติ)
@@ -26,7 +26,7 @@ Circle Room เหมาะถ้าคุณกำลังหา:
 - **โปรแกรมแต่งรูปที่มีเลเยอร์ ใส่ข้อความ และฟอนต์ไทย** (1.3.2 Beta)
 - ให้ **Claude, ChatGPT Codex, Cursor หรือ Gemini แต่งรูปให้** ผ่าน MCP
 
-> **เวอร์ชัน:** ไฟล์ดาวน์โหลดคือ 1.3.1 ส่วนโค้ดใน branch นี้คือ **1.3.2 Beta** เพิ่มเลเยอร์ข้อความและภาพวาดเวกเตอร์ ฟอนต์ราว 110 แบบ สร้างฟอนต์จากลายมือ เริ่มจากผืนผ้าใบว่าง และสร้างภาพด้วย AI ผ่าน OpenRouter (ใช้ key ของคุณเอง)
+> **ใหม่ใน 1.3.2 Beta:** เพิ่มเลเยอร์ข้อความและภาพวาดเวกเตอร์ ฟอนต์ราว 110 แบบ สร้างฟอนต์จากลายมือ เริ่มจากผืนผ้าใบว่าง และสร้างภาพด้วย AI ผ่าน OpenRouter (ใช้ key ของคุณเอง)
 
 ## ผู้สร้าง
 ทำโดย **IAMPOOM** คนเดียวกับที่สร้าง **Circle Zone** โมเดลภาษา AI ขนาดเล็กที่ออกแบบและเทรนเองตั้งแต่ศูนย์ (ไทย/อังกฤษ)

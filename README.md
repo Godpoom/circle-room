@@ -6,10 +6,10 @@
 
 ![Circle Room editing a photo](docs/assets/app_en.jpg)
 
-> **Download:** https://godpoom.github.io/circle-room/ (or the [Releases](../../releases) page). Get `CircleRoom_Portable.zip` (with AI) or `CircleRoom_Lite.zip` (2.1 MB, no AI), unzip, and run `CircleRoom.exe`. Windows 10/11, 64-bit. No installer, no account.
+> **Download:** https://godpoom.github.io/circle-room/ (or the [Releases](../../releases) page). Get `CircleRoom_Portable.zip` (with AI) or `CircleRoom_Lite.zip` (2.4 MB, no AI), unzip, and run `CircleRoom.exe`. Windows 10/11, 64-bit. No installer, no account.
 >
-> **Safety check:** VirusTotal scanned `CircleRoom.exe` 1.3.1: **0/71** ([report](https://www.virustotal.com/gui/file/22431ed7e907661509357a201c75bd3601eb30e86d873e8b631ad4aebbe923b4))
-> SHA-256 of `CircleRoom.exe`: `22431ed7e907661509357a201c75bd3601eb30e86d873e8b631ad4aebbe923b4`. Check yours with `Get-FileHash .\CircleRoom.exe`, and feel free to scan your download yourself.
+> **Safety check:** VirusTotal scanned `CircleRoom.exe` 1.3.2 Beta: **0/71** ([report](https://www.virustotal.com/gui/file/3bf468de8a27335d7dc3e4733b92b3c92fb6a185d6b77decd702c483f3a2ffcd))
+> SHA-256 of `CircleRoom.exe`: `3bf468de8a27335d7dc3e4733b92b3c92fb6a185d6b77decd702c483f3a2ffcd`. Check yours with `Get-FileHash .\CircleRoom.exe`, and feel free to scan your download yourself.
 
 ## Is this the app you are looking for?
 Circle Room fits if you searched for any of these:
@@ -23,7 +23,7 @@ Circle Room fits if you searched for any of these:
 - letting **Claude, ChatGPT Codex, Cursor or Gemini edit photos** through MCP
 - a photo editor in **Thai** (โปรแกรมแต่งรูปฟรี ภาษาไทย)
 
-> **Versions:** the download is 1.3.1. This branch is **1.3.2 Beta**: text and vector layers, about 110 fonts, Make your font, a blank canvas start, and optional AI generate through OpenRouter with your own key.
+> **New in 1.3.2 Beta:** text and vector layers, about 110 fonts, Make your font, a blank canvas start, and optional AI generate through OpenRouter with your own key.
 
 ## Highlights
 - **Light on your PC:** a 3 MB exe that uses about 12–20 MB of RAM with a 24 MP photo open, and 0% CPU when idle. Every slider renders on the GPU.
