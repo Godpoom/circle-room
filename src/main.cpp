@@ -33,6 +33,10 @@
 #include "renderer.h"
 #include "mcp_server.h"
 #include "selftest.h"
+#include "ai_gen.h"
+#include "font_maker.h"
+#include "openrouter.h"
+#include "layer_content.h"
 #include "ui_agent.h"
 #include "ui_batch.h"
 #include "ui_update.h"
@@ -242,7 +246,72 @@ struct App {
   // Photo layers (compositing)
   LayerStore layers;
   int selLayer = -1;    // slot in params.img
-  int layerTool = 0;    // 0 move / resize / rotate, 1 eraser, 2 restore brush
+  int layerTool = 0;    // 0 move / resize / rotate, 1 eraser, 2 restore brush, 3 magic, 4 text, 5 draw, 6 AI generate
+  // Text and drawing layers
+  TextSpec textEdit;
+  int textEditId = -1;
+  std::string textEditPath;
+  char textBuf[4096] = {};
+  float textAspect = 0.f;
+  bool textFocus = false;
+  char fontFilter[64] = {};
+  bool fontThai = false;
+  std::map<std::string, std::string> labelCache;  // layer content path -> list label
+  struct FontPrev {
+    unsigned tex = 0;
+    int w = 0, h = 0;
+  };
+  std::map<std::string, FontPrev> fontPrev;  // family -> sample image (made when its row is first shown)
+  int drawShape = 0;  // 0 pen, 1 line, 2 rectangle, 3 ellipse
+  float drawWidth = 8.f;
+  float drawStroke[4] = {0.886f, 0.322f, 0.212f, 1.f}, drawFill[4] = {0.92f, 0.9f, 0.85f, 1.f};
+  bool drawFillOn = false;
+  std::vector<float> drawPts;  // oriented 0..1 while drawing
+  bool openNewCanvas = false, pendingCompose = false;
+  int canvasW = 1920, canvasH = 1080;
+  float canvasBg[3] = {1.f, 1.f, 1.f};
+  // Make your font
+  bool openFontMaker = false;
+  FontProject fm;
+  int fmSel = 0;
+  char fmName[64] = {};
+  float fmBrush = 14.f;
+  bool fmErase = false, fmTexDirty = true;
+  unsigned fmTex = 0;
+  std::vector<uint8_t> fmUndo;
+  ImVec2 fmLast;
+  std::string fmLastTtf;
+  // AI generate through OpenRouter (the user's own key)
+  std::string orKey, orModel;
+  bool orKeyLoaded = false, orEditKey = false, orModelsInit = false, orFreeOnly = false;
+  char orKeyBuf[256] = {};
+  std::vector<orouter::Model> orModels;
+  struct OrList {
+    std::thread th;
+    std::atomic<bool> done{false};
+    bool active = false;
+    std::vector<orouter::Model> models;
+    std::string err;
+  } orList;
+  int genTask = GEN_EDIT, genAspect = 0;
+  bool genHiRes = false;
+  char genPrompt[1024] = {};
+  std::vector<HealStroke> genMask;
+  std::vector<std::vector<HealStroke>> genUndo;  // area before each stroke, for Ctrl+Z
+  bool genErase = false;
+  std::string genMaskPath;  // the photo the area was painted on
+  HealStroke genPend;
+  double genLastCost = -1;
+  struct GenJob {
+    std::thread th;
+    std::atomic<bool> done{false};
+    bool active = false, asLayer = false, hi = false;
+    int task = 0;
+    std::string modelId;
+    double started = 0;
+    std::string photo;
+    GenOutput out;
+  } gen;
   float brushPx = 60.f, brushHard = 50.f;  // brush diameter on screen, hardness 0..100
   int layerDrag = 0;    // 0 none, 1 move, 2 resize, 3 rotate, 4 brush
   ImageLayer layerStart;
@@ -321,6 +390,12 @@ static void openImage(App& a, const std::string& path) {
 }
 
 static void clearSegmentation(App& a);
+static void setPage(App& a, int pg);
+static void openComposeDraw(App& a);
+static void genSyncPhoto(App& a);
+static void genSnapshot(App& a);
+static void genDensify(HealStroke& st, float asp);
+static void genEraseAt(App& a, float u, float v, float r);
 static void startSegmentation(App& a);
 static void startRecover(App& a);
 static void clearRecover(App& a);
@@ -371,6 +446,10 @@ static void finishLoad(App& a) {
   }
   a.autoValid = false;
   if (anyLayer(a.params) || a.localPanelOpen) startSegmentation(a);
+  if (a.pendingCompose) {
+    a.pendingCompose = false;
+    openComposeDraw(a);
+  }
   std::string title = "Circle Room - " + fileName(a.path);
   glfwSetWindowTitle(a.win, title.c_str());
 }
@@ -899,6 +978,8 @@ static void addImageLayer(App& a, const std::string& path) {
   a.er.extra = fileName(path);
 }
 
+static bool textDrawCanvas(App& a, const Geometry& g, ImVec2 tl, float dW, float dH, bool active);
+
 // Layer uv <-> output uv (0..1 of the shown image) for the current geometry.
 static bool layerMaps(App& a, const Geometry& g, const ImageLayer& l, M3& layerToOut, M3& outToLayer) {
   int lw, lh;
@@ -1029,6 +1110,41 @@ static void layerCanvas(App& a, const Geometry& g, ImVec2 tl, float dW, float dH
         }
       }
     if (a.layerDrag == 5) drawStroke(a.healPend, IM_COL32(226, 82, 54, 140));
+    if (a.layerTool == 6 || a.gen.active) {  // the area for AI generate
+      genSyncPhoto(a);
+      ImU32 gc = a.gen.active ? IM_COL32(120, 160, 255, 70) : IM_COL32(120, 160, 255, 115);
+      for (const HealStroke& st : a.genMask) drawStroke(st, gc);
+      if (a.layerDrag == 7) drawStroke(a.genPend, gc);
+    }
+    if (a.layerTool == 6 && a.genTask != GEN_NEW && !a.gen.active && !a.orKey.empty()) {
+      float ox, oy, u, v;
+      mouseOut(ox, oy);
+      applyM3(g.outToOriented, ox, oy, u, v);
+      float rad = a.brushPx * 0.5f / std::max(1.f, owScreen);
+      if (ImGui::IsItemActivated() && ImGui::IsMouseClicked(0)) {
+        genSnapshot(a);
+        a.genPend = HealStroke();
+        a.genPend.radius = rad;
+        a.genPend.pts = {u, v};
+        a.layerDrag = a.genErase ? 8 : 7;
+        if (a.genErase) genEraseAt(a, u, v, rad);
+      } else if (a.layerDrag == 8 && active) {
+        genEraseAt(a, u, v, rad);
+      } else if (a.layerDrag == 7 && active) {
+        float dx = u - a.genPend.pts[a.genPend.pts.size() - 2], dy = v - a.genPend.pts.back();
+        if (dx * dx + dy * dy > 1e-8f && a.genPend.pts.size() < kMaxStrokePoints * 2) {
+          a.genPend.pts.push_back(u);
+          a.genPend.pts.push_back(v);
+        }
+      }
+      if (a.layerDrag == 8 && !active) a.layerDrag = 0;
+      if (a.layerDrag == 7 && !active) {
+        genDensify(a.genPend, (float)std::max(1, a.R.orientedH()) / (float)std::max(1, a.R.orientedW()));
+        if (a.genMask.size() < 400) a.genMask.push_back(std::move(a.genPend));
+        a.genPend = HealStroke();
+        a.layerDrag = 0;
+      }
+    }
     // Press / drag / release of the magic eraser
     if (a.layerTool == 3) {
       float ox, oy, u, v;
@@ -1056,8 +1172,11 @@ static void layerCanvas(App& a, const Geometry& g, ImVec2 tl, float dW, float dH
     }
   }
 
+  textDrawCanvas(a, g, tl, dW, dH, active);
+
   // Brush cursor
-  bool brush = a.layerTool == 3 || (a.layerTool != 0 && a.selLayer >= 0);
+  bool brush = a.layerTool == 3 || (a.layerTool == 6 && a.genTask != GEN_NEW && !a.orKey.empty()) ||
+               ((a.layerTool == 1 || a.layerTool == 2) && a.selLayer >= 0);
   if (brush && (hovered || a.layerDrag == 4)) {
     dl->AddCircle(io.MousePos, a.brushPx * 0.5f, IM_COL32(0, 0, 0, 160), 0, 3.f);
     dl->AddCircle(io.MousePos, a.brushPx * 0.5f, a.layerTool == 1 ? pal::kText : pal::kAccent, 0, 1.5f);
@@ -1071,7 +1190,7 @@ static void layerCanvas(App& a, const Geometry& g, ImVec2 tl, float dW, float dH
   }
 
   // Press: grab a handle, start a stroke, or pick the layer under the mouse.
-  if (a.layerTool != 3 && ImGui::IsItemActivated() && ImGui::IsMouseClicked(0)) {
+  if (a.layerTool <= 2 && ImGui::IsItemActivated() && ImGui::IsMouseClicked(0)) {
     mouseOriented(a.dragX, a.dragY);
     if (brush) {
       ImageLayer& l = p.img[a.selLayer];
@@ -1109,7 +1228,7 @@ static void layerCanvas(App& a, const Geometry& g, ImVec2 tl, float dW, float dH
   }
 
   // Drag
-  if (a.layerDrag && a.layerDrag != 5 && active && a.selLayer >= 0) {
+  if (a.layerDrag && a.layerDrag != 5 && a.layerDrag != 6 && active && a.selLayer >= 0) {
     ImageLayer& l = p.img[a.selLayer];
     float mx, my;
     mouseOriented(mx, my);
@@ -1138,10 +1257,826 @@ static void layerCanvas(App& a, const Geometry& g, ImVec2 tl, float dW, float dH
     }
     a.er.changed = true;
   }
-  if (a.layerDrag && a.layerDrag != 5 && !active) {
+  if (a.layerDrag && a.layerDrag != 5 && a.layerDrag != 6 && !active) {
     a.er.commit = a.layerDrag == 4 ? T_LayerBrush : T_LayerEdit;
     a.layerDrag = 0;
   }
+}
+
+// ---------------------------------------------------------------- text and drawing layers
+static std::string clipUtf8(const std::string& s, size_t n) {
+  if (s.size() <= n) return s;
+  while (n > 0 && ((unsigned char)s[n] & 0xC0) == 0x80) n--;
+  return s.substr(0, n) + "...";
+}
+
+static uint32_t packColor(const float c[4]) {
+  auto b = [](float v) { return (uint32_t)std::lround(std::clamp(v, 0.f, 1.f) * 255.f); };
+  return b(c[0]) << 24 | b(c[1]) << 16 | b(c[2]) << 8 | b(c[3]);
+}
+static void unpackColor(uint32_t v, float c[4]) {
+  c[0] = (v >> 24 & 255) / 255.f;
+  c[1] = (v >> 16 & 255) / 255.f;
+  c[2] = (v >> 8 & 255) / 255.f;
+  c[3] = (v & 255) / 255.f;
+}
+
+static std::string layerLabel(App& a, const ImageLayer& l) {
+  if (l.kind == LAYER_PHOTO) return fileName(l.path);
+  if (l.kind == LAYER_VECTOR) return tr(T_Drawing);
+  if (l.kind == LAYER_AI) return tr(T_GenLayer);
+  auto it = a.labelCache.find(l.path);
+  if (it != a.labelCache.end()) return it->second;
+  std::string data, err, lab = tr(T_TextCard);
+  TextSpec t;
+  if (readLayerContent(l.path, data, err) && parseText(data, t)) lab = clipUtf8(t.text.substr(0, t.text.find('\n')), 60);
+  if (a.labelCache.size() > 256) a.labelCache.clear();
+  a.labelCache[l.path] = lab;
+  return lab;
+}
+
+// Puts a new layer on top of the stack (the stack stays compact). -1 when every slot is used.
+static int pushLayer(App& a, const ImageLayer& l) {
+  int n = 0;
+  ImageLayer tmp[kMaxImgLayers];
+  std::memset((void*)tmp, 0, sizeof(tmp));
+  for (const ImageLayer& e : a.params.img)
+    if (e.enabled) tmp[n++] = e;
+  if (n >= kMaxImgLayers) {
+    showToast(a, tr(T_MaxImgLayers));
+    return -1;
+  }
+  tmp[n] = l;
+  std::memcpy(a.params.img, tmp, sizeof(tmp));
+  return n;
+}
+
+static bool setLayerPath(ImageLayer& l, const std::string& path) {
+  if (path.size() >= sizeof(l.path)) return false;
+  std::memset(l.path, 0, sizeof(l.path));
+  std::memcpy(l.path, path.data(), path.size());
+  return true;
+}
+
+// New text at (u, v), oriented 0..1 of the photo, one twelfth of its height tall.
+static void addTextLayer(App& a, float u, float v) {
+  TextSpec t;
+  t.font = fontAvailable("Sarabun") ? "Sarabun" : "Leelawadee UI";
+  t.text = currentLang() == Lang::TH ? "ข้อความ" : "Text";
+  t.outline = 4.f;
+  t.outlineColor = 0x1A1816FF;
+  std::vector<uint8_t> rgb, al;
+  int rw = 0, rh = 0;
+  std::string err, file;
+  if (!renderText(t, rgb, al, rw, rh, err) || !writeLayerContent(a.path, serializeText(t), "crtext", file, err)) {
+    showToast(a, err);
+    return;
+  }
+  ImageLayer l;
+  std::memset((void*)&l, 0, sizeof(l));
+  l.enabled = 1;
+  l.kind = LAYER_TEXT;
+  l.id = a.layers.nextId(a.params);
+  l.cx = u;
+  l.cy = v;
+  float Wo = (float)std::max(1, a.R.orientedW()), Ho = (float)std::max(1, a.R.orientedH());
+  l.scale = Ho / 12.f * rw / rh / Wo;
+  l.opacity = 100.f;
+  l.feather = 5.f;
+  if (!setLayerPath(l, file)) return;
+  int idx = pushLayer(a, l);
+  if (idx < 0) return;
+  a.selLayer = idx;
+  a.textEditId = -1;  // the card reloads it
+  a.textFocus = true;
+  a.er.changed = true;
+  a.er.commit = T_AddText;
+}
+
+static void syncTextEdit(App& a, const ImageLayer& l) {
+  if (a.textEditId == l.id && a.textEditPath == l.path) return;
+  std::string data, err;
+  a.textEdit = TextSpec();
+  if (readLayerContent(l.path, data, err)) parseText(data, a.textEdit);
+  snprintf(a.textBuf, sizeof(a.textBuf), "%s", a.textEdit.text.c_str());
+  std::vector<uint8_t> rgb, al;
+  int rw = 0, rh = 0;
+  a.textAspect = renderText(a.textEdit, rgb, al, rw, rh, err) && rh > 0 ? (float)rw / rh : 0.f;
+  a.textEditId = l.id;
+  a.textEditPath = l.path;
+}
+
+// Writes the edited text as new content; the letters keep their height when the words change.
+static void applyTextEdit(App& a, ImageLayer& l, int commit) {
+  std::vector<uint8_t> rgb, al;
+  int rw = 0, rh = 0;
+  std::string err, file;
+  if (!renderText(a.textEdit, rgb, al, rw, rh, err) || rh <= 0) {
+    showToast(a, err);
+    return;
+  }
+  if (!writeLayerContent(a.path, serializeText(a.textEdit), "crtext", file, err) || !setLayerPath(l, file)) {
+    showToast(a, err);
+    return;
+  }
+  float aspect = (float)rw / rh;
+  if (a.textAspect > 0.f) l.scale = std::clamp(l.scale * aspect / a.textAspect, 0.001f, 50.f);
+  a.textAspect = aspect;
+  a.textEditPath = l.path;
+  a.er.changed = true;
+  if (commit >= 0) a.er.commit = commit;
+}
+
+static void drawTextCard(App& a, ImageLayer& l) {
+  float s = a.scale;
+  syncTextEdit(a, l);
+  TextSpec& t = a.textEdit;
+  bool ch = false, done = false;
+  uiCardBegin("##textcard", tr(T_TextCard), false);
+  if (a.textFocus) {
+    ImGui::SetKeyboardFocusHere();
+    a.textFocus = false;
+  }
+  if (ImGui::InputTextMultiline("##txt", a.textBuf, sizeof(a.textBuf), ImVec2(-FLT_MIN, 72.f * s))) {
+    t.text = a.textBuf;
+    ch = true;
+  }
+  done |= ImGui::IsItemDeactivatedAfterEdit();
+  ImGui::Dummy(ImVec2(0, 2.f * s));
+  ImGui::TextUnformatted(tr(T_Font));
+  ImGui::SetNextItemWidth(-FLT_MIN);
+  if (ImGui::BeginCombo("##font", t.font.c_str(), ImGuiComboFlags_HeightLarge)) {
+    if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::InputTextWithHint("##ff", tr(T_FontSearch), a.fontFilter, sizeof(a.fontFilter));
+    ImGui::Checkbox(tr(T_ThaiOnly), &a.fontThai);
+    std::string q = a.fontFilter;
+    for (char& c : q) c = (char)tolower((unsigned char)c);
+    std::vector<const FontEntry*> shown;
+    for (const FontEntry& f : fontList()) {
+      if (a.fontThai && !f.thai) continue;
+      if (!q.empty()) {
+        std::string low = f.family;
+        for (char& c : low) c = (char)tolower((unsigned char)c);
+        if (low.find(q) == std::string::npos) continue;
+      }
+      shown.push_back(&f);
+    }
+    // Each row: the name, and under it a sample written in that font.
+    const float sampleH = std::round(30.f * s), nameH = ImGui::GetTextLineHeight();
+    const float rowH = nameH + sampleH + 6.f * s;
+    const float rowW = ImGui::GetContentRegionAvail().x;
+    int made = 0;  // samples are drawn with GDI: a few per frame keeps scrolling smooth
+    ImGuiListClipper clip;
+    clip.Begin((int)shown.size(), rowH + ImGui::GetStyle().ItemSpacing.y);
+    while (clip.Step())
+      for (int i = clip.DisplayStart; i < clip.DisplayEnd; i++) {
+        const FontEntry& f = *shown[i];
+        ImGui::PushID(i);
+        ImVec2 p0 = ImGui::GetCursorScreenPos();
+        bool sel = f.family == t.font;
+        if (ImGui::Selectable("##f", sel, 0, ImVec2(0, rowH))) {
+          t.font = f.family;
+          ch = done = true;
+        }
+        if (sel && ImGui::IsWindowAppearing()) ImGui::SetScrollHereY();
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        dl->AddText(ImVec2(p0.x + 4.f * s, p0.y + 2.f * s), ImGui::GetColorU32(ImGuiCol_TextDisabled), f.family.c_str());
+        auto it = a.fontPrev.find(f.family);
+        if (it == a.fontPrev.end() && made >= 6) glfwPostEmptyEvent();  // the rest next frame
+        if (it == a.fontPrev.end() && made < 6) {
+          made++;
+          App::FontPrev fp;
+          std::vector<uint8_t> al;
+          int sh = (int)sampleH, sw = 0;
+          const char* sample = f.thai ? "\xe0\xb8\xaa\xe0\xb8\xa7\xe0\xb8\xb1\xe0\xb8\xaa\xe0\xb8\x94\xe0\xb8\xb5 Aa 123"
+                                      : "Aa Bb Cc 123";  // "sawatdi" for Thai fonts
+          if (renderFontSample(f.family, sample, sh, (int)(rowW - 8.f * s), al, sw)) {
+            std::vector<uint8_t> rgba((size_t)sw * sh * 4, 255);
+            for (size_t k = 0; k < al.size(); k++) rgba[k * 4 + 3] = al[k];
+            glGenTextures(1, &fp.tex);
+            glBindTexture(GL_TEXTURE_2D, fp.tex);
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, sw, sh, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba.data());
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            fp.w = sw;
+            fp.h = sh;
+          }
+          it = a.fontPrev.emplace(f.family, fp).first;
+        }
+        if (it != a.fontPrev.end() && it->second.tex) {
+          ImVec2 q0(p0.x + 4.f * s, p0.y + nameH + 4.f * s);
+          dl->AddImage((ImTextureID)(intptr_t)it->second.tex, q0, ImVec2(q0.x + it->second.w, q0.y + it->second.h),
+                       ImVec2(0, 0), ImVec2(1, 1), ImGui::GetColorU32(ImGuiCol_Text));
+        }
+        ImGui::PopID();
+      }
+    ImGui::EndCombo();
+  }
+  float col[4];
+  unpackColor(t.color, col);
+  if (ImGui::ColorEdit4(trId(T_TextColour, "tcol"), col, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar)) {
+    t.color = packColor(col);
+    ch = true;
+  }
+  done |= ImGui::IsItemDeactivatedAfterEdit();
+  ImGui::SameLine(0, 14.f * s);
+  if (uiPill(trId(T_Bold, "tb"), t.bold != 0)) {
+    t.bold ^= 1;
+    ch = done = true;
+  }
+  ImGui::SameLine();
+  if (uiPill(trId(T_Italic, "ti"), t.italic != 0)) {
+    t.italic ^= 1;
+    ch = done = true;
+  }
+  const int alignKeys[3] = {T_AlignLeft, T_AlignCenter, T_AlignRight};
+  for (int k = 0; k < 3; k++) {
+    if (k) ImGui::SameLine();
+    ImGui::PushID(k);
+    if (uiPill(tr(alignKeys[k]), t.align == k)) {
+      t.align = k;
+      ch = done = true;
+    }
+    ImGui::PopID();
+  }
+  EditResult er2;
+  uiSlider(er2, T_LineSpacing, "tsp", &t.spacing, 50, 300, 100, "%.0f%%");
+  uiSlider(er2, T_Outline, "tol", &t.outline, 0, 30, 0, "%.0f");
+  ch |= er2.changed;
+  done |= er2.commit >= 0;
+  if (t.outline > 0.f) {
+    unpackColor(t.outlineColor, col);
+    if (ImGui::ColorEdit3(trId(T_OutlineColour, "toc"), col, ImGuiColorEditFlags_NoInputs)) {
+      col[3] = 1.f;
+      t.outlineColor = packColor(col);
+      ch = true;
+    }
+    done |= ImGui::IsItemDeactivatedAfterEdit();
+  }
+  if (uiPill(trId(T_FontMaker, "tfmk"), false)) a.openFontMaker = true;
+  uiCardEnd();
+  if (ch) applyTextEdit(a, l, done ? T_EditText : -1);
+  else if (done) a.er.commit = T_EditText;
+}
+
+static void drawDrawCard(App& a) {
+  float s = a.scale;
+  uiCardBegin("##drawcard", tr(T_DrawCard), false);
+  uiHint(tr(T_DrawHint));
+  ImGui::Dummy(ImVec2(0, 2.f * s));
+  const int shapeKeys[4] = {T_ShapePen, T_ShapeLine, T_ShapeRect, T_ShapeEllipse};
+  for (int k = 0; k < 4; k++) {
+    if (k) ImGui::SameLine();
+    ImGui::PushID(k);
+    if (uiPill(tr(shapeKeys[k]), a.drawShape == k)) a.drawShape = k;
+    ImGui::PopID();
+  }
+  ImGui::ColorEdit4(trId(T_LineColour, "dcol"), a.drawStroke, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
+  EditResult dummy;
+  uiSlider(dummy, T_LineWidth, "dw", &a.drawWidth, 0, 200, 8, "%.0f px");
+  if (a.drawShape >= 2) {
+    ImGui::Checkbox(tr(T_FillShape), &a.drawFillOn);
+    if (a.drawFillOn) {
+      ImGui::SameLine();
+      ImGui::ColorEdit4(trId(T_FillColour, "dfill"), a.drawFill, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
+    }
+  }
+  uiCardEnd();
+}
+
+static std::string svgNum(float v) {
+  char b[32];
+  snprintf(b, sizeof(b), "%.1f", v);
+  return b;
+}
+
+// Adds the shape just drawn (a.drawPts, oriented 0..1) to the selected sketch layer, or to a new
+// full-photo sketch layer. Coordinates are photo pixels, so strokes keep their width.
+static void commitShape(App& a) {
+  std::vector<float>& P = a.drawPts;
+  if (P.size() < 4) return;
+  EditParams& p = a.params;
+  int Wo = std::max(1, a.R.orientedW()), Ho = std::max(1, a.R.orientedH());
+  int target = -1;
+  std::string svg, err;
+  float sw = (float)Wo, sh = (float)Ho;
+  M3 orToLayer = {};
+  if (a.selLayer >= 0 && p.img[a.selLayer].kind == LAYER_VECTOR && readLayerContent(p.img[a.selLayer].path, svg, err)) {
+    size_t at = svg.find("data-cr-sketch=\"");
+    int lw = 0, lh = 0;
+    a.R.layerSize(p.img[a.selLayer].id, lw, lh);
+    if (at != std::string::npos && lw > 0 && sscanf(svg.c_str() + at + 16, "%f %f", &sw, &sh) == 2 && sw > 0 && sh > 0) {
+      target = a.selLayer;
+      orToLayer = invertM3(layerToOriented(p.img[target], Wo, Ho, lw, lh));
+    }
+  }
+  auto map = [&](float u, float v, float& x, float& y) {
+    float lu = u, lv = v;
+    if (target >= 0) applyM3(orToLayer, u, v, lu, lv);
+    x = lu * sw;
+    y = lv * sh;
+  };
+  std::string stroke = colorHex(packColor(a.drawStroke) | 0xFF);
+  char op[48];
+  snprintf(op, sizeof(op), " stroke-opacity=\"%.2f\"", a.drawStroke[3]);
+  std::string st = a.drawWidth > 0.f ? " stroke=\"" + stroke + "\" stroke-width=\"" + svgNum(a.drawWidth) + "\"" + op +
+                                          " stroke-linecap=\"round\" stroke-linejoin=\"round\""
+                                    : std::string(" stroke=\"none\"");
+  std::string fill = " fill=\"none\"";
+  if (a.drawShape >= 2 && a.drawFillOn) {
+    char fo[48];
+    snprintf(fo, sizeof(fo), " fill-opacity=\"%.2f\"", a.drawFill[3]);
+    fill = " fill=\"" + colorHex(packColor(a.drawFill) | 0xFF) + "\"" + fo;
+  }
+  float x0, y0, x1, y1;
+  map(P[0], P[1], x0, y0);
+  map(P[P.size() - 2], P.back(), x1, y1);
+  std::string el;
+  if (a.drawShape == 0) {
+    el = "<path d=\"M" + svgNum(x0) + " " + svgNum(y0);
+    float lx = x0, ly = y0;
+    for (size_t i = 2; i + 1 < P.size(); i += 2) {
+      float x, y;
+      map(P[i], P[i + 1], x, y);
+      if (std::hypot(x - lx, y - ly) < 1.5f && i + 2 < P.size()) continue;
+      el += " L" + svgNum(x) + " " + svgNum(y);
+      lx = x;
+      ly = y;
+    }
+    el += "\" fill=\"none\"" + st + "/>";
+  } else if (a.drawShape == 1) {
+    el = "<line x1=\"" + svgNum(x0) + "\" y1=\"" + svgNum(y0) + "\" x2=\"" + svgNum(x1) + "\" y2=\"" + svgNum(y1) + "\"" + st + "/>";
+  } else if (a.drawShape == 2) {
+    el = "<rect x=\"" + svgNum(std::min(x0, x1)) + "\" y=\"" + svgNum(std::min(y0, y1)) + "\" width=\"" + svgNum(std::fabs(x1 - x0)) +
+         "\" height=\"" + svgNum(std::fabs(y1 - y0)) + "\"" + fill + st + "/>";
+  } else {
+    el = "<ellipse cx=\"" + svgNum((x0 + x1) * 0.5f) + "\" cy=\"" + svgNum((y0 + y1) * 0.5f) + "\" rx=\"" + svgNum(std::fabs(x1 - x0) * 0.5f) +
+         "\" ry=\"" + svgNum(std::fabs(y1 - y0) * 0.5f) + "\"" + fill + st + "/>";
+  }
+  if (target >= 0) {
+    size_t end = svg.rfind("</svg>");
+    if (end == std::string::npos) return;
+    svg.insert(end, el + "\n");
+  } else {
+    svg = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 " + std::to_string(Wo) + " " + std::to_string(Ho) +
+          "\" data-cr-sketch=\"" + std::to_string(Wo) + " " + std::to_string(Ho) + "\">\n" + el + "\n</svg>\n";
+  }
+  std::string file;
+  if (!writeLayerContent(a.path, svg, "svg", file, err)) {
+    showToast(a, err);
+    return;
+  }
+  if (target >= 0) {
+    setLayerPath(p.img[target], file);
+  } else {
+    ImageLayer l;
+    std::memset((void*)&l, 0, sizeof(l));
+    l.enabled = 1;
+    l.kind = LAYER_VECTOR;
+    l.id = a.layers.nextId(p);
+    l.cx = l.cy = 0.5f;
+    l.scale = 1.f;
+    l.opacity = 100.f;
+    l.feather = 5.f;
+    if (!setLayerPath(l, file)) return;
+    int idx = pushLayer(a, l);
+    if (idx < 0) return;
+    a.selLayer = idx;
+  }
+  a.er.changed = true;
+  a.er.commit = T_ToolDraw;
+}
+
+// Text tool and draw tool on the canvas. Returns true when it handled the mouse this frame.
+static bool textDrawCanvas(App& a, const Geometry& g, ImVec2 tl, float dW, float dH, bool active) {
+  if (a.layerTool != 4 && a.layerTool != 5) return false;
+  ImGuiIO& io = ImGui::GetIO();
+  ImDrawList* dl = ImGui::GetWindowDrawList();
+  float ox = (io.MousePos.x - tl.x) / dW, oy = (io.MousePos.y - tl.y) / dH, u, v;
+  applyM3(g.outToOriented, ox, oy, u, v);
+  M3 orToOut = invertM3(g.outToOriented);
+  auto scr = [&](float pu, float pv) {
+    float x, y;
+    applyM3(orToOut, pu, pv, x, y);
+    return ImVec2(tl.x + x * dW, tl.y + y * dH);
+  };
+  if (a.layerTool == 5) {
+    if (ImGui::IsItemActivated() && ImGui::IsMouseClicked(0)) {
+      a.drawPts = {u, v, u, v};
+      a.layerDrag = 6;
+    } else if (a.layerDrag == 6 && active) {
+      if (a.drawShape == 0) {
+        float du = u - a.drawPts[a.drawPts.size() - 2], dv = v - a.drawPts.back();
+        if ((du * du + dv * dv) * dW * dW > 4.f && a.drawPts.size() < 40000) {
+          a.drawPts.push_back(u);
+          a.drawPts.push_back(v);
+        }
+      } else {
+        a.drawPts.resize(4);
+        a.drawPts[2] = u;
+        a.drawPts[3] = v;
+      }
+    }
+    if (a.layerDrag == 6) {  // live outline of the shape being drawn
+      ImU32 c = ImGui::ColorConvertFloat4ToU32(ImVec4(a.drawStroke[0], a.drawStroke[1], a.drawStroke[2], std::max(0.4f, a.drawStroke[3])));
+      ImVec2 e0 = scr(0, 0), e1 = scr(1, 0);
+      float px = std::max(1.f, a.drawWidth * std::hypot(e1.x - e0.x, e1.y - e0.y) / std::max(1, a.R.orientedW()));
+      const std::vector<float>& P = a.drawPts;
+      float u0 = P[0], v0 = P[1], u1 = P[P.size() - 2], v1 = P.back();
+      if (a.drawShape == 0) {
+        std::vector<ImVec2> pts;
+        for (size_t i = 0; i + 1 < P.size(); i += 2) pts.push_back(scr(P[i], P[i + 1]));
+        dl->AddPolyline(pts.data(), (int)pts.size(), c, ImDrawFlags_None, px);
+      } else if (a.drawShape == 1) {
+        dl->AddLine(scr(u0, v0), scr(u1, v1), c, px);
+      } else if (a.drawShape == 2) {
+        ImVec2 q[4] = {scr(u0, v0), scr(u1, v0), scr(u1, v1), scr(u0, v1)};
+        dl->AddPolyline(q, 4, c, ImDrawFlags_Closed, px);
+      } else {
+        ImVec2 q[48];
+        for (int k = 0; k < 48; k++) {
+          float t = k * 6.2831853f / 48;
+          q[k] = scr((u0 + u1) * 0.5f + std::cos(t) * (u1 - u0) * 0.5f, (v0 + v1) * 0.5f + std::sin(t) * (v1 - v0) * 0.5f);
+        }
+        dl->AddPolyline(q, 48, c, ImDrawFlags_Closed, px);
+      }
+      if (!active) {
+        commitShape(a);
+        a.drawPts.clear();
+        a.layerDrag = 0;
+      }
+    }
+    return true;
+  }
+  // Text tool: click a text layer to select (and drag it), elsewhere to add text there.
+  if (ImGui::IsItemActivated() && ImGui::IsMouseClicked(0)) {
+    int hit = -1;
+    for (int i = kMaxImgLayers - 1; i >= 0 && hit < 0; i--) {
+      const ImageLayer& l = a.params.img[i];
+      M3 lo, ol;
+      if (!l.enabled || l.hidden || l.kind != LAYER_TEXT || !layerMaps(a, g, l, lo, ol)) continue;
+      float lu, lv;
+      applyM3(ol, ox, oy, lu, lv);
+      if (lu >= 0 && lv >= 0 && lu <= 1 && lv <= 1) hit = i;
+    }
+    if (hit >= 0) {
+      a.selLayer = hit;
+      a.layerDrag = 1;
+      a.layerStart = a.params.img[hit];
+      a.dragX = u * a.R.orientedW();
+      a.dragY = v * a.R.orientedH();
+    } else if (u >= 0 && v >= 0 && u <= 1 && v <= 1) {
+      addTextLayer(a, u, v);
+    }
+    return true;
+  }
+  return false;
+}
+
+// "New canvas": a blank PNG to draw and design on.
+static void drawNewCanvasDialog(App& a) {
+  float s = a.scale;
+  if (a.openNewCanvas) {
+    ImGui::OpenPopup("###newcanvas");
+    a.openNewCanvas = false;
+  }
+  ImGui::SetNextWindowSize(ImVec2(420 * s, 0));
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(20 * s, 16 * s));
+  if (ImGui::BeginPopupModal(trId(T_NewCanvas, "newcanvas"), nullptr, ImGuiWindowFlags_NoResize)) {
+    uiHint(tr(T_NewCanvasHint));
+    ImGui::Dummy(ImVec2(0, 4 * s));
+    struct Pre { const char* name; int w, h; };
+    const Pre pre[5] = {{"1080 x 1080", 1080, 1080}, {"1920 x 1080", 1920, 1080}, {"1080 x 1920", 1080, 1920},
+                        {"A4 2480 x 3508", 2480, 3508}, {"3000 x 2000", 3000, 2000}};
+    for (int k = 0; k < 5; k++) {
+      if (k) ImGui::SameLine();
+      if (k == 3) ImGui::NewLine();
+      ImGui::PushID(k);
+      if (uiPill(pre[k].name, a.canvasW == pre[k].w && a.canvasH == pre[k].h)) {
+        a.canvasW = pre[k].w;
+        a.canvasH = pre[k].h;
+      }
+      ImGui::PopID();
+    }
+    ImGui::SetNextItemWidth(120 * s);
+    ImGui::InputInt(trId(T_CanvasWidth, "cw"), &a.canvasW, 0);
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(120 * s);
+    ImGui::InputInt(trId(T_CanvasHeight, "ch"), &a.canvasH, 0);
+    a.canvasW = std::clamp(a.canvasW, 64, 8192);
+    a.canvasH = std::clamp(a.canvasH, 64, 8192);
+    ImGui::ColorEdit3(trId(T_CanvasColour, "cbg"), a.canvasBg, ImGuiColorEditFlags_NoInputs);
+    uiHint(tr(T_CanvasWhere));
+    ImGui::Dummy(ImVec2(0, 6 * s));
+    if (ImGui::Button(trId(T_Cancel, "ccancel"), ImVec2(120 * s, 0))) ImGui::CloseCurrentPopup();
+    ImGui::SameLine();
+    if (uiPrimaryButton(trId(T_Create, "ccreate"), ImVec2(160 * s, 0))) {
+      // Saved straight to Pictures\Circle Room (no dialog); export later picks the final place.
+      std::string out, dir = picturesSubDir("Circle Room");
+      if (!dir.empty()) {
+        char name[64];
+        time_t now = time(nullptr);
+        tm lt;
+        localtime_s(&lt, &now);
+        strftime(name, sizeof(name), "Canvas_%Y%m%d_%H%M%S.png", &lt);
+        out = dir + "\\" + name;
+      } else {
+        out = saveImageDialog(glfwGetWin32Window(a.win), a.S.lastDir + "\\canvas.png", true);
+      }
+      if (!out.empty()) {
+        std::vector<uint8_t> rgb((size_t)a.canvasW * a.canvasH * 3);
+        uint8_t c[3] = {(uint8_t)std::lround(a.canvasBg[0] * 255), (uint8_t)std::lround(a.canvasBg[1] * 255),
+                        (uint8_t)std::lround(a.canvasBg[2] * 255)};
+        for (size_t i = 0; i < (size_t)a.canvasW * a.canvasH; i++) std::memcpy(&rgb[i * 3], c, 3);
+        std::string err;
+        if (writeImage(out, rgb.data(), a.canvasW, a.canvasH, true, 92, err)) {
+          a.mode = 0;
+          openImage(a, out);
+          a.pendingCompose = true;
+        } else {
+          showToast(a, std::string(tr(T_ExportFailed)) + ": " + err);
+        }
+      }
+      ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+  }
+  ImGui::PopStyleVar();
+}
+
+// ---------------------------------------------------------------- "Make your font"
+static std::string cpUtf8(uint32_t cp) {
+  wchar_t w[2] = {(wchar_t)cp, 0};
+  return wideToUtf8(w);
+}
+
+static void fmUploadTex(App& a) {
+  if (a.fm.ink.empty() || a.fmSel < 0) return;
+  const std::vector<uint8_t>& g = a.fm.ink[a.fmSel];
+  std::vector<uint8_t> rgba((size_t)kGlyphCell * kGlyphCell * 4);
+  for (size_t i = 0; i < (size_t)kGlyphCell * kGlyphCell; i++) {
+    uint8_t v = g.empty() ? 0 : g[i];
+    rgba[i * 4] = 234;
+    rgba[i * 4 + 1] = 229;
+    rgba[i * 4 + 2] = 219;
+    rgba[i * 4 + 3] = v;
+  }
+  if (!a.fmTex) glGenTextures(1, &a.fmTex);
+  glBindTexture(GL_TEXTURE_2D, a.fmTex);
+  glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, kGlyphCell, kGlyphCell, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba.data());
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  a.fmTexDirty = false;
+}
+
+// A round, slightly soft dab of ink (or of nothing, for the eraser) at cell pixel (x, y).
+static void fmDab(App& a, float x, float y) {
+  std::vector<uint8_t>& g = a.fm.ink[a.fmSel];
+  if (g.empty()) g.assign((size_t)kGlyphCell * kGlyphCell, 0);
+  float r = a.fmBrush * 0.5f;
+  int x0 = std::max(0, (int)(x - r - 1)), x1 = std::min(kGlyphCell - 1, (int)(x + r + 1));
+  int y0 = std::max(0, (int)(y - r - 1)), y1 = std::min(kGlyphCell - 1, (int)(y + r + 1));
+  for (int yy = y0; yy <= y1; yy++)
+    for (int xx = x0; xx <= x1; xx++) {
+      float d = std::hypot(xx + 0.5f - x, yy + 0.5f - y);
+      float c = std::clamp(r + 0.5f - d, 0.f, 1.f);
+      if (c <= 0) continue;
+      uint8_t& v = g[(size_t)yy * kGlyphCell + xx];
+      v = a.fmErase ? (uint8_t)std::min<int>(v, (int)std::lround((1.f - c) * 255)) : (uint8_t)std::max<int>(v, (int)std::lround(c * 255));
+    }
+  a.fmTexDirty = true;
+}
+
+static void drawFontMakerDialog(App& a) {
+  float s = a.scale;
+  if (a.openFontMaker) {
+    ImGui::OpenPopup("###fontmaker");
+    a.openFontMaker = false;
+  }
+  ImGui::SetNextWindowSize(ImVec2(980 * s, 690 * s), ImGuiCond_Appearing);
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(18 * s, 14 * s));
+  bool open = true;
+  if (!ImGui::BeginPopupModal(trId(T_FontMaker, "fontmaker"), &open)) {
+    ImGui::PopStyleVar();
+    return;
+  }
+  const std::vector<uint32_t>& cs = fontMakerChars();
+  std::string err;
+  // ---- the font being made: name, open / new
+  ImGui::SetNextItemWidth(260 * s);
+  ImGui::InputTextWithHint("##fmname", tr(T_FmName), a.fmName, sizeof(a.fmName));
+  ImGui::SameLine();
+  if (uiPill(trId(T_FmOpen, "fmopen"), false)) {
+    if (openFontProject(a.fmName, a.fm, err)) {
+      a.fmSel = 0;
+      a.fmTexDirty = true;
+    } else {
+      showToast(a, err);
+    }
+  }
+  std::vector<std::string> projects = listFontProjects();
+  for (size_t i = 0; i < projects.size() && i < 6; i++) {
+    ImGui::SameLine();
+    ImGui::PushID((int)i);
+    if (uiPill(projects[i].c_str(), a.fm.name == projects[i])) {
+      snprintf(a.fmName, sizeof(a.fmName), "%s", projects[i].c_str());
+      if (openFontProject(projects[i], a.fm, err)) {
+        a.fmSel = 0;
+        a.fmTexDirty = true;
+      }
+    }
+    ImGui::PopID();
+  }
+  if (a.fm.ink.empty()) {
+    ImGui::Dummy(ImVec2(0, 10 * s));
+    uiHint(tr(T_FmStart));
+    ImGui::EndPopup();
+    ImGui::PopStyleVar();
+    return;
+  }
+  if (a.fmSel < 0 || a.fmSel >= (int)cs.size()) a.fmSel = 0;
+  if (a.fmTexDirty) fmUploadTex(a);
+
+  // ---- left: every character, drawn ones marked
+  float gridW = 330 * s, cellPx = 384 * s;
+  ImGui::BeginChild("##fmgrid", ImVec2(gridW, cellPx + 140 * s), ImGuiChildFlags_Borders);
+  float bw = 34 * s;
+  int perRow = std::max(1, (int)((gridW - 16 * s) / (bw + 4 * s)));
+  for (size_t i = 0; i < cs.size(); i++) {
+    if (i % perRow) ImGui::SameLine(0, 4 * s);
+    ImGui::PushID((int)i);
+    bool drawn = false;
+    for (uint8_t v : a.fm.ink[i]) {
+      if (v > 127) {
+        drawn = true;
+        break;
+      }
+    }
+    std::string lab = isThaiMark(cs[i]) ? "\xe0\xb8\xad" + cpUtf8(cs[i]) : cpUtf8(cs[i]);
+    ImVec2 p0 = ImGui::GetCursorScreenPos();
+    if (ImGui::Button((lab + "##c").c_str(), ImVec2(bw, bw))) {
+      a.fmSel = (int)i;
+      a.fmTexDirty = true;
+      a.fmUndo.clear();
+    }
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    if (drawn) dl->AddCircleFilled(ImVec2(p0.x + bw - 5 * s, p0.y + 5 * s), 3 * s, IM_COL32(127, 200, 169, 255));
+    if ((int)i == a.fmSel) dl->AddRect(p0, ImVec2(p0.x + bw, p0.y + bw), pal::kAccent, 2 * s, 0, 2 * s);
+    ImGui::PopID();
+  }
+  ImGui::EndChild();
+  ImGui::SameLine();
+
+  // ---- middle: the drawing cell
+  ImGui::BeginGroup();
+  uint32_t cp = cs[a.fmSel];
+  ImVec2 c0 = ImGui::GetCursorScreenPos();
+  ImGui::InvisibleButton("##fmcell", ImVec2(cellPx, cellPx));
+  bool hov = ImGui::IsItemHovered(), act = ImGui::IsItemActive();
+  ImDrawList* dl = ImGui::GetWindowDrawList();
+  dl->AddRectFilled(c0, ImVec2(c0.x + cellPx, c0.y + cellPx), IM_COL32(24, 23, 21, 255));
+  float k = cellPx / kGlyphCell;
+  // faint guide letter, sitting on the baseline
+  {
+    ImFont* f = g_fontTitle ? g_fontTitle : ImGui::GetFont();
+    float size = 230.f * k;
+    std::string g = isThaiMark(cp) ? "\xe0\xb8\x81" + cpUtf8(cp) : cpUtf8(cp);  // marks shown on ko kai
+    ImVec2 ts = f->CalcTextSizeA(size, FLT_MAX, 0, g.c_str());
+    float asc = f->Ascent * size / f->FontSize;
+    dl->AddText(f, size, ImVec2(c0.x + (cellPx - ts.x) * 0.5f, c0.y + kGlyphBaseline * k - asc), IM_COL32(234, 229, 219, 34), g.c_str());
+  }
+  auto guide = [&](int y, ImU32 col) { dl->AddLine(ImVec2(c0.x, c0.y + y * k), ImVec2(c0.x + cellPx, c0.y + y * k), col, 1.f); };
+  guide(kGlyphCapHeight, IM_COL32(120, 120, 120, 90));
+  guide(kGlyphXHeight, IM_COL32(120, 120, 120, 90));
+  guide(kGlyphBaseline, IM_COL32(226, 82, 54, 150));
+  guide(kGlyphDescender, IM_COL32(120, 120, 120, 90));
+  if (a.fmTex) dl->AddImage((ImTextureID)(intptr_t)a.fmTex, c0, ImVec2(c0.x + cellPx, c0.y + cellPx));
+  dl->AddRect(c0, ImVec2(c0.x + cellPx, c0.y + cellPx), pal::kFrame);
+  ImGuiIO& io = ImGui::GetIO();
+  float mx = (io.MousePos.x - c0.x) / k, my = (io.MousePos.y - c0.y) / k;
+  if (hov || act) {
+    dl->AddCircle(io.MousePos, a.fmBrush * 0.5f * k, a.fmErase ? pal::kText : pal::kAccent, 0, 1.5f);
+    ImGui::SetMouseCursor(ImGuiMouseCursor_None);
+  }
+  if (ImGui::IsItemActivated()) {
+    a.fmUndo = a.fm.ink[a.fmSel];
+    a.fmLast = ImVec2(mx, my);
+    fmDab(a, mx, my);
+  } else if (act) {
+    float dx = mx - a.fmLast.x, dy = my - a.fmLast.y, d = std::hypot(dx, dy);
+    int steps = (int)std::ceil(d / std::max(1.f, a.fmBrush * 0.2f));
+    for (int t = 1; t <= steps; t++) fmDab(a, a.fmLast.x + dx * t / steps, a.fmLast.y + dy * t / steps);
+    a.fmLast = ImVec2(mx, my);
+  }
+  if (ImGui::IsItemDeactivated()) saveGlyph(a.fm, a.fmSel, err);
+  // tools under the cell
+  ImGui::SetNextItemWidth(cellPx * 0.45f);
+  ImGui::SliderFloat(tr(T_FmBrush), &a.fmBrush, 2.f, 60.f, "%.0f");
+  ImGui::SameLine();
+  if (uiPill(trId(T_FmEraser, "fmer"), a.fmErase)) a.fmErase = !a.fmErase;
+  if (uiPill(trId(T_FmPrev, "fmprev"), false) && a.fmSel > 0) {
+    a.fmSel--;
+    a.fmTexDirty = true;
+  }
+  ImGui::SameLine();
+  if (uiPill(trId(T_FmNext, "fmnext"), false) && a.fmSel + 1 < (int)cs.size()) {
+    a.fmSel++;
+    a.fmTexDirty = true;
+  }
+  ImGui::SameLine();
+  ImGui::BeginDisabled(a.fmUndo.empty() && a.fm.ink[a.fmSel].empty());
+  if (uiPill(trId(T_Undo, "fmundo"), false)) {
+    a.fm.ink[a.fmSel] = a.fmUndo;
+    a.fmUndo.clear();
+    saveGlyph(a.fm, a.fmSel, err);
+    a.fmTexDirty = true;
+  }
+  ImGui::EndDisabled();
+  ImGui::SameLine();
+  if (uiPill(trId(T_FmClear, "fmclr"), false)) {
+    a.fmUndo = a.fm.ink[a.fmSel];
+    a.fm.ink[a.fmSel].clear();
+    saveGlyph(a.fm, a.fmSel, err);
+    a.fmTexDirty = true;
+  }
+  if (uiPill(trId(T_FmImport, "fmimp"), false)) {
+    std::string f = openImageDialog(glfwGetWin32Window(a.win), a.S.lastDir);
+    std::vector<uint8_t> g;
+    if (!f.empty()) {
+      if (importGlyphImage(f, g, err)) {
+        a.fmUndo = a.fm.ink[a.fmSel];
+        a.fm.ink[a.fmSel].swap(g);
+        saveGlyph(a.fm, a.fmSel, err);
+        a.fmTexDirty = true;
+      } else {
+        showToast(a, err);
+      }
+    }
+  }
+  ImGui::EndGroup();
+  ImGui::SameLine();
+
+  // ---- right: how to, template sheet, build and install
+  ImGui::BeginGroup();
+  ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x);
+  uiHint(tr(T_FmHint));
+  ImGui::Dummy(ImVec2(0, 6 * s));
+  if (uiPill(trId(T_FmTemplate, "fmtpl"), false)) {
+    std::string out = saveImageDialog(glfwGetWin32Window(a.win), a.S.lastDir + "\\font_template.png", true);
+    if (!out.empty() && !writeTemplateSheet(out, err)) showToast(a, err);
+  }
+  if (uiPill(trId(T_FmSheet, "fmsheet"), false)) {
+    std::string f = openImageDialog(glfwGetWin32Window(a.win), a.S.lastDir);
+    if (!f.empty()) {
+      int n = importTemplateSheet(f, a.fm, err);
+      if (n < 0) showToast(a, err);
+      else {
+        char b[512];
+        snprintf(b, sizeof(b), tr(T_FmDrawn), n, (int)cs.size());
+        showToast(a, b);
+      }
+      a.fmTexDirty = true;
+    }
+  }
+  uiHint(tr(T_FmSheetHint));
+  ImGui::Dummy(ImVec2(0, 10 * s));
+  char b[512];
+  snprintf(b, sizeof(b), tr(T_FmDrawn), drawnGlyphs(a.fm), (int)cs.size());
+  ImGui::TextUnformatted(b);
+  ImGui::Dummy(ImVec2(0, 4 * s));
+  if (uiPrimaryButton(trId(T_FmBuild, "fmbuild"), ImVec2(-FLT_MIN, 0))) {
+    std::string ttf;
+    if (buildFont(a.fm, ttf, err) && loadPrivateFont(ttf)) {
+      a.fmLastTtf = ttf;
+      auto old = a.fontPrev.find(a.fm.name);  // rebuilt: its sample must show the new letters
+      if (old != a.fontPrev.end()) {
+        if (old->second.tex) glDeleteTextures(1, &old->second.tex);
+        a.fontPrev.erase(old);
+      }
+      snprintf(b, sizeof(b), tr(T_FmBuilt), a.fm.name.c_str());
+      showToast(a, b);
+    } else {
+      showToast(a, err.empty() ? std::string("font build failed") : err);
+    }
+  }
+  ImGui::BeginDisabled(a.fmLastTtf.empty());
+  if (ImGui::Button(trId(T_FmInstall, "fminst"), ImVec2(-FLT_MIN, 0))) {
+    if (installFontForUser(a.fmLastTtf, a.fm.name, err)) {
+      snprintf(b, sizeof(b), tr(T_FmInstalled), a.fm.name.c_str());
+      showToast(a, b);
+    } else {
+      showToast(a, err);
+    }
+  }
+  ImGui::EndDisabled();
+  uiHint(tr(T_FmInstallHint));
+  ImGui::PopTextWrapPos();
+  ImGui::EndGroup();
+  ImGui::EndPopup();
+  ImGui::PopStyleVar();
 }
 
 static const char* layerStatus(App& a, const ImageLayer& l) {
@@ -1152,6 +2087,408 @@ static const char* layerStatus(App& a, const ImageLayer& l) {
   if (st < 2) return tr(T_LayerLoading);
   if (st < 4) return tr(T_LayerAi);
   return nullptr;
+}
+
+// ---------------------------------------------------------------- AI generate (OpenRouter)
+static void genSyncPhoto(App& a) {  // an area belongs to one photo
+  if (a.genMaskPath == a.path) return;
+  a.genMaskPath = a.path;
+  a.genMask.clear();
+  a.genUndo.clear();
+}
+
+static void genSnapshot(App& a) {
+  a.genUndo.push_back(a.genMask);
+  if (a.genUndo.size() > 40) a.genUndo.erase(a.genUndo.begin());
+}
+
+// Points every half radius, so erasing can cut through a long straight stroke.
+static void genDensify(HealStroke& st, float asp) {
+  if (st.pts.size() < 4) return;
+  std::vector<float> o = {st.pts[0], st.pts[1]};
+  float step = std::max(1e-4f, st.radius * 0.5f);
+  for (size_t k = 2; k + 1 < st.pts.size(); k += 2) {
+    float px = st.pts[k - 2], py = st.pts[k - 1], x = st.pts[k], y = st.pts[k + 1];
+    float len = std::hypot(x - px, (y - py) * asp);
+    int n = std::min(2000, (int)(len / step));
+    for (int i = 1; i < n && o.size() < kMaxStrokePoints * 2; i++) {
+      o.push_back(px + (x - px) * i / n);
+      o.push_back(py + (y - py) * i / n);
+    }
+    o.push_back(x);
+    o.push_back(y);
+  }
+  st.pts.swap(o);
+}
+
+// Removes the painted points under an eraser at (u, v), radius r (units of the photo width).
+static void genEraseAt(App& a, float u, float v, float r) {
+  float asp = (float)std::max(1, a.R.orientedH()) / (float)std::max(1, a.R.orientedW());
+  std::vector<HealStroke> out;
+  for (const HealStroke& st : a.genMask) {
+    HealStroke cur;
+    cur.radius = st.radius;
+    for (size_t k = 0; k + 1 < st.pts.size(); k += 2) {
+      if (std::hypot(st.pts[k] - u, (st.pts[k + 1] - v) * asp) < r + st.radius * 0.6f) {
+        if (!cur.pts.empty()) out.push_back(std::move(cur));
+        cur = HealStroke();
+        cur.radius = st.radius;
+      } else {
+        cur.pts.push_back(st.pts[k]);
+        cur.pts.push_back(st.pts[k + 1]);
+      }
+    }
+    if (!cur.pts.empty()) out.push_back(std::move(cur));
+  }
+  a.genMask.swap(out);
+}
+
+static void genEnsureKey(App& a) {
+  if (a.orKeyLoaded) return;
+  a.orKeyLoaded = true;
+  orouter::loadKey(a.orKey);
+}
+
+static void genFetchModels(App& a) {
+  if (a.orList.active) return;
+  if (a.orList.th.joinable()) a.orList.th.join();
+  a.orList.active = true;
+  a.orList.done = false;
+  a.orList.th = std::thread([&L = a.orList]() {
+    L.models.clear();
+    L.err.clear();
+    if (orouter::fetchModels(L.models, L.err)) orouter::saveModelCache(L.models);
+    L.done = true;
+    glfwPostEmptyEvent();
+  });
+}
+
+static const orouter::Model* genModel(App& a) {
+  for (const orouter::Model& m : a.orModels)
+    if (m.id == a.orModel) return &m;
+  return nullptr;
+}
+
+static void genPickDefault(App& a) {
+  if (genModel(a) || a.orModels.empty()) return;
+  for (const char* id : {"google/gemini-3.1-flash-image", "google/gemini-2.5-flash-image"})
+    for (const orouter::Model& m : a.orModels)
+      if (m.id == id) {
+        a.orModel = m.id;
+        return;
+      }
+  for (const orouter::Model& m : a.orModels)
+    if (m.edits) {
+      a.orModel = m.id;
+      return;
+    }
+  a.orModel = a.orModels[0].id;
+}
+
+static void genEnsureModels(App& a) {
+  if (a.orModelsInit) return;
+  a.orModelsInit = true;
+  a.orModel = orouter::loadChosenModel();
+  long long age = 0;
+  if (!orouter::loadModelCache(a.orModels, &age) || age > 6 * 3600 || age < 0) genFetchModels(a);
+  genPickDefault(a);
+}
+
+static void genPollModels(App& a) {
+  if (!a.orList.active || !a.orList.done) return;
+  a.orList.th.join();
+  a.orList.active = false;
+  if (!a.orList.models.empty()) {
+    a.orModels = std::move(a.orList.models);
+    genPickDefault(a);
+  } else if (a.orModels.empty()) {
+    showToast(a, a.orList.err);
+  }
+}
+
+static void genStart(App& a, bool asLayer) {
+  const orouter::Model* m = genModel(a);
+  if (!m || a.gen.active) return;
+  int task = a.genTask;
+  bool painted = !a.genMask.empty();
+  if ((task == GEN_EDIT || task == GEN_NEW) && !a.genPrompt[0]) {
+    showToast(a, tr(T_GenNeedPrompt));
+    return;
+  }
+  if ((task == GEN_REMOVE || task == GEN_MOVE) && !painted) {
+    showToast(a, tr(T_GenNeedArea));
+    return;
+  }
+  if (task != GEN_NEW && !m->edits) {
+    showToast(a, tr(T_GenNeedEdits));
+    return;
+  }
+  if (task != GEN_NEW && !a.hasImage) return;
+  if (a.gen.th.joinable()) a.gen.th.join();
+  GenInput in;
+  in.task = task;
+  in.photo = a.path;
+  in.prompt = a.genPrompt;
+  in.key = a.orKey;
+  in.model = *m;
+  in.mask = a.genMask;
+  in.hiRes = a.genHiRes;
+  a.gen.modelId = m->id;
+  a.gen.hi = a.genHiRes && !m->resolutions.empty();
+  static const float kAspects[5] = {1.f, 4.f / 3.f, 3.f / 4.f, 16.f / 9.f, 9.f / 16.f};
+  in.aspect = kAspects[std::clamp(a.genAspect, 0, 4)];
+  a.gen.task = task;
+  a.gen.asLayer = asLayer;
+  a.gen.photo = a.path;
+  a.gen.started = glfwGetTime();
+  a.gen.active = true;
+  a.gen.done = false;
+  a.gen.th = std::thread([&J = a.gen, in]() {
+    runGen(in, J.out);
+    J.done = true;
+    glfwPostEmptyEvent();
+  });
+}
+
+static void finishGen(App& a) {
+  a.gen.th.join();
+  a.gen.active = false;
+  GenOutput& o = a.gen.out;
+  if (o.cost >= 0) {
+    a.genLastCost = o.cost;
+    if (a.gen.task != GEN_MOVE) orouter::rememberCost(a.gen.modelId, a.gen.task != GEN_NEW, a.gen.hi, o.cost);
+  }
+  if (!o.err.empty()) {
+    if (o.err != "cancelled") showToast(a, std::string(tr(T_GenFailed)) + ": " + o.err);
+    return;
+  }
+  if (a.gen.task == GEN_NEW) {
+    if (o.newImage.empty()) return;
+    if (a.gen.asLayer && a.hasImage) addImageLayer(a, o.newImage);
+    else openImage(a, o.newImage);
+    return;
+  }
+  if (a.gen.photo != a.path) return;  // another photo was opened meanwhile
+  int last = -1;
+  for (const GenLayer& g : o.layers) {
+    ImageLayer l;
+    std::memset((void*)&l, 0, sizeof(l));
+    l.enabled = 1;
+    l.kind = LAYER_AI;
+    l.id = a.layers.nextId(a.params);
+    l.cx = g.cx;
+    l.cy = g.cy;
+    l.scale = g.scale;
+    l.opacity = 100.f;
+    l.feather = 5.f;
+    if (!setLayerPath(l, g.file)) continue;
+    int idx = pushLayer(a, l);
+    if (idx < 0) break;
+    last = idx;
+  }
+  if (last < 0) return;
+  a.selLayer = last;
+  a.genMask.clear();
+  a.genUndo.clear();
+  a.er.changed = true;
+  a.er.commit = T_ToolGen;
+  if (a.gen.task == GEN_MOVE) {
+    a.layerTool = 0;
+    showToast(a, tr(T_GenMoved));
+  } else {
+    showToast(a, tr(T_GenDone));
+  }
+}
+
+static void drawGenCard(App& a) {
+  float s = a.scale;
+  genEnsureKey(a);
+  genSyncPhoto(a);
+  genPollModels(a);
+  uiCardBegin("##gencard", tr(T_GenTitle), false);
+  if (a.orKey.empty() || a.orEditKey) {
+    uiHint(tr(T_GenKeyHint));
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::InputTextWithHint("##orkey", "sk-or-v1-...", a.orKeyBuf, sizeof(a.orKeyBuf), ImGuiInputTextFlags_Password);
+    if (uiPrimaryButton(trId(T_GenKeySave, "orsave"))) {
+      std::string k = a.orKeyBuf, err;
+      while (!k.empty() && (k.back() == ' ' || k.back() == '\n' || k.back() == '\r')) k.pop_back();
+      while (!k.empty() && k[0] == ' ') k.erase(0, 1);
+      if (!orouter::plausibleKey(k)) {
+        showToast(a, tr(T_GenKeyBad));
+      } else if (!orouter::saveKey(k, err)) {
+        showToast(a, err);
+      } else {
+        a.orKey = k;
+        a.orEditKey = false;
+        showToast(a, tr(T_GenKeySaved));
+      }
+      orouter::wipe(a.orKeyBuf, sizeof(a.orKeyBuf));
+    }
+    ImGui::SameLine();
+    if (uiPill(trId(T_GenKeyGet, "orget"), false))
+      orouter::openKeysPage();
+    if (a.orEditKey && !a.orKey.empty()) {
+      ImGui::SameLine();
+      if (uiPill(trId(T_GenCancel, "orkc"), false)) a.orEditKey = false;
+    }
+    if (!a.genMask.empty() && uiPill(trId(T_GenClearArea, "gclr0"), false)) a.genMask.clear();
+    uiCardEnd();
+    return;
+  }
+  genEnsureModels(a);
+
+  // Task
+  const int taskKeys[GEN_TASK_COUNT] = {T_GenTaskEdit, T_GenTaskRemove, T_GenTaskHigh, T_GenTaskMove, T_GenTaskNew};
+  const int order[GEN_TASK_COUNT] = {GEN_EDIT, GEN_REMOVE, GEN_MOVE, GEN_HIGHLIGHT, GEN_NEW};
+  float avail = ImGui::GetContentRegionAvail().x, used = 0;
+  for (int k = 0; k < GEN_TASK_COUNT; k++) {
+    int t = order[k];
+    const char* lab = tr(taskKeys[t]);
+    float w = ImGui::CalcTextSize(lab).x + 22.f * s;
+    if (k && used + w < avail) ImGui::SameLine();
+    else if (k) used = 0;
+    used += w + ImGui::GetStyle().ItemSpacing.x;
+    ImGui::PushID(t);
+    if (uiPill(lab, a.genTask == t)) a.genTask = t;
+    ImGui::PopID();
+  }
+  const int hints[GEN_TASK_COUNT] = {T_GenHintEdit, T_GenHintRemove, T_GenHintHigh, T_GenHintMove, T_GenHintNew};
+  uiHint(tr(hints[a.genTask]));
+  bool needEdits = a.genTask != GEN_NEW;
+
+  // Model
+  ImGui::Dummy(ImVec2(0, 2.f * s));
+  ImGui::TextUnformatted(tr(T_GenModel));
+  const orouter::Model* cur = genModel(a);
+  std::string label = cur ? cur->name : std::string(a.orList.active ? tr(T_GenLoading) : tr(T_GenNoModels));
+  if (cur && cur->free) label += std::string("  [") + tr(T_GenFree) + "]";
+  ImGui::SetNextItemWidth(-FLT_MIN);
+  if (ImGui::BeginCombo("##ormodel", label.c_str(), ImGuiComboFlags_HeightLarge)) {
+    ImGui::Checkbox(tr(T_GenFreeOnly), &a.orFreeOnly);
+    for (const orouter::Model& m : a.orModels) {
+      if (a.orFreeOnly && !m.free) continue;
+      bool usable = !needEdits || m.edits;
+      ImGui::PushID(m.id.c_str());
+      ImGui::BeginDisabled(!usable);
+      if (ImGui::Selectable(m.name.c_str(), m.id == a.orModel)) {
+        a.orModel = m.id;
+        orouter::saveChosenModel(m.id);
+      }
+      ImGui::EndDisabled();
+      std::string tags;
+      if (m.free) tags += tr(T_GenFree);
+      std::string pt = orouter::priceText(m, needEdits, a.genHiRes);
+      if (!pt.empty()) {
+        char pb[64];
+        snprintf(pb, sizeof(pb), tr(T_GenPerImage), pt.c_str());
+        tags += (tags.empty() ? "" : "  ") + std::string(pb);
+      }
+      tags += std::string(tags.empty() ? "" : "  ") + tr(m.edits ? T_GenEdits : T_GenTextOnly);
+      ImGui::SameLine(0, 10.f * s);
+      ImGui::PushStyleColor(ImGuiCol_Text, m.free ? pal::kAccent : pal::kMuted);
+      ImGui::TextUnformatted(tags.c_str());
+      ImGui::PopStyleColor();
+      ImGui::PopID();
+    }
+    ImGui::EndCombo();
+  }
+  if (cur) {
+    ImGui::PushStyleColor(ImGuiCol_Text, cur->free ? pal::kAccent : pal::kMuted);
+    std::string tags = cur->free ? tr(T_GenFree) : "";
+    bool paid = false;
+    std::string pt = orouter::priceText(*cur, needEdits, a.genHiRes, &paid);
+    if (!pt.empty()) {
+      char pb[64];
+      snprintf(pb, sizeof(pb), tr(T_GenPerImage), pt.c_str());
+      tags += (tags.empty() ? "" : "  ") + std::string(pb);
+      if (paid) tags += std::string(" (") + tr(T_GenPaidBefore) + ")";
+    }
+    tags += std::string(tags.empty() ? "" : "  ") + tr(cur->edits ? T_GenEdits : T_GenTextOnly);
+    ImGui::TextUnformatted(tags.c_str());
+    ImGui::PopStyleColor();
+    if (!cur->resolutions.empty()) {  // picture size: the price follows it
+      if (uiPill(trId(T_GenRes1K, "gr1"), !a.genHiRes)) a.genHiRes = false;
+      ImGui::SameLine();
+      if (uiPill(trId(T_GenRes2K, "gr2"), a.genHiRes)) a.genHiRes = true;
+      ImGui::SameLine();
+    }
+  }
+  ImGui::BeginDisabled(a.orList.active);
+  if (uiPill(trId(T_GenRefresh, "orref"), false)) genFetchModels(a);
+  ImGui::EndDisabled();
+  if (a.orList.active) {
+    ImGui::SameLine();
+    ImGui::TextUnformatted(tr(T_GenLoading));
+  }
+  uiHint(tr(T_GenPriceNote));
+
+  // Prompt
+  ImGui::Dummy(ImVec2(0, 2.f * s));
+  bool optional = a.genTask == GEN_REMOVE || a.genTask == GEN_MOVE || a.genTask == GEN_HIGHLIGHT;
+  ImGui::TextUnformatted(tr(optional ? T_GenPromptOpt : T_GenPrompt));
+  ImGui::InputTextMultiline("##genprompt", a.genPrompt, sizeof(a.genPrompt), ImVec2(-FLT_MIN, 64.f * s));
+
+  if (a.genTask == GEN_NEW) {
+    ImGui::TextUnformatted(tr(T_GenAspect));
+    const char* asp[5] = {"1:1", "4:3", "3:4", "16:9", "9:16"};
+    for (int k = 0; k < 5; k++) {
+      if (k) ImGui::SameLine();
+      ImGui::PushID(k);
+      if (uiPill(asp[k], a.genAspect == k)) a.genAspect = k;
+      ImGui::PopID();
+    }
+  } else {
+    EditResult dummy;
+    uiSlider(dummy, T_BrushSize, "gsz", &a.brushPx, 4, 800, 60, "%.0f px");
+    if (uiPill(trId(T_GenPaint, "gpaint"), !a.genErase)) a.genErase = false;
+    ImGui::SameLine();
+    if (uiPill(trId(T_GenErase, "gerase"), a.genErase)) a.genErase = true;
+    if (!a.genMask.empty()) {
+      ImGui::SameLine();
+      if (uiPill(trId(T_GenClearArea, "gclr"), false)) {
+        genSnapshot(a);
+        a.genMask.clear();
+      }
+    }
+    ImGui::PushStyleColor(ImGuiCol_Text, pal::kMuted);
+    ImGui::TextUnformatted(tr(a.genMask.empty() ? (a.genTask == GEN_EDIT ? T_GenWhole : T_GenNeedArea) : T_GenPainted));
+    if (!a.genUndo.empty()) ImGui::TextUnformatted(tr(T_GenUndoHint));
+    ImGui::PopStyleColor();
+  }
+
+  ImGui::Dummy(ImVec2(0, 4.f * s));
+  if (a.gen.active) {
+    char b[160];
+    snprintf(b, sizeof(b), tr(T_GenBusy), (int)(glfwGetTime() - a.gen.started));
+    ImGui::PushStyleColor(ImGuiCol_Text, pal::kAccent);
+    ImGui::TextUnformatted(b);
+    ImGui::PopStyleColor();
+    ImGui::SameLine();
+    if (uiPill(trId(T_GenCancel, "gcan"), false)) orouter::cancel();
+  } else {
+    ImGui::BeginDisabled(!cur || (a.genTask != GEN_NEW && !a.hasImage));
+    if (a.genTask == GEN_NEW) {
+      if (uiPrimaryButton(trId(T_GenOpenNew, "gnew"), ImVec2(0, 0))) genStart(a, false);
+      if (a.hasImage) {
+        ImGui::SameLine();
+        if (uiPill(trId(T_GenAsLayer, "glay"), false)) genStart(a, true);
+      }
+    } else if (uiPrimaryButton(trId(T_GenGo, "ggo"), ImVec2(-FLT_MIN, 0))) {
+      genStart(a, false);
+    }
+    ImGui::EndDisabled();
+  }
+  if (a.genLastCost >= 0) {
+    char b[96];
+    snprintf(b, sizeof(b), tr(T_GenCost), a.genLastCost);
+    ImGui::PushStyleColor(ImGuiCol_Text, pal::kMuted);
+    ImGui::TextUnformatted(b);
+    ImGui::PopStyleColor();
+  }
+  uiHint(tr(T_GenPrivacy));
+  if (uiPill(trId(T_GenKeyChange, "orchg"), false)) a.orEditKey = true;
+  uiCardEnd();
 }
 
 static void drawLayersPanel(App& a) {
@@ -1183,10 +2520,20 @@ static void drawLayersPanel(App& a) {
     }
     uiCardEnd();
   }
+  if (a.layerTool == 4) {
+    uiCardBegin("##texttool", tr(T_ToolText), false);
+    uiHint(tr(T_TextHint));
+    uiCardEnd();
+  }
+  if (a.layerTool == 5) drawDrawCard(a);
+  if (a.layerTool == 6) drawGenCard(a);
   uiCardBegin("##imglayers", tr(T_PhotoLayers), false);
   if (uiPrimaryButton(trId(T_AddPhotoLayer, "addlayer"))) {
     for (const std::string& f : openImagesDialog(glfwGetWin32Window(a.win), a.S.lastDir)) addImageLayer(a, f);
   }
+  if (uiPill(trId(T_NewCanvas, "newcv"), false)) a.openNewCanvas = true;
+  ImGui::SameLine();
+  if (uiPill(trId(T_FontMaker, "fmk"), false)) a.openFontMaker = true;
   uiHint(tr(T_LayersHint));
   ImGui::Dummy(ImVec2(0, 4.f * s));
   int count = 0;
@@ -1216,7 +2563,7 @@ static void drawLayersPanel(App& a) {
       dl->AddRect(ImVec2(p0.x + 8.f * s, p0.y + 4.f * s), ImVec2(p0.x + 8.f * s + tw, p0.y + 4.f * s + th), pal::kFrame);
     }
     float tx = p0.x + 16.f * s + std::max(tw, th);
-    std::string name = fileName(l.path);
+    std::string name = layerLabel(a, l);
     dl->PushClipRect(ImVec2(tx, p0.y), ImVec2(p0.x + w - 60.f * s, p0.y + rowH), true);
     dl->AddText(ImVec2(tx, p0.y + 5.f * s), l.hidden ? pal::kFaint : pal::kText, name.c_str());
     const char* st = layerStatus(a, l);
@@ -1292,6 +2639,8 @@ static void drawLayersPanel(App& a) {
   if (uiPill(trId(T_RemoveLayer, "lrm"), false, IM_COL32(255, 140, 120, 255))) removeAt = i;
   uiCardEnd();
 
+  if (l.kind == LAYER_TEXT) drawTextCard(a, l);
+  if (l.kind == LAYER_PHOTO) {  // AI cut-out: photos only
   uiCardBegin("##cutout", tr(T_CutOut), false);
   if (!A || A->stage == -1) {
     uiHint(tr(T_LayerFailed));
@@ -1353,6 +2702,7 @@ static void drawLayersPanel(App& a) {
     uiSlider(a.er, T_EdgeSoft, "lfe", &l.feather, 0, 100, 5, "%.0f");
   }
   uiCardEnd();
+  }
 
   uiCardBegin("##lblend", tr(T_Blending), false);
   uiSlider(a.er, T_Opacity, "lop", &l.opacity, 0, 100, 100, "%.0f%%");
@@ -1371,6 +2721,7 @@ static void drawLayersPanel(App& a) {
   }
   uiCardEnd();
 
+  if (l.kind == LAYER_PHOTO) {
   uiCardBegin("##lmatch", tr(T_MatchLook), false);
   ImGui::BeginDisabled(!A || !A->uploaded);
   if (uiPrimaryButton(trId(T_MatchAuto, "lmauto"))) {
@@ -1385,9 +2736,10 @@ static void drawLayersPanel(App& a) {
   uiSlider(a.er, T_Saturation, "lsat", &l.saturation, -100, 100, 0, "%.0f", IM_COL32(128, 128, 128, 255),
            IM_COL32(230, 60, 60, 255));
   uiCardEnd();
+  }
 
   if (removeAt >= 0) {
-    std::string nm = fileName(p.img[removeAt].path);
+    std::string nm = layerLabel(a, p.img[removeAt]);
     for (int j = removeAt; j + 1 < kMaxImgLayers; j++) p.img[j] = p.img[j + 1];
     std::memset((void*)&p.img[kMaxImgLayers - 1], 0, sizeof(ImageLayer));
     a.selLayer = -1;
@@ -2249,6 +3601,12 @@ static void updateHistogram(App& a) {
   }
 }
 
+// A new canvas opens on the Compose page with the draw tool ready.
+static void openComposeDraw(App& a) {
+  setPage(a, PG_LAYERS);
+  a.layerTool = 5;
+}
+
 static void drawToolPanel(App& a) {
   static const int titles[PG_COUNT] = {T_TitleAI,    T_TitleLight, T_TitleColor, T_TitleDetail,  T_TitleEffects,
                                        T_TitleLocal, T_TitleLayers, T_TitleCrop, T_TitleLooks, T_TitleHistory};
@@ -2411,12 +3769,29 @@ static void drawCanvas(App& a) {
       dl->AddRect(h0, h1, pal::kAccent, 3.f * s, 0, 1.5f);
       drawIcon(dl, IC_AI, ImVec2(h0.x + 16.f * s, (h0.y + h1.y) * 0.5f), 14.f * s, pal::kAccent);
       dl->AddText(ImVec2(h0.x + 30.f * s, h0.y + 7.f * s), pal::kAccent, hint);
+      // Start from nothing: a blank white canvas (size and colour can be changed in the dialog).
+      const char* blank = tr(T_StartBlank);
+      ImVec2 bs2 = ImGui::CalcTextSize(blank);
+      float bw2 = bs2.x + 24.f * s + 22.f * s;
+      ImVec2 k0(cc.x - bw2 * 0.5f, h1.y + 10.f * s), k1(k0.x + bw2, k0.y + hh);
+      bool kHov = hovered && io.MousePos.x >= k0.x && io.MousePos.x <= k1.x && io.MousePos.y >= k0.y && io.MousePos.y <= k1.y;
+      dl->AddRectFilled(k0, k1, kHov ? IM_COL32(234, 229, 219, 40) : IM_COL32(234, 229, 219, 14), 3.f * s);
+      dl->AddRect(k0, k1, pal::kText, 3.f * s, 0, 1.5f);
+      dl->AddRectFilled(ImVec2(k0.x + 10.f * s, k0.y + 6.f * s), ImVec2(k0.x + 22.f * s, k1.y - 6.f * s), IM_COL32(255, 255, 255, 255),
+                        1.f * s);
+      dl->AddText(ImVec2(k0.x + 30.f * s, k0.y + 7.f * s), pal::kText, blank);
       ImGui::PopFont();
-      if (hHov) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+      if (hHov || kHov) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
       else if (hovered) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
       if (hovered && ImGui::IsMouseReleased(0)) {
-        if (hHov) a.mode = 1;
-        else doOpenDialog(a);
+        if (hHov) {
+          a.mode = 1;
+        } else if (kHov) {
+          a.canvasBg[0] = a.canvasBg[1] = a.canvasBg[2] = 1.f;
+          a.openNewCanvas = true;
+        } else {
+          doOpenDialog(a);
+        }
       }
     }
     return;
@@ -2449,7 +3824,8 @@ static void drawCanvas(App& a) {
   if (hovered && io.MouseWheel != 0.f)
     zoomAt(std::clamp(z * std::pow(1.2f, io.MouseWheel), std::min(fitZ, 1.f) * 0.25f, 16.f), io.MousePos);
   bool layerMode = a.page == PG_LAYERS && !crop;
-  bool layerOwns = layerMode && (a.layerDrag != 0 || a.layerTool == 3 || (a.layerTool != 0 && a.selLayer >= 0));
+  bool layerOwns = layerMode && (a.layerDrag != 0 || a.layerTool == 3 || (a.layerTool == 6 && a.genTask != GEN_NEW && !a.orKey.empty()) ||
+                                 (a.layerTool != 0 && a.selLayer >= 0));
   if (!crop && !layerMode && hovered && ImGui::IsMouseDoubleClicked(0)) {
     if (a.view.fit) zoomAt(1.f, io.MousePos);
     else a.view.fit = true;
@@ -2573,7 +3949,7 @@ static void drawCanvasOverlays(App& a, ImVec2 c0, ImVec2 sz) {
     ImDrawList* dl = ImGui::GetWindowDrawList();
     ImU32 acc = (pal::kAccent & 0x00FFFFFF) | ((ImU32)al << 24);
     dl->AddRect(ImVec2(c0.x + 2, c0.y + 2), ImVec2(c0.x + sz.x - 2, c0.y + sz.y - 2), acc, 0.f, 0, 3.f * s);
-    char b[160];
+    char b[512];
     snprintf(b, sizeof(b), tr(T_AgentEditedBy), a.agentWho.c_str());
     ImVec2 ts = ImGui::CalcTextSize(b), tp(c0.x + 16.f * s, c0.y + 14.f * s);
     dl->AddRectFilled(ImVec2(tp.x - 10 * s, tp.y - 6 * s), ImVec2(tp.x + ts.x + 10 * s, tp.y + ts.y + 6 * s),
@@ -2589,9 +3965,10 @@ static void drawCanvasOverlays(App& a, ImVec2 c0, ImVec2 sz) {
   if (a.page == PG_LAYERS) {  // tool palette down the left edge, like an image editor's toolbox
     float bs = 38.f * s, pad = 6.f * s;
     struct T { int icon, tool; const char* name; const char* key; };
-    const T tools[4] = {{IC_MOVE, 0, tr(T_ToolMove), "V"}, {IC_WAND, 3, tr(T_ToolMagic), "J"},
-                        {IC_ERASER, 1, tr(T_ToolErase), "E"}, {IC_BRUSH, 2, tr(T_ToolRestore), "B"}};
-    float ph = pad * 2 + bs * 5 + 10.f * s;
+    const T tools[7] = {{IC_MOVE, 0, tr(T_ToolMove), "V"}, {IC_TEXT, 4, tr(T_ToolText), "T"}, {IC_PEN, 5, tr(T_ToolDraw), "D"},
+                        {IC_WAND, 3, tr(T_ToolMagic), "J"}, {IC_SPARK, 6, tr(T_ToolGen), "G"}, {IC_ERASER, 1, tr(T_ToolErase), "E"},
+                        {IC_BRUSH, 2, tr(T_ToolRestore), "B"}};
+    float ph = pad * 2 + bs * 8 + 10.f * s;
     ImVec2 pp(c0.x + 14.f * s, c0.y + 14.f * s);
     ImGui::SetCursorScreenPos(pp);
     ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32(24, 23, 21, 240));
@@ -2831,7 +4208,7 @@ static void drawStatusBar(App& a) {
   snprintf(right, sizeof(right), "RAM %.0f MB   /   %s", processPrivateWorkingSet() / (1024.0 * 1024.0), a.gpuName.c_str());
   float tw = ImGui::CalcTextSize(right).x;
   // Version, clickable: opens the update dialog (check now, auto check on/off).
-  const char* ver = "v" CR_VERSION_STR;
+  const char* ver = "v" CR_VERSION_NAME;
   float vw = ImGui::CalcTextSize(ver).x;
   ImGui::SameLine(ImGui::GetWindowWidth() - tw - vw - 40 * a.scale);
   ImVec2 vp0 = ImGui::GetCursorScreenPos();
@@ -2967,9 +4344,17 @@ static void handleShortcuts(App& a) {
   if (io.KeyCtrl && (ImGui::IsKeyPressed(ImGuiKey_0, false) || ImGui::IsKeyPressed(ImGuiKey_Keypad0, false))) requestTextSize(a, 100);
   bool ctrl = io.KeyCtrl;
   if (ctrl && ImGui::IsKeyPressed(ImGuiKey_O, false)) doOpenDialog(a);
+  if (ctrl && ImGui::IsKeyPressed(ImGuiKey_N, false)) a.openNewCanvas = true;
   if (!a.hasImage || a.mode != 0) return;
   if (ctrl && ImGui::IsKeyPressed(ImGuiKey_E, false) && a.exp.stage == 0) a.openExport = true;
-  if (ctrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Z)) doUndo(a);
+  if (ctrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Z)) {
+    if (a.page == PG_LAYERS && a.layerTool == 6 && !a.genUndo.empty()) {  // the AI area's last stroke
+      a.genMask = std::move(a.genUndo.back());
+      a.genUndo.pop_back();
+    } else {
+      doUndo(a);
+    }
+  }
   if (ctrl && (ImGui::IsKeyPressed(ImGuiKey_Y) || (io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Z)))) doRedo(a);
   if (!ctrl && ImGui::IsKeyPressed(ImGuiKey_Backslash, false)) {
     a.showBefore = !a.showBefore;
@@ -2997,6 +4382,9 @@ static void handleShortcuts(App& a) {
   if (a.page == PG_LAYERS && !ctrl && !a.cropMode) {  // Photoshop-like tool keys
     if (ImGui::IsKeyPressed(ImGuiKey_V, false)) a.layerTool = 0;
     if (ImGui::IsKeyPressed(ImGuiKey_J, false)) a.layerTool = 3;
+    if (ImGui::IsKeyPressed(ImGuiKey_T, false)) a.layerTool = 4;
+    if (ImGui::IsKeyPressed(ImGuiKey_D, false)) a.layerTool = 5;
+    if (ImGui::IsKeyPressed(ImGuiKey_G, false)) a.layerTool = 6;
     if (ImGui::IsKeyPressed(ImGuiKey_E, false) && a.selLayer >= 0) a.layerTool = 1;
     if (ImGui::IsKeyPressed(ImGuiKey_B, false) && a.selLayer >= 0) a.layerTool = 2;
   }
@@ -3137,6 +4525,8 @@ static void buildUI(App& a) {
   ImGui::PopStyleColor();
   drawPopups(a);
   drawMcpDialog(a);
+  drawNewCanvasDialog(a);
+  drawFontMakerDialog(a);
   {
     UpdateHost uh;
     uh.scale = s;
@@ -3796,6 +5186,19 @@ int main(int, char**) {
   if (args.size() >= 2 && args[1] == "--ai-tokcheck") return runTokCheck(args);
   if (args.size() >= 2 && args[1] == "--selftest") return runSelfTest(args);
   if (args.size() >= 2 && args[1] == "--mcp") return runMcp();
+  if (args.size() >= 2 && args[1] == "--ai-models") {  // the OpenRouter image models this build sees
+    attachParentConsole();
+    std::vector<orouter::Model> ms;
+    std::string err;
+    if (!orouter::fetchModels(ms, err)) {
+      fprintf(stderr, "%s\n", err.c_str());
+      return 1;
+    }
+    for (const orouter::Model& m : ms)
+      printf("%s%s%s  make %s  edit %s\n", m.id.c_str(), m.free ? " [free]" : "", m.edits ? " [edits]" : "",
+             orouter::priceText(m, false, false).c_str(), orouter::priceText(m, true, false).c_str());
+    return 0;
+  }
   if (args.size() >= 2 && args[1] == "--mcp-config") {  // every client's setup, for scripts and docs
     attachParentConsole();
     for (const McpClient& c : mcpClients()) {
@@ -3885,7 +5288,7 @@ int main(int, char**) {
   int framesLeft = 3;
   while (!glfwWindowShouldClose(a.win)) {
     bool busy = a.load.active || a.exp.stage != 0 || (!a.toast.empty() && Clock::now() < a.toastUntil) ||
-                a.cull.busy() || a.styles.creating() || a.segJob.active || a.recJob.active || a.batch.busy() ||
+                a.cull.busy() || a.styles.creating() || a.segJob.active || a.recJob.active || a.batch.busy() || a.gen.active || a.orList.active ||
                 a.agent.animating() || glfwGetTime() < a.agentFlash || a.upd.working();
     if (framesLeft > 0) glfwPollEvents();
     else if (busy) glfwWaitEventsTimeout(0.05);
@@ -3919,6 +5322,7 @@ int main(int, char**) {
       if (!fin.empty()) agentFinished(a, fin);
     }
     if (a.segJob.active && a.segJob.done) finishSegmentation(a);
+    if (a.gen.active && a.gen.done) finishGen(a);
     if (a.recJob.active && a.recJob.done) finishRecover(a);
     updateMasks(a);
     if (a.hasImage && a.layers.sync(a.params, a.R)) a.maskVer++;
@@ -3966,6 +5370,9 @@ int main(int, char**) {
 
   if (a.load.active) a.load.th.join();
   if (a.segJob.th.joinable()) a.segJob.th.join();
+  if (a.gen.active || a.orList.active) orouter::cancel();
+  if (a.gen.th.joinable()) a.gen.th.join();
+  if (a.orList.th.joinable()) a.orList.th.join();
   if (a.recJob.th.joinable()) a.recJob.th.join();
   a.batch.shutdown();
   a.agent.watch.stop();

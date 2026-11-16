@@ -28,6 +28,7 @@
 #include "agent_log.h"
 #include "version.h"
 #include "heal.h"
+#include "layer_content.h"
 #include "i18n.h"
 #include "image_io.h"
 #include "layers.h"
@@ -438,12 +439,37 @@ std::vector<Tool> tools() {
                  prop(s, "path", "string", "Photo (optional: defaults to the open photo)");
                  prop(s, "size", "number", "Long edge of the preview in pixels (256-2048, default 1024)");
                  prop(s, "compare", "boolean", "Show the original next to the edit");
+                 prop(s, "crop", "string", "Zoom into a detail: \"x,y,w,h\" in view coordinates 0..1 (rendered sharp, not upscaled)");
                  return s;
                },
                [](Session& S, const Json& a) {
                  std::string err;
                  if (!ensurePhoto(S, a, err)) return fail(err);
                  int size = (int)std::clamp(a.num("size", 1024), 256.0, 2048.0);
+                 std::string cs = a.str("crop");
+                 if (!cs.empty()) {
+                   float c[4] = {0, 0, 1, 1};
+                   if (sscanf(cs.c_str(), "%f,%f,%f,%f", &c[0], &c[1], &c[2], &c[3]) != 4 || c[2] <= 0.01f || c[3] <= 0.01f)
+                     return fail("crop must be \"x,y,w,h\" with w and h above 0.01");
+                   c[0] = std::clamp(c[0], 0.f, 1.f);
+                   c[1] = std::clamp(c[1], 0.f, 1.f);
+                   c[2] = std::min(c[2], 1.f - c[0]);
+                   c[3] = std::min(c[3], 1.f - c[1]);
+                   S.prepare();
+                   int full = (int)std::min(4096.f, size / std::max(c[2], c[3]));
+                   std::vector<uint8_t> rgb;
+                   int w, h;
+                   S.render(S.p, full, rgb, w, h);
+                   int x0 = (int)(c[0] * w), y0 = (int)(c[1] * h), cw = std::max(1, (int)(c[2] * w)), ch = std::max(1, (int)(c[3] * h));
+                   cw = std::min(cw, w - x0);
+                   ch = std::min(ch, h - y0);
+                   std::vector<uint8_t> out((size_t)cw * ch * 3);
+                   for (int y = 0; y < ch; y++) std::memcpy(&out[(size_t)y * cw * 3], &rgb[((size_t)(y0 + y) * w + x0) * 3], (size_t)cw * 3);
+                   Result r;
+                   r.text = "Detail " + cs + " of " + fileName(S.path) + " (" + std::to_string(cw) + "x" + std::to_string(ch) + " px).";
+                   r.images.push_back(jpeg(out, cw, ch));
+                   return r;
+                 }
                  return preview(S, "", size, a.flag("compare", false));
                }});
 
@@ -471,13 +497,27 @@ std::vector<Tool> tools() {
                         fmt("%.0f", l.contrast) + " temp " + fmt("%.0f", l.temp) + " saturation " + fmt("%.0f", l.saturation) + "\n";
                  }
                  if (!any) t += "  (none)\n";
-                 t += "Photo layers:\n";
+                 t += "Layers (bottom first):\n";
                  any = false;
                  for (int i = 0; i < kMaxImgLayers; i++) {
                    const ImageLayer& l = S.p.img[i];
                    if (!l.enabled) continue;
                    any = true;
-                   t += "  [" + std::to_string(i) + "] " + l.path + " opacity " + fmt("%.0f", l.opacity) + " blend " +
+                   std::string what = l.path;
+                   if (l.kind == LAYER_TEXT) {
+                     std::string data, e2;
+                     TextSpec ts;
+                     if (readLayerContent(l.path, data, e2)) parseText(data, ts);
+                     std::string ex = ts.text.substr(0, 60);
+                     for (char& c : ex) if (c == '\n') c = ' ';
+                     what = "text \"" + ex + "\" font " + ts.font + " colour " + colorHex(ts.color);
+                   } else if (l.kind == LAYER_VECTOR) {
+                     what = "drawing (SVG)";
+                   } else if (l.kind == LAYER_AI) {
+                     what = "image AI result";
+                   }
+                   t += "  [" + std::to_string(i) + "] " + what + " centre " + fmt("%.2f", l.cx) + "," + fmt("%.2f", l.cy) +
+                        " width " + fmt("%.2f", l.scale) + " rotate " + fmt("%.0f", l.rotate) + " opacity " + fmt("%.0f", l.opacity) + " blend " +
                         kBlends[l.blend] + (l.keep ? " (AI cut-out)" : "") + (l.hidden ? " hidden" : "") + "\n";
                  }
                  if (!any) t += "  (none)\n";
@@ -908,7 +948,7 @@ std::vector<Tool> tools() {
   T.push_back({"layer_add", "Place another photo on top (layer)",
                "Composites another photo onto this one, Photoshop-style. Position and size are in view coordinates. "
                "cutout=\"subject\" lets AI remove the layer's background (keeps the person/animal/vehicle). "
-               "match_colors=true blends its light and colour into the scene. Up to 4 layers.",
+               "match_colors=true blends its light and colour into the scene. Up to 16 layers (photos, text and drawings).",
                [layerSchema] { return layerSchema(true); },
                [applyLayer](Session& S, const Json& a) {
                  std::string err;
@@ -918,7 +958,7 @@ std::vector<Tool> tools() {
                  int slot = -1;
                  for (int i = 0; i < kMaxImgLayers && slot < 0; i++)
                    if (!S.p.img[i].enabled) slot = i;
-                 if (slot < 0) return fail("All 4 layer slots are used.");
+                 if (slot < 0) return fail("All " + std::to_string(kMaxImgLayers) + " layer slots are used.");
                  S.checkpoint();
                  ImageLayer& l = S.p.img[slot];
                  std::memset((void*)&l, 0, sizeof(l));
@@ -941,8 +981,261 @@ std::vector<Tool> tools() {
                  return preview(S, "Layer " + std::to_string(slot) + " added." + note);
                }});
 
+  // ---------------------------------------------------------------- drawing: canvas, text, vector
+  // Previews cost tokens: drawing tools default to a small one; "none" returns text only.
+  auto drawResult = [](Session& S, const std::string& head, const Json& a) {
+    std::string pv = a.str("preview", "small");
+    if (pv == "none") {
+      Result r;
+      S.prepare();
+      r.text = head + "\n(no preview; call view to look)";
+      return r;
+    }
+    return preview(S, head, pv == "large" ? 1024 : 512);
+  };
+  auto addPreviewProp = [](Json& s) {
+    prop(s, "preview", "string", "small (512 px, default), large (1024 px) or none (saves tokens while drawing many parts)");
+  };
+  // A free layer slot or -1.
+  auto freeSlot = [](Session& S) {
+    for (int i = 0; i < kMaxImgLayers; i++)
+      if (!S.p.img[i].enabled) return i;
+    return -1;
+  };
+  // Shared placement: centre (x, y) in view coordinates, the layer's width from a view width share.
+  auto place = [](Session& S, ImageLayer& l, const Json& a, float defaultWidthShare) {
+    Geometry g = S.geom();
+    float vx = (float)a.num("x", 0.5), vy = (float)a.num("y", 0.5);
+    if (a.has("x") || a.has("y") || !l.scale) {
+      float ox, oy;
+      viewToOriented(g, vx, vy, ox, oy);
+      l.cx = ox;
+      l.cy = oy;
+    }
+    if (defaultWidthShare > 0) l.scale = defaultWidthShare * g.outW / std::max(1, S.R.orientedW());
+    if (a.has("rotate")) l.rotate = (float)a.num("rotate", 0);
+    if (a.has("opacity")) l.opacity = (float)a.num("opacity", 100);
+    std::string bl = a.str("blend");
+    for (int i = 0; i < BLEND_COUNT; i++)
+      if (bl == kBlends[i]) l.blend = i;
+    if (a.has("hidden")) l.hidden = a.flag("hidden", false);
+  };
+  auto newLayer = [](Session& S, int slot, int kind, const std::string& path) -> ImageLayer& {
+    ImageLayer& l = S.p.img[slot];
+    std::memset((void*)&l, 0, sizeof(l));
+    l.enabled = 1;
+    l.kind = kind;
+    l.id = S.layers.nextId(S.p);
+    l.opacity = 100;
+    l.feather = 5;
+    std::memcpy(l.path, path.data(), std::min(path.size(), sizeof(l.path) - 1));
+    return l;
+  };
+
+  T.push_back({"new_canvas", "Start a blank canvas",
+               "Creates a blank PNG (to draw or design on from scratch) and opens it. Then use draw_svg, add_text "
+               "and layer_add, and export to save the result.",
+               [addPreviewProp] {
+                 Json s = schemaObj();
+                 prop(s, "path", "string", "Where to create the canvas PNG (absolute path, e.g. D:\\Art\\poster.png)");
+                 prop(s, "width", "number", "Pixels (64-8192, default 1600)");
+                 prop(s, "height", "number", "Pixels (64-8192, default 1200)");
+                 prop(s, "background", "string", "Colour #RRGGBB (default #FFFFFF)");
+                 addPreviewProp(s);
+                 required(s, {"path"});
+                 return s;
+               },
+               [drawResult](Session& S, const Json& a) {
+                 std::string path = a.str("path");
+                 if (path.size() < 5 || (path.substr(path.size() - 4) != ".png" && path.substr(path.size() - 4) != ".PNG"))
+                   return fail("path must end in .png");
+                 if (fileExists(path)) return fail("That file already exists; pick a new name (canvases never overwrite).");
+                 int w = (int)std::clamp(a.num("width", 1600), 64.0, 8192.0), h = (int)std::clamp(a.num("height", 1200), 64.0, 8192.0);
+                 uint32_t bg = 0xFFFFFFFF;
+                 if (a.has("background") && !parseColorHex(a.str("background"), bg)) return fail("background must be #RRGGBB");
+                 std::vector<uint8_t> rgb((size_t)w * h * 3);
+                 for (size_t i = 0; i < (size_t)w * h; i++) {
+                   rgb[i * 3] = (uint8_t)(bg >> 24);
+                   rgb[i * 3 + 1] = (uint8_t)(bg >> 16);
+                   rgb[i * 3 + 2] = (uint8_t)(bg >> 8);
+                 }
+                 std::string err;
+                 if (!writeImage(path, rgb.data(), w, h, true, 92, err)) return fail("Cannot create the canvas: " + err);
+                 if (!S.open(path, err)) return fail("Cannot open the canvas: " + err);
+                 return drawResult(S, "Canvas " + std::to_string(w) + "x" + std::to_string(h) + " created: " + path, a);
+               }});
+
+  T.push_back({"add_text", "Add or change text",
+               "Writes text on the photo as its own layer (Thai and every script shape correctly). Any font from "
+               "list_fonts. Pass layer=<index> to change an existing text layer (unspecified placement stays). "
+               "Move or resize later with layer_update.",
+               [addPreviewProp] {
+                 Json s = schemaObj();
+                 prop(s, "path", "string", "Photo (optional)");
+                 prop(s, "text", "string", "The words; \\n for a new line");
+                 prop(s, "font", "string", "Font family (see list_fonts; default Sarabun)");
+                 prop(s, "color", "string", "#RRGGBB or #RRGGBBAA (default #FFFFFF)");
+                 prop(s, "size", "number", "Height of the whole text block as a share of the view height (default 0.1)");
+                 prop(s, "x", "number", "Centre x in the view, 0..1 (default 0.5)");
+                 prop(s, "y", "number", "Centre y in the view, 0..1 (default 0.5)");
+                 prop(s, "rotate", "number", "Degrees clockwise");
+                 prop(s, "bold", "boolean", "Bold");
+                 prop(s, "italic", "boolean", "Italic");
+                 prop(s, "align", "string", "left, center (default) or right, for several lines");
+                 prop(s, "spacing", "number", "Line spacing in % (default 100)");
+                 prop(s, "outline", "number", "Outline width, % of the font size (0-30)");
+                 prop(s, "outline_color", "string", "#RRGGBB");
+                 prop(s, "opacity", "number", "0-100");
+                 prop(s, "blend", "string", "normal, multiply, screen, overlay, soft-light, darken, lighten");
+                 prop(s, "layer", "number", "Index of a text layer to change instead of adding one");
+                 addPreviewProp(s);
+                 required(s, {"text"});
+                 return s;
+               },
+               [drawResult, freeSlot, place, newLayer](Session& S, const Json& a) {
+                 std::string err;
+                 if (!ensurePhoto(S, a, err)) return fail(err);
+                 int idx = a.has("layer") ? (int)a.num("layer", -1) : -1;
+                 TextSpec t;
+                 if (idx >= 0) {
+                   if (idx >= kMaxImgLayers || !S.p.img[idx].enabled || S.p.img[idx].kind != LAYER_TEXT)
+                     return fail("Layer " + std::to_string(idx) + " is not a text layer (see get_info).");
+                   std::string old;
+                   if (readLayerContent(S.p.img[idx].path, old, err)) parseText(old, t);
+                 }
+                 t.text = a.str("text", t.text);
+                 t.font = a.str("font", t.font);
+                 if (!fontAvailable(t.font)) return fail("Font \"" + t.font + "\" is not installed; call list_fonts.");
+                 if (a.has("color") && !parseColorHex(a.str("color"), t.color)) return fail("color must be #RRGGBB");
+                 if (a.has("outline_color") && !parseColorHex(a.str("outline_color"), t.outlineColor)) return fail("outline_color must be #RRGGBB");
+                 if (a.has("bold")) t.bold = a.flag("bold", false);
+                 if (a.has("italic")) t.italic = a.flag("italic", false);
+                 std::string al = a.str("align");
+                 if (al == "left") t.align = 0;
+                 else if (al == "center" || al == "centre") t.align = 1;
+                 else if (al == "right") t.align = 2;
+                 if (a.has("spacing")) t.spacing = std::clamp((float)a.num("spacing", 100), 50.f, 300.f);
+                 if (a.has("outline")) t.outline = std::clamp((float)a.num("outline", 0), 0.f, 30.f);
+                 std::vector<uint8_t> rgb, al8;
+                 int rw = 0, rh = 0;
+                 if (!renderText(t, rgb, al8, rw, rh, err)) return fail("Cannot render the text: " + err);
+                 std::string file;
+                 if (!writeLayerContent(S.path, serializeText(t), "crtext", file, err)) return fail(err);
+                 S.checkpoint();
+                 int slot = idx >= 0 ? idx : freeSlot(S);
+                 if (slot < 0) return fail("All " + std::to_string(kMaxImgLayers) + " layers are used; remove one first.");
+                 Geometry g = S.geom();
+                 float widthShare = -1;
+                 if (idx < 0 || a.has("size")) widthShare = (float)std::clamp(a.num("size", 0.1), 0.005, 2.0) * g.outH * rw / rh / std::max(1, g.outW);
+                 ImageLayer* l;
+                 if (idx >= 0) {
+                   l = &S.p.img[slot];
+                   if (widthShare < 0) {  // new words, same letter height: the width follows the text
+                     std::string old;
+                     TextSpec ot;
+                     std::vector<uint8_t> orgb, oal;
+                     int ow = 0, oh = 0;
+                     if (readLayerContent(l->path, old, err) && parseText(old, ot) && renderText(ot, orgb, oal, ow, oh, err) && ow > 0 && oh > 0)
+                       l->scale = l->scale * ((float)rw / rh) / ((float)ow / oh);
+                   }
+                   std::memset(l->path, 0, sizeof(l->path));
+                   std::memcpy(l->path, file.data(), std::min(file.size(), sizeof(l->path) - 1));
+                 } else {
+                   l = &newLayer(S, slot, LAYER_TEXT, file);
+                 }
+                 place(S, *l, a, widthShare);
+                 sanitizeParams(S.p);
+                 S.save();
+                 return drawResult(S, "Text layer " + std::to_string(slot) + (idx >= 0 ? " changed." : " added."), a);
+               }});
+
+  T.push_back({"draw_svg", "Draw vector art (SVG)",
+               "Draws SVG markup as its own layer: paths, rect, circle, ellipse, line, polyline, polygon, fills, "
+               "strokes, opacity, linear and radial gradients (no <text>: use add_text; no filters or images). Give "
+               "the SVG a viewBox. Without x/y/width it fills the view. Pass layer=<index> to replace a drawing. "
+               "Tip: draw a scene in a few layers (background, shapes, details) and use preview=none for the middle "
+               "steps; view with crop to check details.",
+               [addPreviewProp] {
+                 Json s = schemaObj();
+                 prop(s, "path", "string", "Photo or canvas (optional)");
+                 prop(s, "svg", "string", "Complete SVG document, e.g. <svg viewBox=\"0 0 100 100\">...</svg>");
+                 prop(s, "x", "number", "Centre x in the view, 0..1 (default 0.5)");
+                 prop(s, "y", "number", "Centre y in the view, 0..1 (default 0.5)");
+                 prop(s, "width", "number", "Width as a share of the view width (default: fit the view)");
+                 prop(s, "rotate", "number", "Degrees clockwise");
+                 prop(s, "opacity", "number", "0-100");
+                 prop(s, "blend", "string", "normal, multiply, screen, overlay, soft-light, darken, lighten");
+                 prop(s, "layer", "number", "Index of a drawing layer to replace");
+                 addPreviewProp(s);
+                 required(s, {"svg"});
+                 return s;
+               },
+               [drawResult, freeSlot, place, newLayer](Session& S, const Json& a) {
+                 std::string err;
+                 if (!ensurePhoto(S, a, err)) return fail(err);
+                 std::string svg = a.str("svg");
+                 std::vector<uint8_t> rgb, al8;
+                 int rw = 0, rh = 0;
+                 if (!renderSvg(svg, 256, rgb, al8, rw, rh, err)) return fail(err);
+                 int idx = a.has("layer") ? (int)a.num("layer", -1) : -1;
+                 if (idx >= 0 && (idx >= kMaxImgLayers || !S.p.img[idx].enabled || S.p.img[idx].kind != LAYER_VECTOR))
+                   return fail("Layer " + std::to_string(idx) + " is not a drawing layer (see get_info).");
+                 std::string file;
+                 if (!writeLayerContent(S.path, svg, "svg", file, err)) return fail(err);
+                 S.checkpoint();
+                 int slot = idx >= 0 ? idx : freeSlot(S);
+                 if (slot < 0) return fail("All " + std::to_string(kMaxImgLayers) + " layers are used; remove one first.");
+                 Geometry g = S.geom();
+                 float widthShare = -1;
+                 if (a.has("width")) widthShare = (float)std::clamp(a.num("width", 1), 0.005, 4.0);
+                 else if (idx < 0) {
+                   float va = (float)g.outW / std::max(1, g.outH), sa = (float)rw / rh;
+                   widthShare = sa >= va ? 1.f : sa / va;
+                 }
+                 ImageLayer* l;
+                 if (idx >= 0) {
+                   l = &S.p.img[slot];
+                   std::memset(l->path, 0, sizeof(l->path));
+                   std::memcpy(l->path, file.data(), std::min(file.size(), sizeof(l->path) - 1));
+                 } else {
+                   l = &newLayer(S, slot, LAYER_VECTOR, file);
+                 }
+                 place(S, *l, a, widthShare);
+                 sanitizeParams(S.p);
+                 S.save();
+                 return drawResult(S, "Drawing layer " + std::to_string(slot) + (idx >= 0 ? " replaced." : " added."), a);
+               }});
+
+  T.push_back({"list_fonts", "List fonts",
+               "Font families usable in add_text: about 100 bundled (Thai and Latin), fonts made in Circle Room, "
+               "and the ones installed on this PC.",
+               [] {
+                 Json s = schemaObj();
+                 prop(s, "query", "string", "Part of a name to filter by (optional)");
+                 prop(s, "thai", "boolean", "Only fonts with Thai letters");
+                 return s;
+               },
+               [](Session&, const Json& a) {
+                 std::string q = a.str("query");
+                 for (char& c : q) c = (char)tolower((unsigned char)c);
+                 bool thai = a.flag("thai", false);
+                 std::string out;
+                 int n = 0, total = 0;
+                 for (const FontEntry& f : fontList()) {
+                   if (thai && !f.thai) continue;
+                   std::string low = f.family;
+                   for (char& c : low) c = (char)tolower((unsigned char)c);
+                   if (!q.empty() && low.find(q) == std::string::npos) continue;
+                   total++;
+                   if (n < 300) out += (n++ ? ", " : "") + f.family + (f.thai ? " (th)" : "");
+                 }
+                 Result r;
+                 r.text = std::to_string(total) + " fonts" + (total > n ? " (first " + std::to_string(n) + ")" : "") + ": " + out;
+                 return r;
+               }});
+
   T.push_back({"layer_update", "Change a layer",
-               "Moves, resizes, rotates or restyles a photo layer (index from get_info).",
+               "Moves, resizes, rotates or restyles any layer: photo, text or drawing (index from get_info).",
                [layerSchema] { return layerSchema(false); },
                [applyLayer](Session& S, const Json& a) {
                  std::string err;
@@ -959,7 +1252,7 @@ std::vector<Tool> tools() {
                }});
 
   T.push_back({"layer_remove", "Remove a layer",
-               "Removes a photo layer (index from get_info).",
+               "Removes a layer: photo, text or drawing (index from get_info).",
                [] {
                  Json s = schemaObj();
                  prop(s, "path", "string", "Photo (optional)");
@@ -1301,7 +1594,9 @@ const char* kInstructions =
     "one. Typical flow: open_photo -> auto_edit (or set_adjustments) -> view compare=true -> refine (set_adjustments, "
     "adjust_region for face/sky/person, crop_rotate, apply_look, magic_erase to remove objects, layer_add to "
     "composite) -> export. For a whole folder: cull_folder to pick the best, search_photos to find by description, "
-    "batch_auto_edit to edit many at once. Coordinates are 0..1 of the current view image (after crop), x to the "
+    "batch_auto_edit to edit many at once. To draw or design: new_canvas (or any photo), draw_svg for vector art, "
+    "add_text for words in any font (list_fonts), layer_update to move or resize; previews default to small, use "
+    "preview=none between steps and view with crop to check details. Coordinates are 0..1 of the current view image (after crop), x to the "
     "right, y down. undo steps back. The user can open the same photos in the Circle Room app to see your edits.";
 
 }  // namespace

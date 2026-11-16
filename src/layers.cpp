@@ -10,6 +10,7 @@
 #include "gl_loader.h"
 #include "image_io.h"
 #include "platform_win.h"
+#include "layer_content.h"
 #include "raw_decode.h"
 #include "renderer.h"
 
@@ -101,6 +102,7 @@ bool layerPathAllowed(const std::string& path, std::string& why) {
   bool known = false;
   for (const char* e : kExt) known |= ext == e;
   known |= isRawFile(path);  // camera RAW photos can be layers too
+  known |= isTextContent(path) || isVectorContent(path);  // text and drawing layers
   if (!known) {
     why = "not an image file";
     return false;
@@ -208,7 +210,7 @@ bool LayerStore::sync(const EditParams& p, Renderer& R, bool wait) {
   for (const ImageLayer& l : p.img) {
     if (!l.enabled || !l.path[0]) continue;
     auto& slot = assets_[l.id];
-    if (slot && slot->path != l.path) {
+    if (slot && (slot->path != l.path || slot->kind != l.kind)) {
       R.dropLayer(l.id);
       if (slot->thumbTex) glDeleteTextures(1, &slot->thumbTex);
       slot.reset();
@@ -219,6 +221,7 @@ bool LayerStore::sync(const EditParams& p, Renderer& R, bool wait) {
       LayerAsset* A = slot.get();
       A->id = l.id;
       A->path = l.path;
+      A->kind = l.kind;
       if (!layerPathAllowed(A->path, A->err)) {
         A->stage = -1;
         continue;
@@ -227,6 +230,47 @@ bool LayerStore::sync(const EditParams& p, Renderer& R, bool wait) {
       int maxDim = std::min(4096, R.maxTextureSize());
       A->th = std::thread([A, maxDim]() {
         try {
+          if (A->kind != LAYER_PHOTO) {  // text or a drawing: render it, no AI cut-out
+            std::string data;
+            bool ok = A->kind == LAYER_AI || readLayerContent(A->path, data, A->err);
+            if (A->kind == LAYER_AI) {  // image AI result: colour + its own alpha
+              std::vector<uint8_t> rgba;
+              ok = loadRgbaFile(A->path, rgba, A->w, A->h) && A->w > 0 && A->h > 0 && A->w <= maxDim && A->h <= maxDim;
+              if (ok) {
+                size_t n = (size_t)A->w * A->h;
+                A->rgb.resize(n * 3);
+                A->genAlpha.resize(n);
+                for (size_t i = 0; i < n; i++) {
+                  std::memcpy(&A->rgb[i * 3], &rgba[i * 4], 3);
+                  A->genAlpha[i] = rgba[i * 4 + 3];
+                }
+              } else {
+                A->err = "cannot read the AI image";
+              }
+            } else if (ok && A->kind == LAYER_TEXT) {
+              TextSpec t;
+              parseText(data, t);
+              ok = renderText(t, A->rgb, A->genAlpha, A->w, A->h, A->err);
+            } else if (ok) {
+              ok = renderSvg(data, std::min(maxDim, 2048), A->rgb, A->genAlpha, A->w, A->h, A->err);
+            }
+            if (!ok) {
+              A->stage = -1;
+              wake();
+              return;
+            }
+            {  // the thumbnail shows the ink on the panel colour, not the colour under transparent pixels
+              std::vector<uint8_t> over(A->rgb.size());
+              for (size_t i = 0; i < A->genAlpha.size(); i++)
+                for (int c = 0; c < 3; c++)
+                  over[i * 3 + c] = (uint8_t)((A->rgb[i * 3 + c] * A->genAlpha[i] + 40 * (255 - A->genAlpha[i])) / 255);
+              makeThumb(over, A->w, A->h, 160, A->thumb, A->tw, A->th2);
+            }
+            A->segOk = false;
+            A->stage = 4;
+            wake();
+            return;
+          }
           if (!loadLayerPixels(A->path, maxDim, A->rgb, A->w, A->h, A->err)) {
             A->stage = -1;
             wake();
@@ -272,7 +316,8 @@ bool LayerStore::sync(const EditParams& p, Renderer& R, bool wait) {
     // ---- mask: AI cut-out, then the brush strokes in order
     std::vector<Stroke>& S = strokes_[l.id];
     int n = std::min(l.strokes, (int)S.size());
-    if (!l.keep && n == 0) {
+    bool generated = !A->genAlpha.empty();
+    if (!l.keep && n == 0 && !generated) {
       if (A->maskOn) {
         R.setLayerMask(A->id, nullptr, 0, 0);
         A->maskOn = false;
@@ -283,15 +328,24 @@ bool LayerStore::sync(const EditParams& p, Renderer& R, bool wait) {
     bool segReady = st == 4 && A->segOk;
     int keep = segReady ? l.keep : 0;
     int mw = segReady ? A->gw : 0, mh = segReady ? A->gh : 0;
-    if (!segReady) {
+    if (generated) {  // text / drawing: the mask is its own alpha, at full resolution
+      mw = A->w;
+      mh = A->h;
+    } else if (!segReady) {
       float k = std::min(1.f, 1536.f / std::max(A->w, A->h));
       mw = std::max(1, (int)(A->w * k));
       mh = std::max(1, (int)(A->h * k));
     }
     bool rebuild = keep != A->builtKeep || l.feather != A->builtFeather || mw != A->mw || mh != A->mh;
     if (rebuild) {
-      if (keep) ai::buildKeepMask(A->seg, keep, l.feather, A->guide, mw, mh, A->base);
-      else A->base.assign((size_t)mw * mh, 1.f);
+      if (generated) {
+        A->base.resize(A->genAlpha.size());
+        for (size_t i = 0; i < A->base.size(); i++) A->base[i] = A->genAlpha[i] / 255.f;
+      } else if (keep) {
+        ai::buildKeepMask(A->seg, keep, l.feather, A->guide, mw, mh, A->base);
+      } else {
+        A->base.assign((size_t)mw * mh, 1.f);
+      }
       A->mw = mw;
       A->mh = mh;
       A->builtKeep = keep;

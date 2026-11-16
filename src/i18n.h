@@ -397,6 +397,118 @@
   X(T_AgentOpenPhoto, "Open", "เปิดภาพ") \
   X(T_AgentAdded, "added", "เพิ่ม") \
   X(T_AgentChanged, "changed", "เปลี่ยนแล้ว") \
+  X(T_ToolText, "Text", "ข้อความ") \
+  X(T_ToolDraw, "Draw", "วาด") \
+  X(T_AddText, "Add text", "เพิ่มข้อความ") \
+  X(T_EditText, "Edit text", "แก้ข้อความ") \
+  X(T_TextCard, "Text", "ข้อความ") \
+  X(T_Font, "Font", "ฟอนต์") \
+  X(T_FontSearch, "Search fonts", "ค้นหาฟอนต์") \
+  X(T_ThaiOnly, "Thai fonts only", "เฉพาะฟอนต์ไทย") \
+  X(T_TextColour, "Colour", "สี") \
+  X(T_Outline, "Outline", "เส้นขอบ") \
+  X(T_OutlineColour, "Outline colour", "สีเส้นขอบ") \
+  X(T_Bold, "Bold", "หนา") \
+  X(T_Italic, "Italic", "เอียง") \
+  X(T_AlignLeft, "Left", "ชิดซ้าย") \
+  X(T_AlignCenter, "Centre", "กึ่งกลาง") \
+  X(T_AlignRight, "Right", "ชิดขวา") \
+  X(T_LineSpacing, "Line spacing", "ระยะบรรทัด") \
+  X(T_TextHint, "Click on the photo to add text, or click a text to select it. Drag to move.", "คลิกบนภาพเพื่อเพิ่มข้อความ หรือคลิกข้อความเดิมเพื่อเลือก ลากเพื่อย้าย") \
+  X(T_DrawCard, "Draw", "วาด") \
+  X(T_ShapePen, "Pen", "ปากกา") \
+  X(T_ShapeLine, "Line", "เส้นตรง") \
+  X(T_ShapeRect, "Rectangle", "สี่เหลี่ยม") \
+  X(T_ShapeEllipse, "Ellipse", "วงรี") \
+  X(T_LineColour, "Line colour", "สีเส้น") \
+  X(T_LineWidth, "Line width", "ความหนาเส้น") \
+  X(T_FillShape, "Fill", "เติมสีด้านใน") \
+  X(T_FillColour, "Fill colour", "สีด้านใน") \
+  X(T_DrawHint, "Drag on the photo to draw. Shapes are vector: sharp at any size, and each one is an undo step.", "ลากบนภาพเพื่อวาด รูปทรงเป็นเวกเตอร์ คมทุกขนาด และย้อนกลับได้ทีละรูป") \
+  X(T_Drawing, "Drawing", "ภาพวาด") \
+  X(T_NewCanvas, "New canvas", "ผืนผ้าใบใหม่") \
+  X(T_NewCanvasHint, "A blank picture to draw and design on; it is saved as a PNG you choose.", "ภาพว่างสำหรับวาดและออกแบบ บันทึกเป็นไฟล์ PNG ตามที่คุณเลือก") \
+  X(T_CanvasWidth, "Width", "กว้าง") \
+  X(T_CanvasHeight, "Height", "สูง") \
+  X(T_CanvasColour, "Background", "สีพื้นหลัง") \
+  X(T_Create, "Create", "สร้าง") \
+  X(T_LayersCard, "Layers", "เลเยอร์") \
+  X(T_FontMaker, "Make a font", "สร้างฟอนต์ของคุณ") \
+  X(T_FmName, "Font name (any language)", "ชื่อฟอนต์ (ภาษาไหนก็ได้)") \
+  X(T_FmOpen, "Open or start", "เปิด / เริ่มใหม่") \
+  X(T_FmStart, "Give your font a name and press Open or start. Your drawings are saved as you go, so you can come back any time.", "ตั้งชื่อฟอนต์แล้วกด เปิด / เริ่มใหม่ ทุกตัวที่วาดถูกบันทึกอัตโนมัติ กลับมาวาดต่อได้ทุกเมื่อ") \
+  X(T_FmBrush, "Brush", "ขนาดแปรง") \
+  X(T_FmEraser, "Eraser", "ยางลบ") \
+  X(T_FmPrev, "Previous", "ก่อนหน้า") \
+  X(T_FmNext, "Next", "ถัดไป") \
+  X(T_FmClear, "Clear", "ล้าง") \
+  X(T_FmImport, "Import image", "นำเข้ารูป") \
+  X(T_FmHint, "Pick a character on the left and draw it in the box; the faint letter is a guide and the red line is the baseline. Thai vowels and tone marks: draw them where they sit above or below a letter, they attach to the letter before them. Characters you skip use a box.", "เลือกตัวอักษรทางซ้ายแล้ววาดในกรอบ ตัวจางๆ คือแบบ เส้นแดงคือเส้นฐาน สระและวรรณยุกต์ไทย ให้วาดในตำแหน่งบนหรือล่างตัวอักษร โปรแกรมจะวางไว้บนตัวก่อนหน้าให้ ตัวที่ไม่ได้วาดจะแสดงเป็นกล่อง") \
+  X(T_FmTemplate, "Save template sheet", "บันทึกแผ่นแม่แบบ") \
+  X(T_FmSheet, "Import filled sheet", "นำเข้าแผ่นที่เขียนแล้ว") \
+  X(T_FmSheetHint, "Print the sheet, write each character in its box with a dark pen, scan or photograph it straight on, crop to the outer border, then import.", "พิมพ์แผ่นแม่แบบ เขียนตัวอักษรในช่องด้วยปากกาสีเข้ม สแกนหรือถ่ายตรงๆ ครอปให้พอดีขอบนอก แล้วนำเข้า") \
+  X(T_FmDrawn, "%d of %d characters drawn", "วาดแล้ว %d จาก %d ตัว") \
+  X(T_FmBuild, "Build font", "สร้างฟอนต์") \
+  X(T_FmBuilt, "Font \"%s\" is ready: pick it in the text font list", "ฟอนต์ \"%s\" พร้อมแล้ว เลือกได้ในรายการฟอนต์ของข้อความ") \
+  X(T_FmInstall, "Install on this PC", "ติดตั้งลงเครื่องนี้") \
+  X(T_FmInstalled, "Installed: other programs can use \"%s\" too", "ติดตั้งแล้ว โปรแกรมอื่นใช้ \"%s\" ได้ด้วย") \
+  X(T_FmInstallHint, "Install puts the font in Windows for your user account, so Word, Canva and other programs can use it (no admin rights needed).", "ติดตั้งจะเพิ่มฟอนต์ให้ Windows ในบัญชีผู้ใช้ของคุณ ให้ Word, Canva และโปรแกรมอื่นใช้ได้ (ไม่ต้องใช้สิทธิ์ผู้ดูแล)") \
+  X(T_ToolGen, "AI generate", "สร้างด้วย AI") \
+  X(T_GenTitle, "Generate with AI (OpenRouter)", "สร้างด้วย AI (OpenRouter)") \
+  X(T_GenKeyHint, "Uses image models on OpenRouter with your own API key: you pay OpenRouter for what you use, and some models are free. Paste a key from openrouter.ai/keys.", "ใช้โมเดลสร้างภาพของ OpenRouter ด้วย API key ของคุณเอง ค่าใช้จ่ายจ่ายให้ OpenRouter ตามที่ใช้จริง บางโมเดลใช้ฟรี วาง key ที่ได้จาก openrouter.ai/keys") \
+  X(T_GenKeySave, "Save key", "บันทึก key") \
+  X(T_GenKeyGet, "Get a key", "รับ key") \
+  X(T_GenKeyBad, "That does not look like an OpenRouter key (it starts with sk-or-)", "รูปแบบ key ไม่ถูกต้อง (key ของ OpenRouter ขึ้นต้นด้วย sk-or-)") \
+  X(T_GenKeySaved, "Key saved, encrypted for your Windows account", "บันทึก key แล้ว (เข้ารหัสไว้สำหรับบัญชี Windows ของคุณ)") \
+  X(T_GenKeyChange, "Change API key", "เปลี่ยน API key") \
+  X(T_GenTaskEdit, "Edit by prompt", "แก้ตามคำสั่ง") \
+  X(T_GenTaskRemove, "Remove", "ลบออก") \
+  X(T_GenTaskMove, "Move", "ย้าย") \
+  X(T_GenTaskHigh, "Blown highlights", "ส่วนที่สว่างเกิน") \
+  X(T_GenTaskNew, "New picture", "สร้างภาพใหม่") \
+  X(T_GenHintEdit, "Paint the area to change and say what to put there, e.g. \"a bird flying here\" or \"a red band T-shirt\". Paint nothing to edit the whole photo.", "ระบายบริเวณที่จะเปลี่ยน แล้วพิมพ์ว่าจะให้เป็นอะไร เช่น \"นกบินอยู่ตรงนี้\" หรือ \"เสื้อยืดวงดนตรีสีแดง\" ถ้าไม่ระบายจะแก้ทั้งภาพ") \
+  X(T_GenHintRemove, "Paint over what to remove; AI fills in the background behind it.", "ระบายทับสิ่งที่จะลบ AI จะเติมพื้นหลังที่ควรอยู่ข้างหลังให้") \
+  X(T_GenHintMove, "Paint over a person or thing: it becomes its own layer you can drag anywhere, and AI fills the spot it left.", "ระบายทับคนหรือสิ่งของ จะได้เลเยอร์แยกที่ลากไปวางตรงไหนก็ได้ และ AI เติมพื้นหลังตรงจุดเดิมให้") \
+  X(T_GenHintHigh, "For white areas the normal recovery cannot bring back. Paint over them, or paint nothing to let it find them.", "ใช้กับส่วนที่ขาวจนกู้แบบปกติไม่ได้ ระบายทับบริเวณนั้น หรือไม่ระบายเพื่อให้หาเอง") \
+  X(T_GenHintNew, "Describe the picture to make. It opens as a new photo, or goes on top of this one as a layer.", "พิมพ์บรรยายภาพที่ต้องการ เปิดเป็นภาพใหม่ หรือวางเป็นเลเยอร์บนภาพนี้ก็ได้") \
+  X(T_GenModel, "Model", "โมเดล") \
+  X(T_GenFreeOnly, "Free only", "เฉพาะที่ฟรี") \
+  X(T_GenFree, "free", "ฟรี") \
+  X(T_GenEdits, "edits photos", "แก้ภาพได้") \
+  X(T_GenTextOnly, "text to image only", "สร้างจากข้อความอย่างเดียว") \
+  X(T_GenRefresh, "Refresh list", "รีเฟรชรายการ") \
+  X(T_GenLoading, "Loading models...", "กำลังโหลดรายชื่อโมเดล...") \
+  X(T_GenNoModels, "No model list yet (needs the internet)", "ยังไม่มีรายชื่อโมเดล (ต้องต่ออินเทอร์เน็ต)") \
+  X(T_GenPrompt, "What to make", "ให้สร้างอะไร") \
+  X(T_GenPromptOpt, "Extra detail (optional)", "รายละเอียดเพิ่ม (ไม่บังคับ)") \
+  X(T_GenClearArea, "Clear area", "ล้างพื้นที่") \
+  X(T_GenWhole, "Nothing painted: the whole photo", "ยังไม่ได้ระบาย: แก้ทั้งภาพ") \
+  X(T_GenPainted, "Area painted", "ระบายพื้นที่แล้ว") \
+  X(T_GenGo, "Generate", "สร้าง") \
+  X(T_GenOpenNew, "Open as new photo", "เปิดเป็นภาพใหม่") \
+  X(T_GenAsLayer, "Place as layer", "วางเป็นเลเยอร์") \
+  X(T_GenBusy, "AI is working... %d s", "AI กำลังสร้าง... %d วินาที") \
+  X(T_GenCancel, "Cancel", "ยกเลิก") \
+  X(T_GenCost, "Last result cost $%.4f", "ครั้งล่าสุดใช้ไป $%.4f") \
+  X(T_GenPrivacy, "The area you chose (or the photo) and your prompt are sent to OpenRouter and the model's provider.", "ส่วนที่เลือก (หรือทั้งภาพ) และข้อความคำสั่งจะถูกส่งไปที่ OpenRouter และผู้ให้บริการโมเดล") \
+  X(T_GenNeedPrompt, "Type what to make first", "พิมพ์คำสั่งก่อน") \
+  X(T_GenNeedArea, "Paint over the area first", "ระบายพื้นที่ก่อน") \
+  X(T_GenNeedEdits, "This model cannot edit photos: pick one marked \"edits photos\"", "โมเดลนี้แก้ภาพไม่ได้ เลือกโมเดลที่มีป้าย \"แก้ภาพได้\"") \
+  X(T_GenDone, "AI result added as a layer", "เพิ่มผลจาก AI เป็นเลเยอร์แล้ว") \
+  X(T_GenMoved, "Drag the new layer to where you want it", "ลากเลเยอร์ใหม่ไปวางตรงที่ต้องการได้เลย") \
+  X(T_GenFailed, "AI could not make it", "AI สร้างไม่สำเร็จ") \
+  X(T_GenLayer, "AI image", "ภาพจาก AI") \
+  X(T_GenAspect, "Shape", "สัดส่วน") \
+  X(T_StartBlank, "Start from a white canvas", "เริ่มจากผืนผ้าใบสีขาว") \
+  X(T_GenPaidBefore, "paid last time", "จ่ายจริงครั้งก่อน") \
+  X(T_GenRes1K, "1K, cheaper", "1K ประหยัด") \
+  X(T_GenRes2K, "2K, sharper", "2K คมกว่า") \
+  X(T_CanvasWhere, "Saved in Pictures > Circle Room", "บันทึกไว้ที่ Pictures > Circle Room") \
+  X(T_GenPerImage, "%s per picture", "%s ต่อรูป") \
+  X(T_GenPriceNote, "Prices from OpenRouter; ~ means estimated (billed by size). After you use a model once, it shows what you really paid.", "ราคาจาก OpenRouter เครื่องหมาย ~ คือราคาประมาณ (คิดตามขนาดภาพ) ใช้โมเดลไหนแล้วหนึ่งครั้ง จะแสดงราคาที่จ่ายจริงแทน") \
+  X(T_GenPaint, "Paint", "ระบาย") \
+  X(T_GenErase, "Erase area", "ลบพื้นที่") \
+  X(T_GenUndoHint, "Ctrl+Z takes back the last stroke", "Ctrl+Z ย้อนเส้นที่ระบายล่าสุด") \
   X(T_UpdTitle, "Update Circle Room", "อัปเดต Circle Room") \
   X(T_UpdCurrent, "Your version: %s", "เวอร์ชันที่ใช้อยู่: %s") \
   X(T_UpdChecking, "Checking for a new version...", "กำลังตรวจหาเวอร์ชันใหม่...") \

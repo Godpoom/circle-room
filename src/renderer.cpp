@@ -279,7 +279,9 @@ void Renderer::shutdown() {
   dropAllLayers();
   if (compTex_) glDeleteTextures(1, &compTex_);
   if (compFbo_) glDeleteFramebuffers(1, &compFbo_);
+  glDeleteTextures(2, compPing_);
   compTex_ = compFbo_ = 0;
+  compPing_[0] = compPing_[1] = 0;
   if (progC_) glDeleteProgram(progC_);
   progC_ = 0;
   truncateHeal(0);
@@ -398,6 +400,8 @@ bool Renderer::upload(ImageData& img, std::string& err) {
   orient_ = img.orientation;
   src16_ = img.is16;
   if (compTex_) glDeleteTextures(1, &compTex_);  // the composite follows the new source's size
+  glDeleteTextures(2, compPing_);
+  compPing_[0] = compPing_[1] = 0;
   if (healTex_) glDeleteTextures(1, &healTex_);
   compTex_ = healTex_ = 0;
   compValid_ = false;
@@ -825,56 +829,69 @@ unsigned Renderer::compose(const EditParams& p) {
   if (compValid_ && compVer_ == layerVer_ && compHeal_ == nh && compHealVer_ == healVer_ &&
       std::memcmp(compKey_, p.img, sizeof(compKey_)) == 0)
     return compTex_;
+  // The shader blends four layers per pass: more layers run more passes, each on top of the
+  // last (ping-pong between two scratch textures, the final pass into the composite). Every
+  // pass reads and writes the photo's own layout, so they all share one orientation matrix.
   allocLike(compTex_);
   if (!compFbo_) glGenFramebuffers(1, &compFbo_);
-  glBindFramebuffer(GL_FRAMEBUFFER, compFbo_);
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, compTex_, 0);
-  glViewport(0, 0, srcW_, srcH_);
+  int chunks = (n + 3) / 4;
+  if (chunks > 1) allocLike(compPing_[0]);
+  if (chunks > 2) allocLike(compPing_[1]);
   unsigned P = progC_;
   glUseProgram(P);
   glBindVertexArray(vao_);
   auto U = [&](const char* nm) { return glGetUniformLocation(P, nm); };
-  glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, base);
-  glUniform1i(U("uSrc"), 0);
-  glUniform2f(U("uO0"), 0.f, 0.f);
-  glUniform2f(U("uO1"), 1.f, 1.f);
-  M3 so = invertM3(orientMatrix(orient_));
-  glUniformMatrix3fv(U("uSO"), 1, GL_TRUE, so.m);
-  glUniform1i(U("uN"), n);
-  float op[4] = {}, ex[4] = {}, tp[4] = {}, sa[4] = {}, bl[4] = {}, hk[4] = {};
   int Wo = orientedW(), Ho = orientedH();
-  for (int i = 0; i < kMaxImgLayers; i++) {
-    char cn[8], kn[8], ln[8];
-    snprintf(cn, sizeof(cn), "uC%d", i);
-    snprintf(kn, sizeof(kn), "uK%d", i);
-    snprintf(ln, sizeof(ln), "uL%d", i);
-    const LayerTex* L = i < n ? &lay_[use[i]->id] : nullptr;
-    glActiveTexture(GL_TEXTURE0 + 1 + i);
-    glBindTexture(GL_TEXTURE_2D, L ? L->col : curveTex_);
-    glUniform1i(U(cn), 1 + i);
-    glActiveTexture(GL_TEXTURE0 + 5 + i);
-    glBindTexture(GL_TEXTURE_2D, L && L->mask ? L->mask : curveTex_);
-    glUniform1i(U(kn), 5 + i);
-    M3 m = L ? invertM3(layerToOriented(*use[i], Wo, Ho, L->w, L->h)) : identity();
-    glUniformMatrix3fv(U(ln), 1, GL_TRUE, m.m);
-    if (!L) continue;
-    op[i] = std::clamp(use[i]->opacity / 100.f, 0.f, 1.f);
-    ex[i] = std::exp2(use[i]->exposure);
-    tp[i] = use[i]->temp / 100.f;
-    sa[i] = use[i]->saturation / 100.f;
-    bl[i] = (float)use[i]->blend;
-    hk[i] = L->mask ? 1.f : 0.f;
+  M3 so = invertM3(orientMatrix(orient_));
+  unsigned in = base;
+  for (int c = 0; c < chunks; c++) {
+    unsigned out = c == chunks - 1 ? compTex_ : compPing_[c % 2];
+    glBindFramebuffer(GL_FRAMEBUFFER, compFbo_);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, out, 0);
+    glViewport(0, 0, srcW_, srcH_);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, in);
+    glUniform1i(U("uSrc"), 0);
+    glUniform2f(U("uO0"), 0.f, 0.f);
+    glUniform2f(U("uO1"), 1.f, 1.f);
+    glUniformMatrix3fv(U("uSO"), 1, GL_TRUE, so.m);
+    int cn4 = std::min(4, n - c * 4);
+    glUniform1i(U("uN"), cn4);
+    float op[4] = {}, ex[4] = {}, tp[4] = {}, sa[4] = {}, bl[4] = {}, hk[4] = {};
+    for (int i = 0; i < 4; i++) {
+      char cn[8], kn[8], ln[8];
+      snprintf(cn, sizeof(cn), "uC%d", i);
+      snprintf(kn, sizeof(kn), "uK%d", i);
+      snprintf(ln, sizeof(ln), "uL%d", i);
+      const ImageLayer* li = i < cn4 ? use[c * 4 + i] : nullptr;
+      const LayerTex* L = li ? &lay_[li->id] : nullptr;
+      glActiveTexture(GL_TEXTURE0 + 1 + i);
+      glBindTexture(GL_TEXTURE_2D, L ? L->col : curveTex_);
+      glUniform1i(U(cn), 1 + i);
+      glActiveTexture(GL_TEXTURE0 + 5 + i);
+      glBindTexture(GL_TEXTURE_2D, L && L->mask ? L->mask : curveTex_);
+      glUniform1i(U(kn), 5 + i);
+      M3 m = L ? invertM3(layerToOriented(*li, Wo, Ho, L->w, L->h)) : identity();
+      glUniformMatrix3fv(U(ln), 1, GL_TRUE, m.m);
+      if (!L) continue;
+      op[i] = std::clamp(li->opacity / 100.f, 0.f, 1.f);
+      ex[i] = std::exp2(li->exposure);
+      tp[i] = li->temp / 100.f;
+      sa[i] = li->saturation / 100.f;
+      bl[i] = (float)li->blend;
+      hk[i] = L->mask ? 1.f : 0.f;
+    }
+    glUniform4f(U("uOp"), op[0], op[1], op[2], op[3]);
+    glUniform4f(U("uExp"), ex[0], ex[1], ex[2], ex[3]);
+    glUniform4f(U("uTemp"), tp[0], tp[1], tp[2], tp[3]);
+    glUniform4f(U("uSat"), sa[0], sa[1], sa[2], sa[3]);
+    glUniform4f(U("uBlend"), bl[0], bl[1], bl[2], bl[3]);
+    glUniform4f(U("uHasK"), hk[0], hk[1], hk[2], hk[3]);
+    if (!src16_) glEnable(GL_FRAMEBUFFER_SRGB);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+    glDisable(GL_FRAMEBUFFER_SRGB);
+    in = out;
   }
-  glUniform4f(U("uOp"), op[0], op[1], op[2], op[3]);
-  glUniform4f(U("uExp"), ex[0], ex[1], ex[2], ex[3]);
-  glUniform4f(U("uTemp"), tp[0], tp[1], tp[2], tp[3]);
-  glUniform4f(U("uSat"), sa[0], sa[1], sa[2], sa[3]);
-  glUniform4f(U("uBlend"), bl[0], bl[1], bl[2], bl[3]);
-  glUniform4f(U("uHasK"), hk[0], hk[1], hk[2], hk[3]);
-  if (!src16_) glEnable(GL_FRAMEBUFFER_SRGB);
-  glDrawArrays(GL_TRIANGLES, 0, 3);
-  glDisable(GL_FRAMEBUFFER_SRGB);
   glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, compTex_);
   glGenerateMipmap(GL_TEXTURE_2D);

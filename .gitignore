@@ -9,6 +9,12 @@ ai/*.onnx
 ai/*.dll
 ai/*.bin
 
+# Bundled fonts (tools/fetch_fonts.py downloads them; shipped in the Portable zip)
+fonts/
+
+# Hallmark's working files
+.hallmark/
+
 # Per-user files the app writes next to itself or next to photos
 settings.ini
 presets/
@@ -30,3 +36,6 @@ __pycache__/
 # local tooling
 .claude/
 docs/_freeze.html
+
+# Self-test scratch output
+selftest_tmp/

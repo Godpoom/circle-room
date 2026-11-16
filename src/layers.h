@@ -26,6 +26,8 @@ struct Stroke {
 struct LayerAsset {
   int id = 0;
   std::string path, err;
+  int kind = 0;               // LAYER_PHOTO / LAYER_TEXT / LAYER_VECTOR
+  std::vector<uint8_t> genAlpha;  // text / vector: the rendered alpha, the mask's base
   std::thread th;
   std::atomic<int> stage{0};  // 1 decoding, 2 pixels ready, 3 segmenting, 4 done, -1 failed
   std::vector<uint8_t> rgb;   // oriented sRGB, freed once on the GPU

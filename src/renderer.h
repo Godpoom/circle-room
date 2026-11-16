@@ -112,6 +112,7 @@ class Renderer {
   unsigned progP_ = 0, healTex_ = 0, healFbo_ = 0;
   int healVer_ = 0, healBuiltN_ = -1, healBuiltVer_ = -1, compHeal_ = -1, compHealVer_ = -1;
   unsigned progC_ = 0, compTex_ = 0, compFbo_ = 0;
+  unsigned compPing_[2] = {0, 0};  // scratch for composites of more than four layers
   bool src16_ = false, compValid_ = false;
   int layerVer_ = 0, compVer_ = -1;
   ImageLayer compKey_[kMaxImgLayers] = {};

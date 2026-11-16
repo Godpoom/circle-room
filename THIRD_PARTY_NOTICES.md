@@ -10,9 +10,13 @@ texts are in the [`LICENSES/`](LICENSES) folder**, which also ships inside every
 | [Dear ImGui 1.91.8](https://github.com/ocornut/imgui) | MIT | `LICENSES/DearImGui-MIT.txt` |
 | [stb_image / stb_image_write](https://github.com/nothings/stb) | MIT or public domain | `LICENSES/stb-MIT-or-PublicDomain.txt` |
 | [LibRaw 0.22.3](https://www.libraw.org/) (camera RAW decoding, compiled into `CircleRoom.exe`) | CDDL-1.0 (LibRaw is dual-licensed LGPL-2.1 / CDDL-1.0; Circle Room uses it under CDDL-1.0). Its unmodified source is in `third_party/libraw` of this repository and at https://github.com/LibRaw/LibRaw | `LICENSES/LibRaw-CDDL-1.0.txt`, `LICENSES/LibRaw-COPYRIGHT.txt` |
+| [nanosvg](https://github.com/memononen/nanosvg) (SVG layers; patched so unitless gradient coordinates are fractions) | zlib | `LICENSES/nanosvg-zlib.txt` |
 | [ONNX Runtime](https://github.com/microsoft/onnxruntime) (`onnxruntime.dll`) | MIT, plus its own third-party notices | `LICENSES/ONNXRuntime-MIT.txt`, `LICENSES/ONNXRuntime-ThirdPartyNotices.txt` |
 | [DirectML](https://www.nuget.org/packages/Microsoft.AI.DirectML) (`DirectML.dll`) | Microsoft DirectML license (redistribution in Windows apps allowed, section 1a) | `LICENSES/DirectML-*.txt` |
 | Microsoft Visual C++ runtime 14.44 (`ai/msvcp140.dll`, `ai/msvcp140_1.dll`, `ai/vcruntime140.dll`, `ai/vcruntime140_1.dll`) | Visual Studio 2022 Community licence, "Distributable Code" | see note below |
+
+## Fonts (folder `fonts/` of the Portable zip)
+About 110 font families from [Google Fonts](https://github.com/google/fonts) (fetched with `tools/fetch_fonts.py`). Each family's folder holds its own licence: SIL Open Font License 1.1 (`OFL.txt`) for all of them except Permanent Marker, Roboto Slab, Satisfy and Special Elite, which are Apache-2.0 (`LICENSE.txt`). The fonts are bundled unmodified and are not sold on their own.
 
 ## AI models (folder `ai/` of the full release zip)
 | File | Source | License | Full text |

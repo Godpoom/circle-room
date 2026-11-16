@@ -21,16 +21,21 @@ struct LocalLayer {
 
 // Another photo composited on top of this one (index 0 = bottom). Placed in EXIF-oriented
 // coordinates of the base photo, so crop / rotate / straighten keep it where it was put.
-constexpr int kMaxImgLayers = 4;
+constexpr int kMaxImgLayers = 16;
 constexpr int kMaxLayerId = 1 << 24;
 constexpr int kMaxLayerStrokes = 2000;  // eraser / restore strokes per photo layer
 constexpr int kMaxHeals = 100;          // magic-eraser strokes per photo
 constexpr int kMaxRegionId = 64;        // above any ai::Region
 constexpr unsigned long long kMaxSidecarBytes = 32ull << 20;
 constexpr int kLayerPathMax = 520;  // UTF-8 bytes
+// What a layer is: another photo, text, or a vector drawing (SVG). Text and drawings keep
+// their content in a small immutable file named by its hash (see layer_content.h), so undo
+// can go back to any earlier version by its path.
+enum { LAYER_PHOTO, LAYER_TEXT, LAYER_VECTOR, LAYER_AI, LAYER_KIND_COUNT };  // LAYER_AI: RGBA PNG made by image AI
 enum { BLEND_NORMAL, BLEND_MULTIPLY, BLEND_SCREEN, BLEND_OVERLAY, BLEND_SOFTLIGHT, BLEND_DARKEN, BLEND_LIGHTEN, BLEND_COUNT };
 struct ImageLayer {
   int enabled, id, hidden;
+  int kind;         // LAYER_PHOTO / LAYER_TEXT / LAYER_VECTOR
   float cx, cy;     // centre, 0..1 of the base photo
   float scale;      // layer width as a share of the base width
   float rotate;     // degrees, clockwise
@@ -73,7 +78,7 @@ struct EditParams {
   // AI local adjustments (image specific: kept like geometry when presets/styles apply)
   LocalLayer layers[kMaxLayers];
   float recover;  // AI highlight recovery 0..100 (image specific)
-  ImageLayer img[kMaxImgLayers];  // photo layers (image specific)
+  ImageLayer img[kMaxImgLayers];  // photo, text and vector layers, bottom first (image specific)
   int heals;                       // magic-eraser patches in use (strokes live in HealStore)
 
   EditParams();

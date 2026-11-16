@@ -205,6 +205,19 @@ void drawIcon(ImDrawList* dl, int icon, ImVec2 c, float size, ImU32 col) {
       dl->AddCircleFilled(P(c, r, 0.75f, 0.2f), r * 0.08f, col);
       break;
     }
+    case IC_SPARK: {  // generative AI: a big four-point sparkle and a small one
+      auto star = [&](ImVec2 o, float R, float w) {
+        auto at = [&](float a, float d) { return ImVec2(o.x + std::cos(a) * d, o.y + std::sin(a) * d); };
+        for (int i = 0; i < 4; i++) {  // four convex kites: the star itself is concave
+          float a = i * kPi / 2 - kPi / 2;
+          ImVec2 q[4] = {o, at(a - kPi / 4, R * w), at(a, R), at(a + kPi / 4, R * w)};
+          dl->AddConvexPolyFilled(q, 4, col);
+        }
+      };
+      star(P(c, r, -0.15f, 0.15f), r * 0.78f, 0.2f);
+      star(P(c, r, 0.6f, -0.6f), r * 0.32f, 0.25f);
+      break;
+    }
     case IC_ERASER: {  // tilted block, half filled
       float cs = std::cos(-kPi / 4), sn = std::sin(-kPi / 4);
       auto R2 = [&](float x, float y) { return P(c, r, x * cs - y * sn, x * sn + y * cs); };
@@ -217,6 +230,18 @@ void drawIcon(ImDrawList* dl, int icon, ImVec2 c, float size, ImU32 col) {
     case IC_BRUSH: {  // round brush
       dl->AddLine(P(c, r, 0.8f, -0.8f), P(c, r, -0.05f, 0.05f), col, t * 1.4f);
       dl->AddCircleFilled(P(c, r, -0.35f, 0.35f), r * 0.38f, col);
+      break;
+    }
+    case IC_TEXT: {  // a serif T
+      dl->AddLine(P(c, r, -0.7f, -0.7f), P(c, r, 0.7f, -0.7f), col, t * 1.3f);
+      dl->AddLine(P(c, r, 0, -0.7f), P(c, r, 0, 0.75f), col, t * 1.3f);
+      dl->AddLine(P(c, r, -0.3f, 0.75f), P(c, r, 0.3f, 0.75f), col, t);
+      break;
+    }
+    case IC_PEN: {  // a pen nib drawing a curve
+      dl->AddLine(P(c, r, 0.75f, -0.75f), P(c, r, -0.25f, 0.25f), col, t * 1.3f);
+      dl->AddTriangleFilled(P(c, r, -0.25f, 0.25f), P(c, r, -0.05f, 0.45f), P(c, r, -0.5f, 0.5f), col);
+      dl->AddBezierQuadratic(P(c, r, -0.85f, 0.85f), P(c, r, -0.2f, 0.9f), P(c, r, 0.4f, 0.75f), col, t * 0.8f);
       break;
     }
     case IC_PLUS: {

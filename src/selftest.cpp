@@ -1,6 +1,7 @@
 // CircleRoom.exe --selftest [work_dir]: regression tests for damaged or crafted input files
 // (analysis cache, thumbnails, images, .pedit sidecars, brush strokes, layer paths, writes).
 // Every case must be rejected or repaired without a crash or a large allocation.
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -9,6 +10,11 @@
 #include <vector>
 
 #include "agent_log.h"
+#include "ai_gen.h"
+#include "mcp_json.h"
+#include "openrouter.h"
+#include "font_maker.h"
+#include "layer_content.h"
 #include "raw_decode.h"
 #include "updater.h"
 #include "ai/cache.h"
@@ -300,6 +306,290 @@ std::vector<uint8_t> storedZip(const std::vector<std::pair<std::string, std::str
   return z;
 }
 
+// AI generate: the OpenRouter pieces offline, and the whole edit pipeline with a stand-in model
+// that paints the white area of the mask green.
+static bool fakeModel(const orouter::Request& rq, orouter::Result& out, std::string& err) {
+  if (rq.images.size() != 2 || rq.aspect.empty() || rq.prompt.find("bird") == std::string::npos) {
+    err = "fake model: unexpected request";
+    return false;
+  }
+  std::vector<uint8_t> img, mk;
+  int w = 0, h = 0, mw = 0, mh = 0;
+  if (!decodeRgbMem(rq.images[0].bytes.data(), rq.images[0].bytes.size(), img, w, h) ||
+      !decodeRgbMem(rq.images[1].bytes.data(), rq.images[1].bytes.size(), mk, mw, mh) || mw != w || mh != h) {
+    err = "fake model: bad input images";
+    return false;
+  }
+  for (size_t i = 0; i < (size_t)w * h; i++)
+    if (mk[i * 3] > 127) {
+      img[i * 3] = 20;
+      img[i * 3 + 1] = 200;
+      img[i * 3 + 2] = 30;
+    }
+  out.mime = "image/jpeg";
+  out.cost = 0.01;
+  return encodeJpegMem(img.data(), w, h, 95, out.bytes);
+}
+
+void testAiGen(const std::string& dir) {
+  // base64, request and answer
+  std::vector<uint8_t> raw = {0, 1, 2, 250, 251, 252, 7}, back;
+  check(orouter::unbase64(orouter::base64(raw.data(), raw.size()), back) && back == raw, "base64 round trip");
+  orouter::Request rq;
+  rq.model = "a/b";
+  rq.prompt = "นก \"bird\"";
+  rq.aspect = "4:3";
+  rq.images.resize(1);
+  rq.images[0].mime = "image/jpeg";
+  rq.images[0].bytes = raw;
+  Json j;
+  bool okJ = json::parse(orouter::buildRequestJson(rq), j);
+  const Json* refs = j.get("input_references");
+  check(okJ && j.str("model") == "a/b" && j.str("prompt") == rq.prompt && j.str("aspect_ratio") == "4:3" && refs && refs->isArr() &&
+            refs->a.size() == 1 && refs->a[0].get("image_url") &&
+            refs->a[0].get("image_url")->str("url").rfind("data:image/jpeg;base64,", 0) == 0,
+        "OpenRouter request JSON has model, prompt, aspect and the image as a data URL");
+  orouter::Result res;
+  std::string err;
+  std::string ans = "{\"data\":[{\"b64_json\":\"" + orouter::base64(raw.data(), raw.size()) +
+                    "\",\"media_type\":\"image/png\"}],\"usage\":{\"cost\":0.04}}";
+  check(orouter::parseResult(ans, res, err) && res.bytes == raw && res.mime == "image/png" && std::fabs(res.cost - 0.04) < 1e-9,
+        "OpenRouter answer: image bytes, type and cost");
+  check(!orouter::parseResult("{\"data\":[]}", res, err), "an answer without an image is an error");
+
+  // model lists: capabilities + prices + free variants
+  std::string imgs =
+      "{\"data\":[{\"id\":\"x/edit\",\"name\":\"Edit Model\",\"architecture\":{\"input_modalities\":[\"text\",\"image\"]},"
+      "\"supported_parameters\":{\"aspect_ratio\":{\"type\":\"enum\",\"values\":[\"1:1\",\"16:9\"]},\"input_references\":{}}},"
+      "{\"id\":\"y/text\",\"name\":\"Text Model\",\"architecture\":{\"input_modalities\":[\"text\"]},\"supported_parameters\":{}}]}";
+  std::string prices =
+      "{\"data\":[{\"id\":\"x/edit\",\"name\":\"Edit Model\",\"pricing\":{\"image\":\"0.003\",\"prompt\":\"0\"}},"
+      "{\"id\":\"y/text:free\",\"name\":\"Text Model (free)\",\"pricing\":{\"prompt\":\"0\"}},"
+      "{\"id\":\"openrouter/auto\",\"pricing\":{}}]}";
+  std::vector<orouter::Model> ms;
+  bool okM = orouter::parseModels(imgs, prices, ms);
+  bool order = okM && ms.size() == 3 && ms[0].id == "y/text:free" && ms[0].free && !ms[0].edits;
+  const orouter::Model* e = nullptr;
+  for (const orouter::Model& m : ms)
+    if (m.id == "x/edit") e = &m;
+  check(order && e && e->edits && !e->free && e->outCost < 0 /* the "image" key is the input price: the real one comes from the endpoints */ && e->aspects.size() == 2,
+        "model list: free first, edit support and per-image price read");
+  float ex = 0;
+  check(e && orouter::nearestAspect(*e, 1.7f, &ex) == "16:9" && std::fabs(ex - 16.f / 9.f) < 1e-4f, "nearest aspect ratio");
+  {  // prices per picture from the endpoints answer
+    orouter::Model pm;
+    std::string perImg =
+        "{\"endpoints\":[{\"pricing\":[{\"billable\":\"output_image\",\"unit\":\"image\",\"cost_usd\":0.02},"
+        "{\"billable\":\"output_image\",\"unit\":\"image\",\"cost_usd\":0.035,\"variant\":\"high_resolution\"},"
+        "{\"billable\":\"input_image\",\"unit\":\"image\",\"cost_usd\":0.008}]}]}";
+    pm.id = "selftest/per-image";
+    pm.resolutions = {"1K", "2K"};
+    bool p1 = orouter::parseEndpointPrice(perImg, pm) && std::fabs(pm.outCost - 0.02) < 1e-9 && std::fabs(pm.inCost - 0.008) < 1e-9 &&
+              !pm.approx && orouter::priceText(pm, false, false) == "$0.020" && orouter::priceText(pm, true, false) == "$0.036" &&
+              orouter::priceText(pm, false, true) == "$0.035";
+    orouter::Model tm;  // the model's own tokens (Gemini style): ~1290 per picture
+    tm.id = "selftest/native-tokens";
+    std::string perTok =
+        "{\"endpoints\":[{\"pricing\":[{\"billable\":\"output_image\",\"unit\":\"token\",\"cost_usd\":0.00006}]},"
+        "{\"pricing\":[{\"billable\":\"output_image\",\"unit\":\"token\",\"cost_usd\":0.00003}]}]}";
+    bool p2 = orouter::parseEndpointPrice(perTok, tm) && tm.approx && std::fabs(tm.outCost - 0.0387) < 1e-6 &&
+              orouter::priceText(tm, false, false) == "~$0.039";
+    orouter::Model nm;  // OpenRouter image tokens: 4175 per 1K picture, about 4x at 2K
+    nm.id = "selftest/or-tokens";
+    nm.normTok = true;
+    nm.resolutions = {"1K", "2K"};
+    bool p3 = orouter::parseEndpointPrice(
+                  "{\"endpoints\":[{\"pricing\":[{\"billable\":\"output_image\",\"unit\":\"token\",\"cost_usd\":0.0000016}]}]}", nm) &&
+              orouter::priceText(nm, false, false) == "~$0.007" && orouter::priceText(nm, false, true) == "~$0.027";
+    check(p1 && p2 && p3, "price per picture: per-image exact, token prices by OpenRouter's or the model's own tokens, 2K");
+  }
+  check(orouter::plausibleKey("sk-or-v1-0123456789abcdef0123") && !orouter::plausibleKey("sk-or-v1 has spaces 0123456") &&
+            !orouter::plausibleKey("sk-ant-0123456789012345678"),
+        "API key format check");
+  int x, y, w, h;
+  contextRect(500, 300, 600, 380, 1000, 400, 16.f / 9.f, x, y, w, h);
+  check(x >= 0 && y >= 0 && x + w <= 1000 && y + h <= 400 && x <= 500 && x + w >= 600 && y <= 300 && y + h >= 380,
+        "context crop stays inside the photo and holds the area");
+
+  // the whole pipeline on a test photo: a red square on blue
+  const int W = 600, H = 400;
+  std::vector<uint8_t> px((size_t)W * H * 3);
+  for (int yy = 0; yy < H; yy++)
+    for (int xx = 0; xx < W; xx++) {
+      uint8_t* q = &px[((size_t)yy * W + xx) * 3];
+      bool sq = xx >= 260 && xx < 340 && yy >= 160 && yy < 240;
+      q[0] = sq ? 220 : 40;
+      q[1] = sq ? 30 : (uint8_t)(80 + yy / 8);
+      q[2] = sq ? 30 : 180;
+    }
+  std::string photo = dir + "\\gen_photo.png";
+  writeImage(photo, px.data(), W, H, true, 95, err);
+  GenInput in;
+  in.task = GEN_EDIT;
+  in.photo = photo;
+  in.prompt = "a bird here";
+  in.key = "sk-or-v1-test-not-used-000000";
+  in.model.id = "test/fake";
+  in.model.edits = true;
+  in.model.aspects = {"1:1", "4:3", "3:4", "16:9"};
+  HealStroke st;
+  st.radius = 30.f / W;
+  st.pts = {270.f / W, 170.f / H, 330.f / W, 170.f / H, 330.f / W, 230.f / H, 270.f / W, 230.f / H};
+  in.mask = {st};
+  setGenHook(fakeModel);
+  GenOutput out;
+  bool ok = runGen(in, out);
+  std::vector<uint8_t> rgba;
+  int lw = 0, lh = 0;
+  bool loaded = ok && out.layers.size() == 1 && loadRgbaFile(out.layers[0].file, rgba, lw, lh);
+  check(loaded, (std::string("AI edit makes one layer file") + (out.err.empty() ? "" : ": " + out.err)).c_str());
+  if (loaded) {
+    const GenLayer& L = out.layers[0];
+    check(std::fabs(L.cx - 0.5f) < 0.03f && std::fabs(L.cy - 0.5f) < 0.04f && L.scale > 0.12f && L.scale < 0.3f,
+          "the layer sits over the painted area");
+    const uint8_t* c = &rgba[((size_t)(lh / 2) * lw + lw / 2) * 4];
+    check(c[3] == 255 && c[1] > 150 && c[0] < 90, "inside the area: the model's pixels, fully opaque");
+    check(rgba[3] < 10 && rgba[((size_t)lh * lw - 1) * 4 + 3] < 10, "the edge fades out (corners transparent)");
+    check(std::fabs(out.cost - 0.01) < 1e-9, "the cost is reported");
+  }
+  in.task = GEN_MOVE;
+  in.prompt = "bird";  // the fake model wants the word
+  ok = runGen(in, out);
+  bool two = ok && out.layers.size() == 2 && loadRgbaFile(out.layers[1].file, rgba, lw, lh);
+  check(two, "move: a background fill and the moved piece");
+  if (two) {
+    const uint8_t* c = &rgba[((size_t)(lh / 2) * lw + lw / 2) * 4];
+    check(c[0] > 150 && c[1] < 90 && c[3] == 255, "the moved piece keeps the original pixels");
+  }
+  in.task = GEN_EDIT;
+  in.model.edits = false;
+  check(!runGen(in, out) && !out.err.empty(), "a text-only model is refused for photo edits");
+  setGenHook(nullptr);
+  // Real lists saved from openrouter.ai, when the tester put them in the folder.
+  std::string ri, rp;
+  if (readTextFile(dir + "\\or_img_models.json", ri) && readTextFile(dir + "\\or_models.json", rp)) {
+    std::vector<orouter::Model> real;
+    size_t edits = 0, freeN = 0;
+    bool okR = orouter::parseModels(ri, rp, real);
+    for (const orouter::Model& m : real) {
+      edits += m.edits;
+      freeN += m.free;
+    }
+    printf("  (real OpenRouter list: %d models, %d edit photos, %d free)\n", (int)real.size(), (int)edits, (int)freeN);
+    check(okR && real.size() > 20 && edits > 10, "the real OpenRouter model lists parse");
+  }
+}
+
+// Font list samples: each font draws its own letters (also saves font_samples.png to look at).
+void testFontSamples(const std::string& dir) {
+  const char* fams[] = {"Sarabun", "Kanit", "Sriracha", "Pacifico", "Bebas Neue", "Press Start 2P"};
+  const char* sample = "\xe0\xb8\xaa\xe0\xb8\xa7\xe0\xb8\xb1\xe0\xb8\xaa\xe0\xb8\x94\xe0\xb8\xb5 Aa 123";
+  const int H = 40, W = 360;
+  std::vector<uint8_t> sheet((size_t)W * H * 6 * 4, 255);
+  std::vector<std::vector<uint8_t>> got;
+  bool allInk = true;
+  for (int i = 0; i < 6; i++) {
+    std::vector<uint8_t> al;
+    int w = 0;
+    bool ok = renderFontSample(fams[i], sample, H, W, al, w);
+    size_t ink = 0;
+    for (uint8_t v : al) ink += v > 128;
+    allInk &= ok && ink > 50 && al.size() == (size_t)w * H;
+    got.push_back(al);
+    for (int y = 0; y < H && ok; y++)
+      for (int x = 0; x < w; x++) {
+        uint8_t v = 255 - al[(size_t)y * w + x];
+        uint8_t* p = &sheet[(((size_t)i * H + y) * W + x) * 4];
+        p[0] = p[1] = p[2] = v;
+      }
+  }
+  check(allInk, "font samples render with ink, at the row height");
+  check(got[0] != got[3] && got[1] != got[5], "each font's sample looks different");
+  std::string err;
+  writePngRgba(dir + "\\font_samples.png", sheet.data(), W, H * 6, err);
+}
+
+// Font maker: drawn glyphs -> traced outlines -> a TrueType font Windows can render.
+void testFontMaker(const std::string& dir) {
+  const int N = kGlyphCell;
+  auto blank = [&] { return std::vector<uint8_t>((size_t)N * N, 0); };
+  std::vector<uint8_t> O = blank(), I = blank(), mark = blank();
+  for (int y = 0; y < N; y++)
+    for (int x = 0; x < N; x++) {
+      float d = std::hypot(x - 128.f, y - 120.f);
+      if (d < 78 && d > 44) O[(size_t)y * N + x] = 255;  // a ring: one outer contour, one hole
+      if (x >= 112 && x < 144 && y >= kGlyphCapHeight && y < kGlyphBaseline) I[(size_t)y * N + x] = 255;
+      if (x >= 120 && x < 136 && y >= 10 && y < 30) mark[(size_t)y * N + x] = 255;
+    }
+  auto loops = traceBitmap(O, N, N);
+  check(loops.size() == 2, "a ring traces to two contours (outside and hole)");
+  std::vector<FmGlyph> G(1);
+  G[0].advance = 600;
+  G[0].contours = {{{60, 0}, {60, 700}, {540, 700}, {540, 0}}};
+  const float k = 1100.f / N;
+  auto toGlyph = [&](uint32_t cp, const std::vector<uint8_t>& ink, bool zeroWidth) {
+    FmGlyph g;
+    g.cp = cp;
+    auto L = traceBitmap(ink, N, N);
+    int x0 = 1 << 20, x1 = -(1 << 20);
+    for (auto& c : L) {
+      std::vector<std::pair<int, int>> m;
+      for (auto& q : c) {
+        m.push_back({(int)std::lround(q.first * k), (int)std::lround((kGlyphBaseline - q.second) * k)});
+        x0 = std::min(x0, m.back().first);
+        x1 = std::max(x1, m.back().second > -100000 ? m.back().first : x1);
+      }
+      g.contours.push_back(m);
+    }
+    // wind: largest contour clockwise, the rest the other way (good enough for these shapes)
+    size_t big = 0;
+    auto area = [](const std::vector<std::pair<int, int>>& c) {
+      long long s = 0;
+      for (size_t a = 0; a < c.size(); a++) s += (long long)c[a].first * c[(a + 1) % c.size()].second - (long long)c[(a + 1) % c.size()].first * c[a].second;
+      return s;
+    };
+    for (size_t a = 1; a < g.contours.size(); a++)
+      if (std::llabs(area(g.contours[a])) > std::llabs(area(g.contours[big]))) big = a;
+    for (size_t a = 0; a < g.contours.size(); a++)
+      if ((area(g.contours[a]) < 0) != (a == big)) std::reverse(g.contours[a].begin(), g.contours[a].end());
+    for (auto& c : g.contours)
+      for (auto& q : c) q.first += zeroWidth ? -300 : 60 - x0;
+    g.advance = zeroWidth ? 0 : (x1 - x0) + 120;
+    return g;
+  };
+  G.push_back(toGlyph('I', I, false));
+  G.push_back(toGlyph('O', O, false));
+  G.push_back(toGlyph(0x0E48, mark, true));
+  std::vector<uint8_t> ttf = writeTrueType("CR Selftest Font", G);
+  std::string file = dir + "\\selftest_font.ttf";
+  writeBytes(file, ttf);
+  check(ttf.size() > 500 && loadPrivateFont(file) && fontAvailable("CR Selftest Font"), "the made font loads into Windows");
+  TextSpec t;
+  t.font = "CR Selftest Font";
+  t.text = "OI";
+  t.color = 0x000000FF;
+  std::vector<uint8_t> rgb, al;
+  int w = 0, h = 0;
+  std::string err;
+  bool ok = renderText(t, rgb, al, w, h, err);
+  int ink = 0;
+  for (uint8_t v : al) ink += v > 128;
+  check(ok && ink > 1000 && w > h, "text renders in the made font");
+  // The O's hole must stay empty: scan the row through the O's middle for ink, gap, ink.
+  bool hole = false;
+  if (ok) {
+    int y = h / 2, transitions = 0;
+    bool prev = false;
+    for (int x = 0; x < w; x++) {
+      bool on = al[(size_t)y * w + x] > 128;
+      transitions += on != prev;
+      prev = on;
+    }
+    hole = transitions >= 6;  // O left edge, hole, O right edge, I: six changes along the row
+  }
+  check(hole, "contours are wound so the O keeps its hole");
+}
+
 // Camera RAW files come from anywhere: damaged or crafted ones must fail cleanly.
 void testRaw(const std::string& dir) {
   check(isRawFile("C:\\p\\IMG_0001.CR2") && isRawFile("a.nef") && isRawFile("b.Dng") && isRawFile("c.cr3") &&
@@ -380,6 +670,9 @@ int runSelfTest(const std::vector<std::string>& args) {
   testAgentLog();
   testUpdater(dir);
   testRaw(dir);
+  testFontSamples(dir);
+  testAiGen(dir);
+  testFontMaker(dir);
   printf("%d passed, %d failed\n", g_pass, g_fail);
   return g_fail ? 1 : 0;
 }

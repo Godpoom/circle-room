@@ -2,7 +2,7 @@
 
 **English** · [ภาษาไทย](README.th.md)
 
-**A free, lightweight photo editor for Windows with on-device AI.** Edit with GPU-fast sliders, let AI pick your best shots, remove objects, cut out people, rebuild blown-out skies, and even let AI agents like Claude Code or Codex edit photos for you. Your photos never leave your computer.
+**A free, lightweight photo editor for Windows with on-device AI.** Edit with GPU-fast sliders, let AI pick your best shots, remove objects, cut out people, rebuild blown-out skies, and even let AI agents like Claude Code or Codex edit photos for you. Your photos never leave your computer (unless you choose the optional AI generate tool).
 
 ![Circle Room editing a photo](docs/assets/app_en.jpg)
 
@@ -11,13 +11,29 @@
 > **Safety check:** VirusTotal scanned `CircleRoom.exe` 1.3.1: **0/71** ([report](https://www.virustotal.com/gui/file/22431ed7e907661509357a201c75bd3601eb30e86d873e8b631ad4aebbe923b4))
 > SHA-256 of `CircleRoom.exe`: `22431ed7e907661509357a201c75bd3601eb30e86d873e8b631ad4aebbe923b4`. Check yours with `Get-FileHash .\CircleRoom.exe`, and feel free to scan your download yourself.
 
+## Is this the app you are looking for?
+Circle Room fits if you searched for any of these:
+- a **free photo editor for Windows like Lightroom** (no subscription, no account, no ads)
+- a **free AI photo culling** tool that picks the best shots from a folder, offline
+- **batch auto editing** of many photos at once
+- a **free RAW editor** (Canon, Nikon, Sony, Fujifilm and over 1,200 cameras)
+- **removing people or objects** from photos for free, on your own PC
+- **recovering a blown-out sky** or overexposed highlights
+- a **photo editor with layers, text and Thai fonts** (1.3.2 Beta)
+- letting **Claude, ChatGPT Codex, Cursor or Gemini edit photos** through MCP
+- a photo editor in **Thai** (โปรแกรมแต่งรูปฟรี ภาษาไทย)
+
+> **Versions:** the download is 1.3.1. This branch is **1.3.2 Beta**: text and vector layers, about 110 fonts, Make your font, a blank canvas start, and optional AI generate through OpenRouter with your own key.
+
 ## Highlights
 - **Light on your PC:** a 3 MB exe that uses about 12–20 MB of RAM with a 24 MP photo open, and 0% CPU when idle. Every slider renders on the GPU.
 - **AI that runs on your computer:** no cloud, no sign-up, nothing uploaded. Models load only while they work, then free their memory.
+- **Optional generative AI (OpenRouter):** with your own key, edit an area by prompt, remove or move people, rebuild blown highlights or create new pictures, with the model you choose (free ones are marked). Only this tool goes online, and only when you press Generate.
 - **AI Cull:** scores a whole folder (sharpness, closed eyes, exposure, composition, duplicates) and picks the best shots, about 30 photos per second.
 - **Auto edit:** recognises the scene (portrait, sunset, food, night...) and edits to match, for one photo or a whole folder at once.
 - **Magic eraser:** paint over people, wires or litter and AI fills in the background.
-- **Compose:** stack up to 4 photos as layers, with AI background removal, blend modes and colour matching.
+- **Compose:** stack up to 16 layers of photos, text and vector drawings, with AI background removal, blend modes and colour matching.
+- **Text and fonts:** about 110 bundled fonts (32 Thai), plus **Make your font** from your own handwriting.
 - **Local adjustments by AI:** brighten just the faces, deepen just the sky, without masking by hand.
 - **Rebuild blown highlights:** AI recreates detail in pure-white areas that sliders alone cannot bring back.
 - **Search photos by text:** "dog on the beach", "person with glasses" (English or Thai).
@@ -138,15 +154,18 @@ For plain-text setup snippets (for scripts), run `CircleRoom.exe --mcp-config`.
 - "Pick the 10 best photos in D:\Trip, auto edit them all and export JPEGs to D:\Trip\best"
 - "Find the photos with someone wearing glasses in this folder"
 
-**Tools the agent gets (20):**
+**Tools the agent gets (24):**
 | Group | Tools |
 |---|---|
 | Look | `open_photo`, `view` (before/after side by side), `get_info`, `list_adjustments` |
 | Edit | `set_adjustments` (every slider and curve), `auto_edit`, `apply_look`, `crop_rotate`, `undo` |
 | Local AI | `find_regions`, `adjust_region` (faces, people, sky, water...), `recover_highlights`, `magic_erase` |
 | Compose | `layer_add` (AI cut-out, colour matching), `layer_update`, `layer_remove` |
+| Draw | `new_canvas`, `add_text`, `draw_svg`, `list_fonts` |
 | Folders | `cull_folder` (best shots + contact sheet), `search_photos` (English or Thai), `batch_auto_edit` |
 | Save | `export` (full-size JPEG/PNG, never overwrites) |
+
+**Drawing for agents:** `new_canvas` starts a blank page, `add_text` places text in any font (`list_fonts` finds them, Thai included) and `draw_svg` adds any SVG as a sharp vector layer. To save tokens, each returns a small preview by default (`preview: "large"` or `"none"` to change it), and `view` with `crop: "x,y,w,h"` shows one area in full detail.
 
 **Watch what the AI is doing:** keep Circle Room open while the agent works.
 - The **Connect AI** button turns into the connected app's name (e.g. "Claude Code"): a green dot when it is waiting, a pulsing orange dot when it is working. Click to show or hide the activity card; right-click for the setup dialog.
@@ -179,6 +198,9 @@ The third main mode next to **Edit** and **AI Cull**, with a vertical toolbox on
 | Move | V | Select, move, resize and rotate layers |
 | Magic eraser (AI) | J | Paint over something on the main photo and AI fills the background |
 | Eraser | E | Erase part of the selected layer |
+| Text | T | Click to add text |
+| Draw | D | Pen, line, rectangle, ellipse (vector) |
+| AI generate | G | Edit, remove, move or create with image models on OpenRouter (your own key) |
 | Restore | B | Paint parts of the layer back |
 | + | | Add a photo on top |
 
@@ -191,7 +213,7 @@ The third main mode next to **Edit** and **AI Cull**, with a vertical toolbox on
 - Originals stay untouched: strokes live in `.pedit`, AI fills in `.photoeditor_cache`, so reopening needs no re-run.
 
 ### Layers
-Stack up to 4 photos on top of the main one, e.g. move a person from one photo into another scene.
+Stack up to 16 layers (photos, text, drawings) on top of the main one, e.g. move a person from one photo into another scene.
 - **Add:** click **+ Add a photo on top**, or drop an image file on the photo while on this page.
 - **Move / resize / rotate:** drag the layer; drag a corner to resize; drag the round handle to rotate (hold Shift for 15° steps). Click the photo to select the layer under the mouse.
 - **Remove the background (AI):** keep only the main subject automatically, or choose which parts to keep (people, animals, vehicles...). Adjust **Edge softness**.
@@ -201,6 +223,28 @@ Stack up to 4 photos on top of the main one, e.g. move a person from one photo i
 - Reorder, hide, invert or remove layers; every step can be undone.
 - Edits on the other pages (light, colour, crop, looks) apply to the whole composite, so layers blend into the main photo.
 - Originals are not modified. Layer positions and strokes are stored in `.pedit` as paths to the layer images; if you move or delete a layer's image, that layer can no longer be opened.
+
+### Text, drawing and new canvases
+- **Text (T):** click the photo to type. Pick from about 110 bundled fonts (32 Thai, 80 Latin) plus every font on your PC; filter by name or "Thai only". Colour, bold, italic, alignment, letter spacing and an outline. Thai vowels and tone marks are shaped correctly.
+- **Draw (D):** pen, line, rectangle and ellipse, with stroke colour, width and fill. Each drawing is a vector layer (SVG), so it stays sharp at any size and can be moved, resized and rotated like any layer.
+- **New canvas (Ctrl+N, or "Start from a white canvas" on the empty screen):** no photo needed; start from a blank page of any size and colour (presets such as 1080×1080, 1080×1920 and A4), then add photos, text and drawings on top. Canvases are saved in `Pictures > Circle Room`.
+- Text and drawings are stored next to the photo in `.circleroom_layers` as small `.crtext` / `.svg` files, so they undo, reopen and export like photo layers.
+
+### AI generate with OpenRouter (G)
+Uses image models on [OpenRouter](https://openrouter.ai) with **your own API key** (paste it once; it is stored encrypted for your Windows account). You pick the model; the list comes from OpenRouter, shows which models are **free** right now and which can **edit photos** (the rest only make pictures from text), sorted by price, with the **price per picture** next to each model (exact, or marked ~ when the provider bills by size), and the actual cost of each result is shown after it arrives.
+- **Edit by prompt:** paint an area and type what to put there ("a bird flying here", "a red band T-shirt"). Paint nothing to edit the whole photo.
+- **Remove:** paint over a person or thing; the background behind it is filled in.
+- **Move:** paint over a person or thing; it becomes its own layer you drag anywhere, and the spot it left is filled.
+- **Blown highlights:** for white areas that normal recovery cannot bring back; paint them, or let it find them.
+- **New picture:** describe one; it opens as a new photo (saved in `Pictures\Circle Room AI`) or goes on top of this one as a layer.
+- Results are layers (PNG in `.circleroom_layers`), so they can be moved, blended, erased and undone, and the original is never changed. Only the area around what you painted is sent (the whole photo when nothing is painted), with your prompt; nothing is sent until you press Generate.
+
+### Make your font
+Turn your handwriting into a real font (button **Make a font** in the layers panel or the text card).
+- Give it a name, then draw each character in the box (178 characters: Thai consonants, vowels and tone marks, A–Z, a–z, digits and punctuation). The faint letter is a guide; drawings are saved as you go.
+- Or **Import image** for one character, or **Save template sheet**, write on the printed sheet with a dark pen, scan it and **Import filled sheet** to fill everything at once.
+- **Build font** makes a TrueType font (`.ttf`) that appears in the text font list immediately. Characters you skip show as a box.
+- **Install on this PC** adds it to Windows for your account (no admin rights needed), so Word, Canva and other programs can use it too.
 
 ## Rebuild blown highlights (page "AI")
 Pure white (255) has no data left; lowering highlights or exposure only turns it grey. This card rebuilds those areas:
@@ -304,9 +348,13 @@ The AI files live in `ai/` and are copied to `bin\ai\` by the build. `tools/conv
 - `src/ui_batch.*`: auto edit many photos (background thread + progress card)
 - `src/heal.*`: magic eraser (strokes, background LaMa jobs, result cache); compositing on the GPU in `kPatchShader`
 - `src/layers.*`: photo layers (loading, AI cut-outs, eraser strokes, colour matching); compositing on the GPU in `kComposeShader`
+- `src/layer_content.*`: text layers (GDI, Thai shaping), SVG layers (nanosvg) and the font list
+- `src/openrouter.*`, `src/ai_gen.*`: AI generate through OpenRouter (key kept with DPAPI, model list, requests; mask, crop, blending into layers)
+- `src/font_maker.*`: Make your font (projects, outline tracing, TrueType writer, install for the user)
 - `src/raw_decode.*`: camera RAW through LibRaw (`third_party/libraw`): full 16-bit decode for the editor, embedded preview for the AI
 - `src/params.*`, `src/history.*`, `src/curves.*`, `src/i18n.*`: parameters, history, curves and translations
-- `third_party/`: GLFW 3.4, Dear ImGui 1.91.8, stb_image
+- `third_party/`: GLFW 3.4, Dear ImGui 1.91.8, stb_image, nanosvg, LibRaw
+- `fonts/` (not in git): the bundled fonts, fetched with `tools/fetch_fonts.py`
 
 ## Name and logo
 **Circle Room**: the logo is "a circle in a room": a rounded graphite square (the room) with a paper-coloured ring (lens or window) and a low red safelight circle inside, like a sunset seen through a window. It is generated by `tools/make_logo.py` into `res/circleroom.ico`, embedded in the exe through `res/circleroom.rc`.

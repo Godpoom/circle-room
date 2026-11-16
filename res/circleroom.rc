@@ -16,7 +16,7 @@ BEGIN
       VALUE "FileDescription", "Circle Room photo editor"
       VALUE "OriginalFilename", "CircleRoom.exe"
       VALUE "FileVersion", CR_VERSION_STR
-      VALUE "ProductVersion", CR_VERSION_STR
+      VALUE "ProductVersion", CR_VERSION_NAME
     END
   END
   BLOCK "VarFileInfo"

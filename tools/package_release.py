@@ -58,6 +58,12 @@ def main():
         z.writestr("CircleRoom/อ่านก่อน.txt", readme_th.encode("utf-8"))
         for f in ai_files:
             z.write(os.path.join(ai_dir, f), "CircleRoom/ai/" + f)
+        font_root = os.path.join(root, "fonts")  # bundled fonts, each folder with its licence
+        assert os.path.isdir(font_root), "fonts/ missing: run tools/fetch_fonts.py"
+        for d, _, fs in os.walk(font_root):
+            for f in sorted(fs):
+                rel = os.path.relpath(os.path.join(d, f), font_root).replace(os.sep, "/")
+                z.write(os.path.join(d, f), "CircleRoom/fonts/" + rel)
         for f in VC:
             z.write(os.path.join(vc_dir, f), "CircleRoom/ai/" + f)
 

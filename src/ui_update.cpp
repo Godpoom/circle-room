@@ -64,7 +64,7 @@ void drawUpdateDialog(Updater& u, UpdateHost& h, bool& open) {
     return;
   }
   char b[256];
-  snprintf(b, sizeof(b), tr(T_UpdCurrent), CR_VERSION_STR);
+  snprintf(b, sizeof(b), tr(T_UpdCurrent), CR_VERSION_NAME);
   muted(b);
   ImGui::Dummy(ImVec2(0, 2 * s));
   ReleaseInfo r = u.latest();

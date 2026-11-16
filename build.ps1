@@ -22,6 +22,13 @@ $bin = Join-Path $src 'bin'
 New-Item -ItemType Directory -Force $bin | Out-Null
 Copy-Item (Join-Path $build 'CircleRoom.exe') $bin -Force
 # AI runtime + models (only copied when newer: ~120 MB)
+# Bundled fonts (tools/fetch_fonts.py), only copied when newer
+$fontSrc = Join-Path $src 'fonts'
+if (Test-Path $fontSrc) {
+  robocopy $fontSrc (Join-Path $bin 'fonts') /E /XO /NJH /NJS /NFL /NDL | Out-Null
+  if ($LASTEXITCODE -ge 8) { throw 'Copying fonts\ failed' }
+  $global:LASTEXITCODE = 0
+}
 $aiSrc = Join-Path $src 'ai'
 if (Test-Path $aiSrc) {
   robocopy $aiSrc (Join-Path $bin 'ai') /XO /NJH /NJS /NFL /NDL | Out-Null

@@ -1,6 +1,7 @@
 #include "params.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -118,7 +119,7 @@ std::string serializeParams(const EditParams& pin, bool includeGeometry) {
   std::string out;
   char line[128];
   visitScalars(p, includeGeometry, [&](const char* k, float& v) {
-    if (k[0] == 'i' && k[1] == 'm' && k[2] == 'g' && !p.img[k[3] - '0'].enabled) return;  // unused photo-layer slot
+    if (k[0] == 'i' && k[1] == 'm' && k[2] == 'g' && !p.img[atoi(k + 3)].enabled) return;  // unused layer slot
     snprintf(line, sizeof(line), "%s=%.6g\n", k, v);
     out += line;
   });
@@ -136,7 +137,8 @@ std::string serializeParams(const EditParams& pin, bool includeGeometry) {
       snprintf(line, sizeof(line), "img%dEnabled=1\nimg%dId=%d\nimg%dHidden=%d\nimg%dFlipH=%d\n", i, i, l.id, i, l.hidden, i,
                l.flipH);
       out += line;
-      snprintf(line, sizeof(line), "img%dBlend=%d\nimg%dKeep=%d\nimg%dStrokes=%d\n", i, l.blend, i, l.keep, i, l.strokes);
+      snprintf(line, sizeof(line), "img%dBlend=%d\nimg%dKeep=%d\nimg%dStrokes=%d\nimg%dKind=%d\n", i, l.blend, i, l.keep, i,
+               l.strokes, i, l.kind);
       out += line;
       out += "img" + std::to_string(i) + "Path=" + l.path + "\n";
     }
@@ -255,6 +257,7 @@ void sanitizeParams(EditParams& p) {
     if (l.enabled && (l.id <= 0 || l.id >= kMaxLayerId || dup)) l.id = ++maxId, l.strokes = 0;
     if (!l.path[0] || l.id >= kMaxLayerId) l.enabled = 0;
     l.hidden = bit(l.hidden);
+    if (l.kind < 0 || l.kind >= LAYER_KIND_COUNT) l.kind = LAYER_PHOTO;
     l.flipH = bit(l.flipH);
     l.cx = fin(l.cx, -10.f, 10.f, 0.5f);
     l.cy = fin(l.cy, -10.f, 10.f, 0.5f);
@@ -295,9 +298,12 @@ void deserializeParams(const std::string& text, EditParams& p, bool includeGeome
         if (field == "Region") { l.region = atoi(v.c_str()); continue; }
         if (field == "Invert") { l.invert = atoi(v.c_str()) ? 1 : 0; continue; }
       }
-      if (k.size() > 4 && k.compare(0, 3, "img") == 0 && k[3] >= '0' && k[3] < '0' + kMaxImgLayers) {
-        ImageLayer& l = p.img[k[3] - '0'];
-        std::string field = k.substr(4);
+      size_t digits = 0;
+      while (k.size() > 3 + digits && digits < 2 && isdigit((unsigned char)k[3 + digits])) digits++;
+      int li = digits ? atoi(k.c_str() + 3) : -1;
+      if (k.compare(0, 3, "img") == 0 && li >= 0 && li < kMaxImgLayers && k.size() > 3 + digits) {
+        ImageLayer& l = p.img[li];
+        std::string field = k.substr(3 + digits);
         int iv = atoi(v.c_str());
         if (field == "Enabled") { l.enabled = iv ? 1 : 0; continue; }
         if (field == "Id") { l.id = iv; continue; }
@@ -306,6 +312,7 @@ void deserializeParams(const std::string& text, EditParams& p, bool includeGeome
         if (field == "Blend") { l.blend = iv >= 0 && iv < BLEND_COUNT ? iv : 0; continue; }
         if (field == "Keep") { l.keep = iv; continue; }
         if (field == "Strokes") { l.strokes = iv > 0 ? iv : 0; continue; }
+        if (field == "Kind") { l.kind = iv >= 0 && iv < LAYER_KIND_COUNT ? iv : LAYER_PHOTO; continue; }
         if (field == "Path") {  // too long for the field: dropped, never cut mid-character
           std::memset(l.path, 0, sizeof(l.path));
           if (v.size() < sizeof(l.path) && v.find('\0') == std::string::npos) std::memcpy(l.path, v.data(), v.size());
