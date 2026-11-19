@@ -84,6 +84,8 @@ def build_mcpb(version, rel_dir, root):
         "tools": [{"name": n, "description": d} for n, d in TOOLS],
     }
     out = os.path.join(rel_dir, "CircleRoom-mcp.mcpb")
+    if os.path.isfile(out):  # already built (maybe published): rebuilding would change its hash
+        return out
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         z.writestr("manifest.json", json.dumps(manifest, indent=2, ensure_ascii=False))
         z.write(os.path.join(root, RAW_ICON), "icon.png")
@@ -111,26 +113,26 @@ def main():
     mcpb = build_mcpb(version, rel_dir, root)
     mcpb_sha = sha256(mcpb)
 
-    # winget (manifest schema 1.6.0): the Portable zip, extracted whole; "circleroom" on PATH.
+    # winget (manifest schema 1.28.0): the Portable zip, extracted whole; "circleroom" on PATH.
     wdir = os.path.join(root, "packaging", "winget", version)
     os.makedirs(wdir, exist_ok=True)
     pid = "Godpoom.CircleRoom"
-    head = "# yaml-language-server: $schema=https://aka.ms/winget-manifest.{kind}.1.6.0.schema.json\n\n"
+    head = "# yaml-language-server: $schema=https://aka.ms/winget-manifest.{kind}.1.28.0.schema.json\n\n"
     files = {
         f"{pid}.yaml": head.format(kind="version") +
-        f"PackageIdentifier: {pid}\nPackageVersion: {version}\nDefaultLocale: en-US\nManifestType: version\nManifestVersion: 1.6.0\n",
+        f"PackageIdentifier: {pid}\nPackageVersion: {version}\nDefaultLocale: en-US\nManifestType: version\nManifestVersion: 1.28.0\n",
         f"{pid}.installer.yaml": head.format(kind="installer") +
         f"PackageIdentifier: {pid}\nPackageVersion: {version}\nInstallerType: zip\nNestedInstallerType: portable\n"
         "NestedInstallerFiles:\n- RelativeFilePath: CircleRoom\\CircleRoom.exe\n  PortableCommandAlias: circleroom\n"
         f"MinimumOSVersion: 10.0.17763.0\nReleaseDate: {date}\nInstallers:\n- Architecture: x64\n"
         f"  InstallerUrl: {dl}CircleRoom_Portable.zip\n  InstallerSha256: {portable_sha.upper()}\n"
-        "ManifestType: installer\nManifestVersion: 1.6.0\n",
+        "ManifestType: installer\nManifestVersion: 1.28.0\n",
         f"{pid}.locale.en-US.yaml": head.format(kind="defaultLocale") +
         f"PackageIdentifier: {pid}\nPackageVersion: {version}\nPackageLocale: en-US\nPublisher: IAMPOOM\n"
         f"PublisherUrl: https://github.com/Godpoom\nPublisherSupportUrl: {REPO}/issues\nPackageName: Circle Room\n"
         f"PackageUrl: {SITE}\nLicense: MIT\nLicenseUrl: {REPO}/blob/main/LICENSE\nCopyright: (c) 2026 IAMPOOM\nShortDescription: {json.dumps(SHORT)}\n"
         f"Description: {json.dumps(LONG)}\nMoniker: circleroom\nTags:\n"  # quoted: the text contains ": " + "".join(f"- {t}\n" for t in TAGS) +
-        f"ReleaseNotesUrl: {REPO}/releases/tag/{tag}\nManifestType: defaultLocale\nManifestVersion: 1.6.0\n",
+        f"ReleaseNotesUrl: {REPO}/releases/tag/{tag}\nManifestType: defaultLocale\nManifestVersion: 1.28.0\n",
     }
     for name, text in files.items():
         with open(os.path.join(wdir, name), "w", encoding="utf-8", newline="\n") as f:
