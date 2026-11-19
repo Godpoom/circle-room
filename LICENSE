@@ -19,12 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-Name and logo: this licence covers the source code. The name "Circle Room" and
-the Circle Room logo are not licensed under it; a modified version you
-distribute must use a different name and logo.
-
-Third-party components (libraries, AI models, fonts) keep their own licences;
-see THIRD_PARTY_NOTICES.md and the LICENSES folder.
