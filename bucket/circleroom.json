@@ -1,12 +1,12 @@
 {
-    "version": "1.3.3",
+    "version": "1.3.5",
     "description": "Free, light photo editor for Windows with on-device AI and an MCP server for AI agents.",
     "homepage": "https://godpoom.github.io/circle-room/",
     "license": "MIT",
     "architecture": {
         "64bit": {
-            "url": "https://github.com/Godpoom/circle-room/releases/download/v1.3.3/CircleRoom_Portable.zip",
-            "hash": "6dd278b5ab7fea3311e5b4125d43fe97dec726b8d47c592c0d69bad8e16aa685"
+            "url": "https://github.com/Godpoom/circle-room/releases/download/v1.3.5/CircleRoom_Portable.zip",
+            "hash": "5df519b5341c395a6fd48ed6a284ee3f0ed4b61f27029e79fa6b44a94323beed"
         }
     },
     "extract_dir": "CircleRoom",

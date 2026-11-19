@@ -3,6 +3,6 @@
 #pragma once
 #define CR_VER_MAJOR 1
 #define CR_VER_MINOR 3
-#define CR_VER_PATCH 3
-#define CR_VERSION_STR "1.3.3-beta"  // numbers first: compareVersions stops at the suffix
-#define CR_VERSION_NAME "1.3.3 Beta"  // shown to people
+#define CR_VER_PATCH 5
+#define CR_VERSION_STR "1.3.5"
+#define CR_VERSION_NAME "1.3.5"  // shown to people (a suffix such as " Beta" may follow the numbers)

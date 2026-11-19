@@ -36,6 +36,7 @@
 #include "ai_gen.h"
 #include "font_maker.h"
 #include "openrouter.h"
+#include "ui_runner.h"
 #include "layer_content.h"
 #include "ui_agent.h"
 #include "ui_batch.h"
@@ -303,6 +304,7 @@ struct App {
   int orKeyState = 0;  // 0 unknown, 1 checking, 2 connected, 3 rejected, 4 not checked (offline)
   orouter::KeyInfo orInfo;
   std::string genErr;  // last failure, shown in the card until the next try
+  Runner runner;       // the hidden game behind the logo
   int genResult = 0;   // last success: 1 layer added, 2 new picture
   int genTask = GEN_EDIT, genAspect = 0;
   bool genHiRes = false;
@@ -3378,6 +3380,8 @@ static void drawTopBar(App& a, float barH) {
   float x = 16.f * s, cy = w0.y + barH * 0.5f;
   float mk = 30.f * s;
   drawIcon(dl, IC_LOGO, ImVec2(w0.x + x + mk * 0.5f, cy), mk, 0);
+  ImGui::SetCursorScreenPos(ImVec2(w0.x + x - mk * 0.5f, cy - mk));
+  if (ImGui::InvisibleButton("##logo", ImVec2(mk * 2.f, mk * 2.f)) && runnerLogoClick(glfwGetTime())) runnerOpen(a.runner);
   x += mk + 10.f * s;
   ImGui::PushFont(g_fontTitle);
   ImVec2 t1 = ImGui::CalcTextSize("Circle "), t2 = ImGui::CalcTextSize("Room");
@@ -4596,7 +4600,7 @@ static void drawPopups(App& a) {
 
 static void handleShortcuts(App& a) {
   ImGuiIO& io = ImGui::GetIO();
-  if (io.WantTextInput || a.tourStep >= 0) return;
+  if (io.WantTextInput || a.tourStep >= 0 || a.runner.open) return;  // the game owns the keys while open
   if (ImGui::IsKeyPressed(ImGuiKey_F1, false)) tourGo(a, 0);
   if (io.KeyCtrl && (ImGui::IsKeyPressed(ImGuiKey_Equal, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadAdd, false))) stepTextSize(a, +1);
   if (io.KeyCtrl && (ImGui::IsKeyPressed(ImGuiKey_Minus, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadSubtract, false))) stepTextSize(a, -1);
@@ -4785,6 +4789,7 @@ static void buildUI(App& a) {
   drawPopups(a);
   drawMcpDialog(a);
   drawNewCanvasDialog(a);
+  drawRunner(a.runner, a.scale);
   drawFontMakerDialog(a);
   {
     UpdateHost uh;
@@ -5627,6 +5632,7 @@ int main(int, char**) {
       applyTextSize(a);
       framesLeft = std::max(framesLeft, 2);
     }
+    if (a.runner.open) framesLeft = std::max(framesLeft, 1);  // the game animates: keep rendering
     if (shotFrames >= 0) {
       framesLeft = std::max(framesLeft, 1);
       if (a.hasImage && !a.load.active && shotFrames++ == 0) {
@@ -5634,6 +5640,10 @@ int main(int, char**) {
         if (shotView.rfind("gen", 0) == 0) {
           setPage(a, PG_LAYERS);
           a.layerTool = 6;
+        }
+        if (shotView.rfind("runner", 0) == 0) {
+          runnerOpen(a.runner);
+          if (shotView == "runner-play") a.runner.state = 1;  // runs into the first obstacle: shows the crash
         }
         if (shotView == "gen-demo") {
           a.orKeyLoaded = true;

@@ -39,3 +39,7 @@ docs/_freeze.html
 
 # Self-test scratch output
 selftest_tmp/
+
+# MCP Registry publisher (downloaded tool and its login token)
+mcp-publisher.exe
+.mcpregistry_*

@@ -556,6 +556,12 @@
   X(T_GenTeaser, "Paint an area and ask: add a bird, change a shirt, remove or move a person, rebuild a white sky, or make a new picture. Uses OpenRouter with your own key.", "ระบายพื้นที่แล้วสั่ง: เพิ่มนก เปลี่ยนเสื้อ ลบหรือย้ายคน สร้างท้องฟ้าที่ขาวเกินขึ้นใหม่ หรือสร้างภาพใหม่ ใช้ OpenRouter ด้วย key ของคุณเอง") \
   X(T_GenOpenTool, "Open AI generate", "เปิดเครื่องมือสร้างด้วย AI") \
   X(T_RecTryGen, "Still white? Let generative AI rebuild it", "ยังขาวอยู่? ให้ AI สร้างรายละเอียดขึ้นใหม่") \
+  X(T_RunTitle, "Darkroom Run", "วิ่งในห้องมืด") \
+  X(T_RunStart, "Press Space to run", "กด Space เพื่อเริ่มวิ่ง") \
+  X(T_RunOver, "Crashed! Space to run again", "ชนแล้ว! กด Space เพื่อวิ่งใหม่") \
+  X(T_RunBest, "BEST", "สถิติ") \
+  X(T_RunNewBest, "New best!", "ทำสถิติใหม่!") \
+  X(T_RunKeys, "Space / Up / click: jump (hold for higher)    Esc: close", "Space / ลูกศรขึ้น / คลิก: กระโดด (กดค้างเพื่อกระโดดสูง)    Esc: ปิด") \
   X(T_UpdTitle, "Update Circle Room", "อัปเดต Circle Room") \
   X(T_UpdCurrent, "Your version: %s", "เวอร์ชันที่ใช้อยู่: %s") \
   X(T_UpdChecking, "Checking for a new version...", "กำลังตรวจหาเวอร์ชันใหม่...") \

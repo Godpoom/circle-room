@@ -8,8 +8,8 @@
 
 > **Download:** https://godpoom.github.io/circle-room/ (or the [Releases](../../releases) page). Get `CircleRoom_Portable.zip` (with AI) or `CircleRoom_Lite.zip` (2.4 MB, no AI), unzip, and run `CircleRoom.exe`. Windows 10/11, 64-bit. No installer, no account.
 >
-> **Safety check:** VirusTotal scanned `CircleRoom.exe` 1.3.3 Beta: **0/71** ([report](https://www.virustotal.com/gui/file/7118786f4e883ee0d7ab140a07b52fe4617638537d0bc45b43e026472ab1ea2b))
-> SHA-256 of `CircleRoom.exe`: `7118786f4e883ee0d7ab140a07b52fe4617638537d0bc45b43e026472ab1ea2b`. Check yours with `Get-FileHash .\CircleRoom.exe`, and feel free to scan your download yourself.
+> **Safety check:** VirusTotal scanned `CircleRoom.exe` 1.3.5: **0/71** ([report](https://www.virustotal.com/gui/file/5792b18b2a7ea232b217771f28a4989b89228e8e8bbfb26ecb8d6e4c4caa4bf7))
+> SHA-256 of `CircleRoom.exe`: `5792b18b2a7ea232b217771f28a4989b89228e8e8bbfb26ecb8d6e4c4caa4bf7`. Check yours with `Get-FileHash .\CircleRoom.exe`, and feel free to scan your download yourself.
 
 **Other ways to install:**
 - **Scoop:** `scoop bucket add circleroom https://github.com/Godpoom/circle-room` then `scoop install circleroom`
@@ -23,11 +23,11 @@ Circle Room fits if you searched for any of these:
 - a **free RAW editor** (Canon, Nikon, Sony, Fujifilm and over 1,200 cameras)
 - **removing people or objects** from photos for free, on your own PC
 - **recovering a blown-out sky** or overexposed highlights
-- a **photo editor with layers, text and Thai fonts** (1.3.2 Beta)
+- a **photo editor with layers, text and Thai fonts**
 - letting **Claude, ChatGPT Codex, Cursor or Gemini edit photos** through MCP
 - a photo editor in **Thai** (โปรแกรมแต่งรูปฟรี ภาษาไทย)
 
-> **1.3.3 Beta:** steadier (bug fixes, faster typing in text layers), a clearer AI generate panel with your key's credit and the price on the button, MIT license, Scoop and a Claude Desktop bundle. **New since 1.3.2 Beta:** text and vector layers, about 110 fonts, Make your font, a blank canvas start, and optional AI generate through OpenRouter with your own key.
+> **New in 1.3.5:** text and vector layers, about 110 fonts (32 Thai), Make your font, a blank canvas start, optional AI generate through OpenRouter with your own key (credit and price shown), steadier and faster, open source under MIT, and installs through Scoop or as a Claude Desktop bundle. Plus a small Easter egg hidden somewhere in the app 🥚
 
 ## Highlights
 - **Light on your PC:** a 3 MB exe that uses about 12–20 MB of RAM with a 24 MP photo open, and 0% CPU when idle. Every slider renders on the GPU.
