@@ -3,6 +3,7 @@
 // The result never touches the photo: it becomes RGBA layers (PNG next to the photo in
 // ".circleroom_layers") that the compose page stacks, blends and can undo like any layer.
 #pragma once
+#include <atomic>
 #include <string>
 #include <vector>
 
@@ -10,6 +11,7 @@
 #include "openrouter.h"
 
 enum GenTask { GEN_EDIT, GEN_REMOVE, GEN_HIGHLIGHT, GEN_MOVE, GEN_NEW, GEN_TASK_COUNT };
+enum GenStage { GEN_STAGE_PREPARE = 1, GEN_STAGE_WAIT, GEN_STAGE_PLACE };
 
 struct GenInput {
   int task = GEN_EDIT;
@@ -20,6 +22,7 @@ struct GenInput {
   std::vector<HealStroke> mask;  // painted area; empty = whole photo (edit) / auto (highlights)
   float aspect = 1.f;           // GEN_NEW: width / height wanted
   bool hiRes = false;           // ask for 2K pictures (sharper, costs more); 1K otherwise
+  std::atomic<int>* stage = nullptr;  // progress for the UI: GEN_STAGE_*
 };
 
 struct GenLayer {

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <mutex>
 #include <cstring>
 #include <vector>
 
@@ -14,14 +15,13 @@ static float smooth01(float a, float b, float x) {
 
 static const float* srgbLut() {
   static float lut[256];
-  static bool init = false;
-  if (!init) {
+  static std::once_flag once;  // thread-safe: called from worker threads too
+  std::call_once(once, [] {
     for (int i = 0; i < 256; i++) {
       float c = i / 255.f;
       lut[i] = c <= 0.04045f ? c / 12.92f : std::pow((c + 0.055f) / 1.055f, 2.4f);
     }
-    init = true;
-  }
+  });
   return lut;
 }
 

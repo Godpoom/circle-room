@@ -453,7 +453,7 @@
   X(T_FmInstall, "Install on this PC", "ติดตั้งลงเครื่องนี้") \
   X(T_FmInstalled, "Installed: other programs can use \"%s\" too", "ติดตั้งแล้ว โปรแกรมอื่นใช้ \"%s\" ได้ด้วย") \
   X(T_FmInstallHint, "Install puts the font in Windows for your user account, so Word, Canva and other programs can use it (no admin rights needed).", "ติดตั้งจะเพิ่มฟอนต์ให้ Windows ในบัญชีผู้ใช้ของคุณ ให้ Word, Canva และโปรแกรมอื่นใช้ได้ (ไม่ต้องใช้สิทธิ์ผู้ดูแล)") \
-  X(T_ToolGen, "AI generate", "สร้างด้วย AI") \
+  X(T_ToolGen, "AI generate (OpenRouter)", "สร้างด้วย AI (OpenRouter)") \
   X(T_GenTitle, "Generate with AI (OpenRouter)", "สร้างด้วย AI (OpenRouter)") \
   X(T_GenKeyHint, "Uses image models on OpenRouter with your own API key: you pay OpenRouter for what you use, and some models are free. Paste a key from openrouter.ai/keys.", "ใช้โมเดลสร้างภาพของ OpenRouter ด้วย API key ของคุณเอง ค่าใช้จ่ายจ่ายให้ OpenRouter ตามที่ใช้จริง บางโมเดลใช้ฟรี วาง key ที่ได้จาก openrouter.ai/keys") \
   X(T_GenKeySave, "Save key", "บันทึก key") \
@@ -509,6 +509,53 @@
   X(T_GenPaint, "Paint", "ระบาย") \
   X(T_GenErase, "Erase area", "ลบพื้นที่") \
   X(T_GenUndoHint, "Ctrl+Z takes back the last stroke", "Ctrl+Z ย้อนเส้นที่ระบายล่าสุด") \
+  X(T_GenIntro, "Edit or create pictures with image AI on the internet (OpenRouter). You use your own key and pay OpenRouter for what you use; some models are free. Results come back as layers, the photo itself is never changed.", "แก้หรือสร้างภาพด้วย AI บนอินเทอร์เน็ต (OpenRouter) ใช้ key ของคุณเอง จ่ายให้ OpenRouter ตามที่ใช้จริง บางโมเดลใช้ฟรี ผลลัพธ์ออกมาเป็นเลเยอร์ ไฟล์ต้นฉบับไม่ถูกแก้") \
+  X(T_GenNoKey, "Not connected to OpenRouter yet", "ยังไม่ได้เชื่อม OpenRouter") \
+  X(T_GenChecking, "Checking the key...", "กำลังตรวจ key...") \
+  X(T_GenConnected, "Connected", "เชื่อมแล้ว") \
+  X(T_GenKeyRejected, "This key does not work", "key นี้ใช้ไม่ได้") \
+  X(T_GenOffline, "Key saved (could not reach OpenRouter to check it)", "บันทึก key แล้ว (ติดต่อ OpenRouter เพื่อตรวจไม่ได้)") \
+  X(T_GenSpent, "spent $%.2f", "ใช้ไป $%.2f") \
+  X(T_GenLeft, "$%.2f left on this key", "key นี้เหลือ $%.2f") \
+  X(T_GenFreeTier, "No credit bought yet: only free models work", "ยังไม่เคยเติมเครดิต: ใช้ได้เฉพาะโมเดลฟรี") \
+  X(T_GenFreeLeftN, "%d free requests left today", "ใช้โมเดลฟรีได้อีก %d ครั้งวันนี้") \
+  X(T_GenRemoveKey, "Remove key", "ลบ key") \
+  X(T_GenAddCredit, "Add credit", "เติมเครดิต") \
+  X(T_GenStep1, "What should the AI do?", "ให้ AI ทำอะไร") \
+  X(T_GenStep2, "Model", "เลือกโมเดล") \
+  X(T_GenStep3, "Tell the AI", "บอก AI") \
+  X(T_GenStep4, "Area on the photo", "พื้นที่บนภาพ") \
+  X(T_GenStep4New, "Picture shape", "สัดส่วนภาพ") \
+  X(T_GenStepKey, "Your OpenRouter API key", "API key ของ OpenRouter") \
+  X(T_GenKeyHow, "1. Sign in at openrouter.ai  2. Keys > Create key  3. Copy it (starts with sk-or-) and paste it here.", "1. สมัคร / เข้าสู่ระบบที่ openrouter.ai  2. ไปที่ Keys > Create key  3. คัดลอก key (ขึ้นต้นด้วย sk-or-) มาวางที่นี่") \
+  X(T_GenExEdit, "e.g. a small bird flying here / a red band T-shirt / sunset sky", "เช่น นกตัวเล็กบินอยู่ตรงนี้ / เสื้อยืดวงดนตรีสีแดง / ท้องฟ้ายามเย็น") \
+  X(T_GenExRemove, "optional, e.g. the man in the blue shirt", "ไม่บังคับ เช่น ผู้ชายเสื้อฟ้า") \
+  X(T_GenExMove, "optional, e.g. the girl on the left", "ไม่บังคับ เช่น เด็กผู้หญิงทางซ้าย") \
+  X(T_GenExHigh, "optional, e.g. blue sky with soft clouds", "ไม่บังคับ เช่น ท้องฟ้าสีฟ้ามีเมฆบางๆ") \
+  X(T_GenExNew, "e.g. a cozy coffee shop in Bangkok at night, photo", "เช่น ร้านกาแฟบรรยากาศอบอุ่นในกรุงเทพตอนกลางคืน แบบภาพถ่าย") \
+  X(T_GenAreaNone, "Nothing painted yet: paint on the photo with the brush", "ยังไม่ได้ระบาย: ใช้แปรงระบายบนภาพ") \
+  X(T_GenAreaWhole, "Nothing painted: the whole photo will be edited", "ยังไม่ได้ระบาย: จะแก้ทั้งภาพ") \
+  X(T_GenAreaAuto, "Nothing painted: blown-out areas are found automatically", "ยังไม่ได้ระบาย: โปรแกรมจะหาส่วนที่ขาวเกินให้เอง") \
+  X(T_GenAreaDone, "Area painted (blue)", "ระบายพื้นที่แล้ว (สีฟ้า)") \
+  X(T_GenGoPrice, "Generate  %s", "สร้าง  %s") \
+  X(T_GenStagePrep, "Preparing the photo... %d s", "กำลังเตรียมภาพ... %d วินาที") \
+  X(T_GenStageWait, "Waiting for %s... %d s", "รอ %s สร้างภาพ... %d วินาที") \
+  X(T_GenStagePlace, "Placing the result... %d s", "กำลังวางผลลัพธ์... %d วินาที") \
+  X(T_GenStageNote, "Usually 10-60 seconds. You can keep editing meanwhile.", "ปกติใช้ 10-60 วินาที ระหว่างนี้ทำงานอื่นต่อได้") \
+  X(T_GenResultLayer, "Done: added as the layer \"AI image\". Move, hide or delete it in Layers; Ctrl+Z undoes it.", "เสร็จแล้ว: เพิ่มเป็นเลเยอร์ \"ภาพจาก AI\" ย้าย ซ่อน หรือลบได้ในแผงเลเยอร์ กด Ctrl+Z เพื่อย้อน") \
+  X(T_GenResultNew, "Done: the new picture is saved in Pictures > Circle Room AI", "เสร็จแล้ว: ภาพใหม่บันทึกไว้ที่ Pictures > Circle Room AI") \
+  X(T_GenErrTitle, "Could not generate", "สร้างไม่สำเร็จ") \
+  X(T_GenErrKey, "OpenRouter did not accept the API key. Check it, or create a new key.", "OpenRouter ไม่ยอมรับ API key นี้ ตรวจ key หรือสร้าง key ใหม่") \
+  X(T_GenErrCredit, "Not enough OpenRouter credit for this model. Add credit, or pick a model marked free.", "เครดิต OpenRouter ไม่พอสำหรับโมเดลนี้ เติมเครดิต หรือเลือกโมเดลที่มีป้าย ฟรี") \
+  X(T_GenErrBusy, "The model is busy right now. Wait a moment and try again, or pick another model.", "ตอนนี้โมเดลมีคนใช้เยอะ รอสักครู่แล้วลองใหม่ หรือเลือกโมเดลอื่น") \
+  X(T_GenErrTimeout, "The AI took too long to answer. Try again, or pick a faster model.", "AI ใช้เวลานานเกินไป ลองใหม่ หรือเลือกโมเดลที่เร็วกว่า") \
+  X(T_GenErrNet, "Cannot reach OpenRouter. Check the internet connection.", "ติดต่อ OpenRouter ไม่ได้ ตรวจการเชื่อมต่ออินเทอร์เน็ต") \
+  X(T_GenErrRefused, "The model sent no picture back; it may have refused the request. Rephrase it or try another model.", "โมเดลไม่ส่งภาพกลับมา อาจปฏิเสธคำสั่ง ลองเปลี่ยนคำ หรือเปลี่ยนโมเดล") \
+  X(T_GenErrNoClip, "No pure-white area was found. Paint over the area to rebuild.", "ไม่พบส่วนที่ขาวจนหมด ระบายทับบริเวณที่ต้องการให้ AI สร้างใหม่") \
+  X(T_GenErrOther, "Something went wrong.", "เกิดข้อผิดพลาด") \
+  X(T_GenTeaser, "Paint an area and ask: add a bird, change a shirt, remove or move a person, rebuild a white sky, or make a new picture. Uses OpenRouter with your own key.", "ระบายพื้นที่แล้วสั่ง: เพิ่มนก เปลี่ยนเสื้อ ลบหรือย้ายคน สร้างท้องฟ้าที่ขาวเกินขึ้นใหม่ หรือสร้างภาพใหม่ ใช้ OpenRouter ด้วย key ของคุณเอง") \
+  X(T_GenOpenTool, "Open AI generate", "เปิดเครื่องมือสร้างด้วย AI") \
+  X(T_RecTryGen, "Still white? Let generative AI rebuild it", "ยังขาวอยู่? ให้ AI สร้างรายละเอียดขึ้นใหม่") \
   X(T_UpdTitle, "Update Circle Room", "อัปเดต Circle Room") \
   X(T_UpdCurrent, "Your version: %s", "เวอร์ชันที่ใช้อยู่: %s") \
   X(T_UpdChecking, "Checking for a new version...", "กำลังตรวจหาเวอร์ชันใหม่...") \

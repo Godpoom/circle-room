@@ -1,6 +1,7 @@
 #include "layers.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -30,15 +31,15 @@ bool loadLayerPixels(const std::string& path, int maxDim, std::vector<uint8_t>& 
   if (!loadImage(path, maxDim, d, err)) return false;
   std::vector<uint8_t> px;
   if (d.is16) {  // linear 16-bit -> sRGB bytes
-    static uint8_t lut[4096];
-    static bool init = false;
-    if (!init) {
+    // Built once, thread-safely (several layer workers and the AI jobs call this at the same time).
+    static const std::array<uint8_t, 4096> lut = [] {
+      std::array<uint8_t, 4096> t{};
       for (int i = 0; i < 4096; i++) {
         double l = (i + 0.5) / 4096.0;
-        lut[i] = (uint8_t)std::lround((l <= 0.0031308 ? l * 12.92 : 1.055 * std::pow(l, 1 / 2.4) - 0.055) * 255.0);
+        t[i] = (uint8_t)std::lround((l <= 0.0031308 ? l * 12.92 : 1.055 * std::pow(l, 1 / 2.4) - 0.055) * 255.0);
       }
-      init = true;
-    }
+      return t;
+    }();
     px.resize(d.px16.size());
     for (size_t i = 0; i < px.size(); i++) px[i] = lut[d.px16[i] >> 4];
   } else {
@@ -142,11 +143,22 @@ LayerAsset* LayerStore::asset(int id) {
   return it == assets_.end() ? nullptr : it->second.get();
 }
 
+void LayerStore::retire(std::unique_ptr<LayerAsset>& a) {
+  if (!a) return;
+  if (a->thumbTex) glDeleteTextures(1, &a->thumbTex);
+  a->thumbTex = 0;
+  if (a->th.joinable() && !a->finished) retired_.push_back(std::move(a));
+  a.reset();  // finished or never started: joins at once
+}
+
+void LayerStore::reap() {
+  retired_.erase(std::remove_if(retired_.begin(), retired_.end(), [](const std::unique_ptr<LayerAsset>& a) { return a->finished.load(); }),
+                 retired_.end());
+}
+
 void LayerStore::clear(Renderer& R) {
-  for (auto& kv : assets_) {
-    if (kv.second->thumbTex) glDeleteTextures(1, &kv.second->thumbTex);
-  }
-  assets_.clear();  // joins any worker still running
+  for (auto& kv : assets_) retire(kv.second);
+  assets_.clear();
   strokes_.clear();
   gen_.clear();
   R.dropAllLayers();
@@ -207,13 +219,13 @@ static void applyStroke(std::vector<float>& a, int W, int H, const Stroke& s, si
 
 bool LayerStore::sync(const EditParams& p, Renderer& R, bool wait) {
   bool changed = false;
+  reap();
   for (const ImageLayer& l : p.img) {
     if (!l.enabled || !l.path[0]) continue;
     auto& slot = assets_[l.id];
-    if (slot && (slot->path != l.path || slot->kind != l.kind)) {
+    if (slot && (slot->path != l.path || slot->kind != l.kind)) {  // e.g. each key typed in a text layer
       R.dropLayer(l.id);
-      if (slot->thumbTex) glDeleteTextures(1, &slot->thumbTex);
-      slot.reset();
+      retire(slot);
       changed = true;
     }
     if (!slot) {
@@ -229,6 +241,10 @@ bool LayerStore::sync(const EditParams& p, Renderer& R, bool wait) {
       A->stage = 1;
       int maxDim = std::min(4096, R.maxTextureSize());
       A->th = std::thread([A, maxDim]() {
+        struct Done {  // set on every way out, so a retired asset can be joined without waiting
+          LayerAsset* a;
+          ~Done() { a->finished = true; }
+        } done{A};
         try {
           if (A->kind != LAYER_PHOTO) {  // text or a drawing: render it, no AI cut-out
             std::string data;

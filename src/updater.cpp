@@ -11,6 +11,7 @@
 #include <winhttp.h>
 
 #include <algorithm>
+#include <mutex>
 #include <climits>
 #include <cstdio>
 #include <cstring>
@@ -298,15 +299,14 @@ bool zipEntryPath(const std::string& name, std::string& rel) {
 
 uint32_t crc32Of(const void* data, size_t n, uint32_t crc) {
   static uint32_t T[256];
-  static bool init = false;
-  if (!init) {
+  static std::once_flag once;  // thread-safe: called from worker threads too
+  std::call_once(once, [] {
     for (uint32_t i = 0; i < 256; i++) {
       uint32_t c = i;
       for (int k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320u ^ (c >> 1) : c >> 1;
       T[i] = c;
     }
-    init = true;
-  }
+  });
   const uint8_t* p = (const uint8_t*)data;
   crc = ~crc;
   for (size_t i = 0; i < n; i++) crc = T[(crc ^ p[i]) & 0xFF] ^ (crc >> 8);

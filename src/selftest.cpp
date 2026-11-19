@@ -2,10 +2,12 @@
 // (analysis cache, thumbnails, images, .pedit sidecars, brush strokes, layer paths, writes).
 // Every case must be rejected or repaired without a crash or a large allocation.
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <process.h>
+#include <thread>
 #include <string>
 #include <vector>
 
@@ -173,6 +175,34 @@ void testParams() {
   EditParams q;
   deserializeParams("img0Enabled=1\nimg0Id=1\nimg0Path=C:\\" + longPath + ".jpg\n", q, true);
   check(!q.img[0].enabled && q.img[0].path[0] == 0, "over-long layer path is dropped, not truncated");
+  {  // 16 layers: two-digit keys ("img12...") and the layer kind survive a save / load
+    EditParams w;
+    for (int i = 0; i < kMaxImgLayers; i++) {
+      ImageLayer& l = w.img[i];
+      l.enabled = 1;
+      l.id = 100 + i;
+      l.kind = i % LAYER_KIND_COUNT;
+      l.cx = 0.05f * i;
+      l.scale = 0.1f + 0.01f * i;
+      l.opacity = 100.f;
+      snprintf(l.path, sizeof(l.path), "C:\\layers\\l%d.png", i);
+    }
+    EditParams r;
+    deserializeParams(serializeParams(w, true), r, true);
+    bool same = true;
+    for (int i = 0; i < kMaxImgLayers; i++)
+      same &= r.img[i].enabled && r.img[i].id == w.img[i].id && r.img[i].kind == w.img[i].kind &&
+              std::fabs(r.img[i].cx - w.img[i].cx) < 1e-5f && std::fabs(r.img[i].scale - w.img[i].scale) < 1e-5f &&
+              std::strcmp(r.img[i].path, w.img[i].path) == 0;
+    check(same, "all 16 layers (two-digit keys) and their kinds round-trip");
+    EditParams bad;
+    deserializeParams("img16Enabled=1\nimg16Id=7\nimg16Path=C:\\x.jpg\nimg99Enabled=1\nimg3Kind=77\nimg3Enabled=1\nimg3Id=5\n"
+                      "img3Path=C:\\y.jpg\n",
+                      bad, true);
+    bool none16 = true;
+    for (int i = 0; i < kMaxImgLayers; i++) none16 &= !(bad.img[i].enabled && bad.img[i].id == 7);
+    check(none16 && bad.img[3].kind == LAYER_PHOTO, "layer 16+ ignored, unknown layer kind falls back to photo");
+  }
   // A valid file from an older version (and AI styles at 150%) loads unchanged.
   EditParams a;
   a.exposure = 1.25f;
@@ -406,6 +436,31 @@ void testAiGen(const std::string& dir) {
   check(orouter::plausibleKey("sk-or-v1-0123456789abcdef0123") && !orouter::plausibleKey("sk-or-v1 has spaces 0123456") &&
             !orouter::plausibleKey("sk-ant-0123456789012345678"),
         "API key format check");
+  {  // the status line and the error box
+    orouter::KeyInfo ki;
+    bool okK = orouter::parseKeyInfo(
+        "{\"data\":{\"label\":\"x\",\"usage\":1.25,\"limit\":10,\"limit_remaining\":8.75,\"is_free_tier\":true,"
+        "\"free_model_daily_requests\":{\"used\":3,\"limit\":50,\"remaining\":47}}}",
+        ki);
+    orouter::KeyInfo kn;
+    bool okN = orouter::parseKeyInfo("{\"data\":{\"usage\":0,\"limit\":null,\"limit_remaining\":null,\"is_free_tier\":false}}", kn);
+    check(okK && ki.usage == 1.25 && ki.remaining == 8.75 && ki.freeTier && ki.freeLeft == 47 && okN && kn.remaining < 0 &&
+              !kn.freeTier,
+          "key status: spending, credit left, free tier (null limits read as none)");
+    std::string mk = orouter::maskKey("sk-or-v1-0123456789abcdefWXYZ");
+    check(mk == "sk-or-v1-...WXYZ" && mk.find("0123") == std::string::npos, "the key is shown masked");
+    using namespace orouter;
+    check(errorKind("API key not accepted (401): User not found.") == ERR_KEY &&
+              errorKind("not enough OpenRouter credit for this model (402)") == ERR_CREDIT &&
+              errorKind("too many requests, try again shortly (429)") == ERR_BUSY &&
+              errorKind("the AI took too long to answer (timeout)") == ERR_TIMEOUT &&
+              errorKind("network error 12007") == ERR_NETWORK &&
+              errorKind("the model returned no image (it may have refused the prompt)") == ERR_REFUSED &&
+              errorKind("cancelled") == ERR_CANCELLED && errorKind("paint over what to remove first") == ERR_NEED_AREA &&
+              errorKind("no blown-out area found; paint over the area instead") == ERR_NO_CLIP &&
+              errorKind("this model cannot edit photos") == ERR_NEED_EDITS && errorKind("OpenRouter 500: boom") == ERR_OTHER,
+          "every failure maps to a plain message");
+  }
   int x, y, w, h;
   contextRect(500, 300, 600, 380, 1000, 400, 16.f / 9.f, x, y, w, h);
   check(x >= 0 && y >= 0 && x + w <= 1000 && y + h <= 400 && x <= 500 && x + w >= 600 && y <= 300 && y + h >= 380,
@@ -465,6 +520,33 @@ void testAiGen(const std::string& dir) {
   in.model.edits = false;
   check(!runGen(in, out) && !out.err.empty(), "a text-only model is refused for photo edits");
   setGenHook(nullptr);
+
+  // Cancel: a model-list download stops at once (closing the app must not wait on the network),
+  // and a cancel made before the worker runs is not lost.
+  {
+    orouter::resetCancel(orouter::kModelList);
+    std::vector<orouter::Model> ms2;
+    std::string e2;
+    auto t0 = std::chrono::steady_clock::now();
+    std::thread th([&] { orouter::fetchModels(ms2, e2); });
+    std::this_thread::sleep_for(std::chrono::milliseconds(60));
+    orouter::cancel(orouter::kModelList);
+    th.join();
+    double s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+    printf("  (model list cancelled after %.2f s)\n", s);
+    check(s < 3.0, "cancelling the model list returns within seconds");
+    orouter::resetCancel(orouter::kGenerate);
+    orouter::cancel(orouter::kGenerate);  // pressed before the request went out
+    orouter::Result r2;
+    std::string e3;
+    orouter::Request rq2;
+    rq2.model = "x/y";
+    rq2.prompt = "p";
+    bool sent = orouter::generate("sk-or-v1-test-not-a-real-key-0000", rq2, r2, e3);
+    check(!sent && e3 == "cancelled", "a cancel pressed before the request goes out is kept");
+    orouter::resetCancel(orouter::kGenerate);
+    orouter::resetCancel(orouter::kModelList);
+  }
   // Real lists saved from openrouter.ai, when the tester put them in the folder.
   std::string ri, rp;
   if (readTextFile(dir + "\\or_img_models.json", ri) && readTextFile(dir + "\\or_models.json", rp)) {
@@ -507,6 +589,26 @@ void testFontSamples(const std::string& dir) {
   check(got[0] != got[3] && got[1] != got[5], "each font's sample looks different");
   std::string err;
   writePngRgba(dir + "\\font_samples.png", sheet.data(), W, H * 6, err);
+
+  // Typing in a text layer re-renders it on every key: it has to stay well under a frame budget.
+  TextSpec ts;
+  ts.font = "Sarabun";
+  ts.text = "\xe0\xb8\xaa\xe0\xb8\xa7\xe0\xb8\xb1\xe0\xb8\xaa\xe0\xb8\x94\xe0\xb8\xb5 Circle Room\n2026";
+  ts.outline = 4.f;
+  std::vector<uint8_t> rgb, al;
+  int tw = 0, th = 0;
+  using Clk = std::chrono::steady_clock;
+  auto msSince = [](Clk::time_point s) { return std::chrono::duration<double, std::milli>(Clk::now() - s).count(); };
+  auto t0 = Clk::now();
+  bool okT = renderText(ts, rgb, al, tw, th, err);
+  double ms = msSince(t0);
+  float aspect = 0.f;
+  t0 = Clk::now();
+  bool okM = measureText(ts, aspect);
+  double msM = msSince(t0);
+  printf("  (text layer: render %.1f ms, measure %.2f ms)\n", ms, msM);
+  check(okT && okM && th > 0 && std::fabs(aspect - (float)tw / th) < 0.002f, "measuring text gives the rendered aspect exactly");
+  check(msM < 30.0, "measuring text is fast enough to run on every key");
 }
 
 // Font maker: drawn glyphs -> traced outlines -> a TrueType font Windows can render.

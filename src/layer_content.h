@@ -31,6 +31,8 @@ std::string serializeText(const TextSpec& t);
 bool parseText(const std::string& data, TextSpec& t);
 // Renders at a fixed internal size (long edge <= 4096). rgb: sRGB, alpha: 0..255, both w*h.
 bool renderText(const TextSpec& t, std::vector<uint8_t>& rgb, std::vector<uint8_t>& alpha, int& w, int& h, std::string& err);
+// The width / height renderText would give, at a fraction of the cost (for the UI thread).
+bool measureText(const TextSpec& t, float& aspect);
 
 // One line of sample text in a font, for the font list: alpha only (white ink), exactly h pixels
 // tall, at most maxW wide (cut off on the right).

@@ -80,13 +80,12 @@ bool UnigramTokenizer::load(const std::string& file) {
 // NFKC (as SentencePiece's nmt_nfkc): Windows NormalizeString, else the Thai/Lao SARA AM split.
 static std::string nfkc(const std::string& s) {
   typedef int(__stdcall * NormFn)(int, const wchar_t*, int, wchar_t*, int);
-  static NormFn fn = nullptr;
-  static bool tried = false;
-  if (!tried) {
-    tried = true;
+  static const NormFn fn = [] {  // thread-safe one-time lookup
+    NormFn f = nullptr;
     for (const char* dll : {"kernel32.dll", "normaliz.dll"})
-      if (!fn) fn = (NormFn)getProcAddressU(dll, "NormalizeString");
-  }
+      if (!f) f = (NormFn)getProcAddressU(dll, "NormalizeString");
+    return f;
+  }();
   std::wstring w = utf8ToWide(s);
   if (fn && !w.empty()) {
     int n = fn(5 /*NormalizationKC*/, w.c_str(), (int)w.size(), nullptr, 0);

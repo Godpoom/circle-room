@@ -227,7 +227,8 @@ bool renderFontSample(const std::string& family, const std::string& sample, int 
 }
 
 // ---------------------------------------------------------------- text rendering (GDI: shapes Thai properly)
-bool renderText(const TextSpec& t, std::vector<uint8_t>& rgb, std::vector<uint8_t>& alpha, int& w, int& h, std::string& err) {
+// The glyphs as coverage (0..255), w x h with room for marks and the outline; R = outline radius.
+static bool drawInk(const TextSpec& t, std::vector<uint8_t>& ta, int& w, int& h, float& R, std::string& err) {
   initFonts();
   std::vector<std::wstring> lines;
   {
@@ -305,17 +306,60 @@ bool renderText(const TextSpec& t, std::vector<uint8_t>& rgb, std::vector<uint8_
     DrawTextW(dc, lines[i].c_str(), (int)lines[i].size(), &r, DT_SINGLELINE | DT_NOPREFIX | DT_NOCLIP | DT_LEFT | DT_TOP);
   }
   GdiFlush();
-  std::vector<uint8_t> ta((size_t)w * h);
+  ta.resize((size_t)w * h);
   const uint8_t* src = (const uint8_t*)bits;
   for (size_t i = 0; i < ta.size(); i++) ta[i] = std::max({src[i * 4], src[i * 4 + 1], src[i * 4 + 2]});
   SelectObject(dc, oldBmp);
   DeleteObject(bmp);
   DeleteObject(font);
   DeleteDC(dc);
+  R = t.outline * px / 100.f;
+  return true;
+}
+
+static const int kTrimMargin = 6;
+
+// Width / height of renderText's result without the outline pass or colour: the ink box grown by
+// the outline exactly as the chamfer distance grows it along rows and columns, plus the margin.
+bool measureText(const TextSpec& t, float& aspect) {
+  std::vector<uint8_t> ta;
+  int w = 0, h = 0;
+  float R = 0;
+  std::string err;
+  if (!drawInk(t, ta, w, h, R, err)) return false;
+  float op = (t.color & 0xFF) / 255.f;
+  int x0 = w, y0 = h, x1 = -1, y1 = -1, sx0 = w, sy0 = h, sx1 = -1, sy1 = -1;
+  for (int y = 0; y < h; y++)
+    for (int x = 0; x < w; x++) {
+      uint8_t v = ta[(size_t)y * w + x];
+      if (v && std::lround(v / 255.f * op * 255.f) > 0) {
+        x0 = std::min(x0, x), x1 = std::max(x1, x), y0 = std::min(y0, y), y1 = std::max(y1, y);
+      }
+      if (v >= 128) sx0 = std::min(sx0, x), sx1 = std::max(sx1, x), sy0 = std::min(sy0, y), sy1 = std::max(sy1, y);
+    }
+  if (R > 0.5f && sx1 >= 0) {
+    // oa > 0 where d < R + 0.5 - 1/510; along a row d is the plain pixel count
+    int k = (int)std::ceil(R + 0.5f - 1.f / 510.f) - 1;
+    x0 = std::min(x0, std::max(0, sx0 - k)), x1 = std::max(x1, std::min(w - 1, sx1 + k));
+    y0 = std::min(y0, std::max(0, sy0 - k)), y1 = std::max(y1, std::min(h - 1, sy1 + k));
+  }
+  if (x1 >= 0) {
+    x0 = std::max(0, x0 - kTrimMargin), y0 = std::max(0, y0 - kTrimMargin);
+    x1 = std::min(w - 1, x1 + kTrimMargin), y1 = std::min(h - 1, y1 + kTrimMargin);
+    w = x1 - x0 + 1;
+    h = y1 - y0 + 1;
+  }
+  aspect = (float)w / std::max(1, h);
+  return true;
+}
+
+bool renderText(const TextSpec& t, std::vector<uint8_t>& rgb, std::vector<uint8_t>& alpha, int& w, int& h, std::string& err) {
+  std::vector<uint8_t> ta;
+  float R = 0;
+  if (!drawInk(t, ta, w, h, R, err)) return false;
 
   // Outline: distance to the nearest ink (two-pass chamfer), anti-aliased at the edge.
   std::vector<uint8_t> oa;
-  float R = t.outline * px / 100.f;
   if (R > 0.5f) {
     const float INF = 1e9f;
     std::vector<float> d((size_t)w * h);
@@ -364,7 +408,7 @@ bool renderText(const TextSpec& t, std::vector<uint8_t>& rgb, std::vector<uint8_
         y1 = std::max(y1, y);
       }
   if (x1 >= 0) {
-    const int m = 6;
+    const int m = kTrimMargin;
     x0 = std::max(0, x0 - m);
     y0 = std::max(0, y0 - m);
     x1 = std::min(w - 1, x1 + m);

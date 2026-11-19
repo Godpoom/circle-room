@@ -293,6 +293,17 @@ struct App {
     std::vector<orouter::Model> models;
     std::string err;
   } orList;
+  struct OrCheck {  // is the key valid, what has it spent (worker thread)
+    std::thread th;
+    std::atomic<bool> done{false};
+    bool active = false, ok = false;
+    std::string key, err;
+    orouter::KeyInfo info;
+  } orCheck;
+  int orKeyState = 0;  // 0 unknown, 1 checking, 2 connected, 3 rejected, 4 not checked (offline)
+  orouter::KeyInfo orInfo;
+  std::string genErr;  // last failure, shown in the card until the next try
+  int genResult = 0;   // last success: 1 layer added, 2 new picture
   int genTask = GEN_EDIT, genAspect = 0;
   bool genHiRes = false;
   char genPrompt[1024] = {};
@@ -307,13 +318,14 @@ struct App {
     std::atomic<bool> done{false};
     bool active = false, asLayer = false, hi = false;
     int task = 0;
-    std::string modelId;
+    std::atomic<int> stage{0};  // GEN_STAGE_*
+    std::string modelId, modelName;
     double started = 0;
     std::string photo;
     GenOutput out;
   } gen;
   float brushPx = 60.f, brushHard = 50.f;  // brush diameter on screen, hardness 0..100
-  int layerDrag = 0;    // 0 none, 1 move, 2 resize, 3 rotate, 4 brush
+  int layerDrag = 0;    // 0 none, 1 move, 2 resize, 3 rotate, 4 brush, 5 magic eraser, 6 drawing, 7/8 AI area paint/erase
   ImageLayer layerStart;
   float dragX = 0, dragY = 0;  // drag start, oriented pixels of the base photo
   // Magic eraser (LaMa fills painted strokes; patches lie under the layers)
@@ -1257,8 +1269,10 @@ static void layerCanvas(App& a, const Geometry& g, ImVec2 tl, float dW, float dH
     }
     a.er.changed = true;
   }
-  if (a.layerDrag && a.layerDrag != 5 && a.layerDrag != 6 && !active) {
-    a.er.commit = a.layerDrag == 4 ? T_LayerBrush : T_LayerEdit;
+  if (a.layerDrag && !active) {
+    // 5 magic eraser, 6 drawing, 7/8 AI area: their own tool ends them (above); this only catches
+    // a drag whose tool was switched mid-stroke, which must not stay stuck.
+    if (a.layerDrag <= 4) a.er.commit = a.layerDrag == 4 ? T_LayerBrush : T_LayerEdit;
     a.layerDrag = 0;
   }
 }
@@ -1325,11 +1339,10 @@ static void addTextLayer(App& a, float u, float v) {
   t.text = currentLang() == Lang::TH ? "ข้อความ" : "Text";
   t.outline = 4.f;
   t.outlineColor = 0x1A1816FF;
-  std::vector<uint8_t> rgb, al;
-  int rw = 0, rh = 0;
+  float asp = 0.f;
   std::string err, file;
-  if (!renderText(t, rgb, al, rw, rh, err) || !writeLayerContent(a.path, serializeText(t), "crtext", file, err)) {
-    showToast(a, err);
+  if (!measureText(t, asp) || asp <= 0.f || !writeLayerContent(a.path, serializeText(t), "crtext", file, err)) {
+    showToast(a, err.empty() ? std::string("cannot lay out the text") : err);
     return;
   }
   ImageLayer l;
@@ -1340,7 +1353,7 @@ static void addTextLayer(App& a, float u, float v) {
   l.cx = u;
   l.cy = v;
   float Wo = (float)std::max(1, a.R.orientedW()), Ho = (float)std::max(1, a.R.orientedH());
-  l.scale = Ho / 12.f * rw / rh / Wo;
+  l.scale = Ho / 12.f * asp / Wo;
   l.opacity = 100.f;
   l.feather = 5.f;
   if (!setLayerPath(l, file)) return;
@@ -1359,27 +1372,25 @@ static void syncTextEdit(App& a, const ImageLayer& l) {
   a.textEdit = TextSpec();
   if (readLayerContent(l.path, data, err)) parseText(data, a.textEdit);
   snprintf(a.textBuf, sizeof(a.textBuf), "%s", a.textEdit.text.c_str());
-  std::vector<uint8_t> rgb, al;
-  int rw = 0, rh = 0;
-  a.textAspect = renderText(a.textEdit, rgb, al, rw, rh, err) && rh > 0 ? (float)rw / rh : 0.f;
+  float asp = 0.f;
+  a.textAspect = measureText(a.textEdit, asp) ? asp : 0.f;
   a.textEditId = l.id;
   a.textEditPath = l.path;
 }
 
 // Writes the edited text as new content; the letters keep their height when the words change.
+// Only measures on this thread: the layer worker renders the pixels.
 static void applyTextEdit(App& a, ImageLayer& l, int commit) {
-  std::vector<uint8_t> rgb, al;
-  int rw = 0, rh = 0;
+  float aspect = 0.f;
   std::string err, file;
-  if (!renderText(a.textEdit, rgb, al, rw, rh, err) || rh <= 0) {
-    showToast(a, err);
+  if (!measureText(a.textEdit, aspect) || aspect <= 0.f) {
+    showToast(a, "cannot lay out the text");
     return;
   }
   if (!writeLayerContent(a.path, serializeText(a.textEdit), "crtext", file, err) || !setLayerPath(l, file)) {
     showToast(a, err);
     return;
   }
-  float aspect = (float)rw / rh;
   if (a.textAspect > 0.f) l.scale = std::clamp(l.scale * aspect / a.textAspect, 0.001f, 50.f);
   a.textAspect = aspect;
   a.textEditPath = l.path;
@@ -2143,10 +2154,27 @@ static void genEraseAt(App& a, float u, float v, float r) {
   a.genMask.swap(out);
 }
 
+// Checks the saved key with OpenRouter (worker thread): valid?, what it spent, credit left.
+static void genCheckKey(App& a) {
+  if (a.orCheck.active || a.orKey.empty()) return;
+  if (a.orCheck.th.joinable()) a.orCheck.th.join();
+  a.orCheck.active = true;
+  a.orCheck.done = false;
+  a.orCheck.key = a.orKey;
+  if (a.orKeyState != 2) a.orKeyState = 1;  // keep "connected" visible while it only refreshes
+  orouter::resetCancel(orouter::kModelList);
+  a.orCheck.th = std::thread([&C = a.orCheck]() {
+    C.err.clear();
+    C.ok = orouter::keyInfo(C.key, C.info, C.err);
+    C.done = true;
+    glfwPostEmptyEvent();
+  });
+}
+
 static void genEnsureKey(App& a) {
   if (a.orKeyLoaded) return;
   a.orKeyLoaded = true;
-  orouter::loadKey(a.orKey);
+  if (orouter::loadKey(a.orKey)) genCheckKey(a);
 }
 
 static void genFetchModels(App& a) {
@@ -2154,6 +2182,7 @@ static void genFetchModels(App& a) {
   if (a.orList.th.joinable()) a.orList.th.join();
   a.orList.active = true;
   a.orList.done = false;
+  orouter::resetCancel(orouter::kModelList);
   a.orList.th = std::thread([&L = a.orList]() {
     L.models.clear();
     L.err.clear();
@@ -2194,15 +2223,29 @@ static void genEnsureModels(App& a) {
   genPickDefault(a);
 }
 
-static void genPollModels(App& a) {
-  if (!a.orList.active || !a.orList.done) return;
-  a.orList.th.join();
-  a.orList.active = false;
-  if (!a.orList.models.empty()) {
-    a.orModels = std::move(a.orList.models);
-    genPickDefault(a);
-  } else if (a.orModels.empty()) {
-    showToast(a, a.orList.err);
+// Every frame from the main loop (not only while the card is shown): finished workers are joined
+// at once, so nothing keeps the app in its busy, redrawing state after they end.
+static void genPoll(App& a) {
+  if (a.orList.active && a.orList.done) {
+    a.orList.th.join();
+    a.orList.active = false;
+    if (!a.orList.models.empty()) {
+      a.orModels = std::move(a.orList.models);
+      genPickDefault(a);
+    } else if (a.orModels.empty()) {
+      a.genErr = a.orList.err;
+    }
+  }
+  if (a.orCheck.active && a.orCheck.done) {
+    a.orCheck.th.join();
+    a.orCheck.active = false;
+    if (a.orCheck.key != a.orKey) return;  // the key was changed meanwhile
+    if (a.orCheck.ok) {
+      a.orKeyState = 2;
+      a.orInfo = a.orCheck.info;
+    } else {
+      a.orKeyState = orouter::errorKind(a.orCheck.err) == orouter::ERR_KEY ? 3 : 4;
+    }
   }
 }
 
@@ -2211,16 +2254,18 @@ static void genStart(App& a, bool asLayer) {
   if (!m || a.gen.active) return;
   int task = a.genTask;
   bool painted = !a.genMask.empty();
+  a.genErr.clear();
+  a.genResult = 0;
   if ((task == GEN_EDIT || task == GEN_NEW) && !a.genPrompt[0]) {
-    showToast(a, tr(T_GenNeedPrompt));
+    a.genErr = "!prompt";
     return;
   }
   if ((task == GEN_REMOVE || task == GEN_MOVE) && !painted) {
-    showToast(a, tr(T_GenNeedArea));
+    a.genErr = "paint over what to remove first";
     return;
   }
   if (task != GEN_NEW && !m->edits) {
-    showToast(a, tr(T_GenNeedEdits));
+    a.genErr = "this model cannot edit photos";
     return;
   }
   if (task != GEN_NEW && !a.hasImage) return;
@@ -2233,7 +2278,9 @@ static void genStart(App& a, bool asLayer) {
   in.model = *m;
   in.mask = a.genMask;
   in.hiRes = a.genHiRes;
+  in.stage = &a.gen.stage;
   a.gen.modelId = m->id;
+  a.gen.modelName = m->name;
   a.gen.hi = a.genHiRes && !m->resolutions.empty();
   static const float kAspects[5] = {1.f, 4.f / 3.f, 3.f / 4.f, 16.f / 9.f, 9.f / 16.f};
   in.aspect = kAspects[std::clamp(a.genAspect, 0, 4)];
@@ -2241,8 +2288,10 @@ static void genStart(App& a, bool asLayer) {
   a.gen.asLayer = asLayer;
   a.gen.photo = a.path;
   a.gen.started = glfwGetTime();
+  a.gen.stage = GEN_STAGE_PREPARE;
   a.gen.active = true;
   a.gen.done = false;
+  orouter::resetCancel(orouter::kGenerate);
   a.gen.th = std::thread([&J = a.gen, in]() {
     runGen(in, J.out);
     J.done = true;
@@ -2258,12 +2307,14 @@ static void finishGen(App& a) {
     a.genLastCost = o.cost;
     if (a.gen.task != GEN_MOVE) orouter::rememberCost(a.gen.modelId, a.gen.task != GEN_NEW, a.gen.hi, o.cost);
   }
+  genCheckKey(a);  // refresh what the key has spent / has left
   if (!o.err.empty()) {
-    if (o.err != "cancelled") showToast(a, std::string(tr(T_GenFailed)) + ": " + o.err);
+    if (orouter::errorKind(o.err) != orouter::ERR_CANCELLED) a.genErr = o.err;
     return;
   }
   if (a.gen.task == GEN_NEW) {
     if (o.newImage.empty()) return;
+    a.genResult = 2;
     if (a.gen.asLayer && a.hasImage) addImageLayer(a, o.newImage);
     else openImage(a, o.newImage);
     return;
@@ -2290,6 +2341,7 @@ static void finishGen(App& a) {
   a.selLayer = last;
   a.genMask.clear();
   a.genUndo.clear();
+  a.genResult = 1;
   a.er.changed = true;
   a.er.commit = T_ToolGen;
   if (a.gen.task == GEN_MOVE) {
@@ -2300,45 +2352,190 @@ static void finishGen(App& a) {
   }
 }
 
+// ---- card pieces
+static void genStepHeader(App& a, int n, int title) {
+  float s = a.scale;
+  ImGui::Dummy(ImVec2(0, 6.f * s));
+  ImDrawList* dl = ImGui::GetWindowDrawList();
+  ImVec2 p = ImGui::GetCursorScreenPos();
+  float r = 9.f * s, lh = ImGui::GetTextLineHeight();
+  ImVec2 c(p.x + r, p.y + lh * 0.5f);
+  dl->AddCircleFilled(c, r, pal::kAccent);
+  char num[4];
+  snprintf(num, sizeof(num), "%d", n);
+  ImVec2 ns = ImGui::CalcTextSize(num);
+  dl->AddText(ImVec2(c.x - ns.x * 0.5f, c.y - ns.y * 0.5f), pal::kOnAccent, num);
+  ImGui::SetCursorScreenPos(ImVec2(p.x + 2 * r + 8.f * s, p.y));
+  ImGui::PushFont(g_fontBold);
+  ImGui::TextUnformatted(tr(title));
+  ImGui::PopFont();
+}
+
+static void genDotLine(App& a, ImU32 dot, ImU32 col, const std::string& text) {
+  float s = a.scale;
+  ImVec2 p = ImGui::GetCursorScreenPos();
+  float lh = ImGui::GetTextLineHeight();
+  ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(p.x + 5.f * s, p.y + lh * 0.5f), 4.5f * s, dot);
+  ImGui::SetCursorScreenPos(ImVec2(p.x + 16.f * s, p.y));
+  ImGui::PushStyleColor(ImGuiCol_Text, col);
+  ImGui::PushTextWrapPos(0.f);
+  ImGui::TextUnformatted(text.c_str());
+  ImGui::PopTextWrapPos();
+  ImGui::PopStyleColor();
+}
+
+static const ImU32 kGenGreen = IM_COL32(110, 190, 120, 255);
+
+// Connection line: not connected / checking / connected with spending and credit / key rejected.
+static void genStatus(App& a) {
+  if (a.orKey.empty()) {
+    genDotLine(a, pal::kFaint, pal::kMuted, tr(T_GenNoKey));
+    return;
+  }
+  std::string masked = orouter::maskKey(a.orKey);
+  switch (a.orKeyState) {
+    case 2: {
+      std::string t = std::string(tr(T_GenConnected)) + "  " + masked;
+      char b[96];
+      if (a.orInfo.usage >= 0) {
+        snprintf(b, sizeof(b), tr(T_GenSpent), a.orInfo.usage);
+        t += "  \xc2\xb7  " + std::string(b);
+      }
+      genDotLine(a, kGenGreen, pal::kText, t);
+      if (a.orInfo.remaining >= 0) {  // own line: a wrapped "$0." / "10" reads wrong
+        snprintf(b, sizeof(b), tr(T_GenLeft), a.orInfo.remaining);
+        genDotLine(a, a.orInfo.remaining < 0.05 ? pal::kAccent : kGenGreen, pal::kText, b);
+      }
+      if (a.orInfo.freeTier) {
+        std::string f = tr(T_GenFreeTier);
+        if (a.orInfo.freeLeft >= 0) {
+          snprintf(b, sizeof(b), tr(T_GenFreeLeftN), a.orInfo.freeLeft);
+          f += "  \xc2\xb7  " + std::string(b);
+        }
+        genDotLine(a, pal::kAccent, pal::kMuted, f);
+      }
+      break;
+    }
+    case 3: genDotLine(a, pal::kAccent, pal::kAccent, std::string(tr(T_GenKeyRejected)) + "  " + masked); break;
+    case 4: genDotLine(a, pal::kFaint, pal::kMuted, std::string(tr(T_GenOffline)) + "  " + masked); break;
+    default: genDotLine(a, pal::kFaint, pal::kMuted, std::string(tr(T_GenChecking)) + "  " + masked); break;
+  }
+}
+
+// A failure, in plain words, with the button that fixes it.
+static void genErrorBox(App& a) {
+  if (a.genErr.empty() || a.gen.active) return;
+  float s = a.scale;
+  int kind = a.genErr == "!prompt" ? -1 : orouter::errorKind(a.genErr);
+  int msg = T_GenErrOther;
+  switch (kind) {
+    case -1: msg = T_GenNeedPrompt; break;
+    case orouter::ERR_KEY: msg = T_GenErrKey; break;
+    case orouter::ERR_CREDIT: msg = T_GenErrCredit; break;
+    case orouter::ERR_BUSY: msg = T_GenErrBusy; break;
+    case orouter::ERR_TIMEOUT: msg = T_GenErrTimeout; break;
+    case orouter::ERR_NETWORK: msg = T_GenErrNet; break;
+    case orouter::ERR_REFUSED: msg = T_GenErrRefused; break;
+    case orouter::ERR_NEED_AREA: msg = T_GenNeedArea; break;
+    case orouter::ERR_NO_CLIP: msg = T_GenErrNoClip; break;
+    case orouter::ERR_NEED_EDITS: msg = T_GenNeedEdits; break;
+    default: break;
+  }
+  ImGui::Dummy(ImVec2(0, 4.f * s));
+  ImVec2 p0 = ImGui::GetCursorScreenPos();
+  float w = ImGui::GetContentRegionAvail().x;
+  ImDrawList* dl = ImGui::GetWindowDrawList();
+  dl->ChannelsSplit(2);
+  dl->ChannelsSetCurrent(1);
+  ImGui::Indent(10.f * s);
+  ImGui::Dummy(ImVec2(0, 4.f * s));
+  ImGui::PushFont(g_fontBold);
+  ImGui::PushStyleColor(ImGuiCol_Text, pal::kAccent);
+  ImGui::TextUnformatted(tr(T_GenErrTitle));
+  ImGui::PopStyleColor();
+  ImGui::PopFont();
+  ImGui::PushTextWrapPos(p0.x + w - 10.f * s);
+  ImGui::TextUnformatted(tr(msg));
+  if (kind == orouter::ERR_OTHER || kind == orouter::ERR_REFUSED || kind == orouter::ERR_BUSY || kind == orouter::ERR_CREDIT) {
+    ImGui::PushStyleColor(ImGuiCol_Text, pal::kFaint);
+    ImGui::TextUnformatted(a.genErr.substr(0, 300).c_str());  // OpenRouter's own words, for support
+    ImGui::PopStyleColor();
+  }
+  ImGui::PopTextWrapPos();
+  if (kind == orouter::ERR_KEY && uiPill(trId(T_GenKeyChange, "gekey"), false)) a.orEditKey = true;
+  if (kind == orouter::ERR_CREDIT) {
+    if (uiPill(trId(T_GenAddCredit, "gecred"), false)) orouter::openCreditsPage();
+    ImGui::SameLine();
+    if (uiPill(trId(T_GenFreeOnly, "gefree"), false)) {
+      a.orFreeOnly = true;
+      for (const orouter::Model& m : a.orModels)
+        if (m.free && (m.edits || a.genTask == GEN_NEW)) {
+          a.orModel = m.id;
+          break;
+        }
+    }
+  }
+  ImGui::Dummy(ImVec2(0, 4.f * s));
+  ImGui::Unindent(10.f * s);
+  ImVec2 p1(p0.x + w, ImGui::GetCursorScreenPos().y);
+  dl->ChannelsSetCurrent(0);
+  dl->AddRectFilled(p0, p1, IM_COL32(226, 82, 54, 26), 3.f * s);
+  dl->AddRect(p0, p1, pal::kAccent, 3.f * s, 0, 1.f);
+  dl->ChannelsMerge();
+}
+
+static void drawGenKeyForm(App& a) {
+  genStepHeader(a, 1, T_GenStepKey);
+  uiHint(tr(T_GenKeyHow));
+  ImGui::SetNextItemWidth(-FLT_MIN);
+  bool enter = ImGui::InputTextWithHint("##orkey", "sk-or-v1-...", a.orKeyBuf, sizeof(a.orKeyBuf),
+                                        ImGuiInputTextFlags_Password | ImGuiInputTextFlags_EnterReturnsTrue);
+  if (uiPrimaryButton(trId(T_GenKeySave, "orsave"), ImVec2(0, 0)) || enter) {
+    std::string k = a.orKeyBuf, err;
+    while (!k.empty() && (k.back() == ' ' || k.back() == '\n' || k.back() == '\r')) k.pop_back();
+    while (!k.empty() && k[0] == ' ') k.erase(0, 1);
+    if (!orouter::plausibleKey(k)) {
+      showToast(a, tr(T_GenKeyBad));
+    } else if (!orouter::saveKey(k, err)) {
+      showToast(a, err);
+    } else {
+      a.orKey = k;
+      a.orEditKey = false;
+      a.orKeyState = 0;
+      a.genErr.clear();
+      genCheckKey(a);
+      showToast(a, tr(T_GenKeySaved));
+    }
+    orouter::wipe(a.orKeyBuf, sizeof(a.orKeyBuf));
+  }
+  ImGui::SameLine();
+  if (uiPill(trId(T_GenKeyGet, "orget"), false)) orouter::openKeysPage();
+  if (a.orEditKey && !a.orKey.empty()) {
+    ImGui::SameLine();
+    if (uiPill(trId(T_GenCancel, "orkc"), false)) a.orEditKey = false;
+  }
+}
+
 static void drawGenCard(App& a) {
   float s = a.scale;
   genEnsureKey(a);
   genSyncPhoto(a);
-  genPollModels(a);
   uiCardBegin("##gencard", tr(T_GenTitle), false);
+  uiHint(tr(T_GenIntro));
+  genStatus(a);
   if (a.orKey.empty() || a.orEditKey) {
-    uiHint(tr(T_GenKeyHint));
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    ImGui::InputTextWithHint("##orkey", "sk-or-v1-...", a.orKeyBuf, sizeof(a.orKeyBuf), ImGuiInputTextFlags_Password);
-    if (uiPrimaryButton(trId(T_GenKeySave, "orsave"))) {
-      std::string k = a.orKeyBuf, err;
-      while (!k.empty() && (k.back() == ' ' || k.back() == '\n' || k.back() == '\r')) k.pop_back();
-      while (!k.empty() && k[0] == ' ') k.erase(0, 1);
-      if (!orouter::plausibleKey(k)) {
-        showToast(a, tr(T_GenKeyBad));
-      } else if (!orouter::saveKey(k, err)) {
-        showToast(a, err);
-      } else {
-        a.orKey = k;
-        a.orEditKey = false;
-        showToast(a, tr(T_GenKeySaved));
-      }
-      orouter::wipe(a.orKeyBuf, sizeof(a.orKeyBuf));
-    }
-    ImGui::SameLine();
-    if (uiPill(trId(T_GenKeyGet, "orget"), false))
-      orouter::openKeysPage();
-    if (a.orEditKey && !a.orKey.empty()) {
-      ImGui::SameLine();
-      if (uiPill(trId(T_GenCancel, "orkc"), false)) a.orEditKey = false;
-    }
+    drawGenKeyForm(a);
     if (!a.genMask.empty() && uiPill(trId(T_GenClearArea, "gclr0"), false)) a.genMask.clear();
+    uiHint(tr(T_GenPrivacy));
     uiCardEnd();
     return;
   }
   genEnsureModels(a);
+  bool busy = a.gen.active;
+  ImGui::BeginDisabled(busy);
 
-  // Task
+  // 1 task
+  genStepHeader(a, 1, T_GenStep1);
   const int taskKeys[GEN_TASK_COUNT] = {T_GenTaskEdit, T_GenTaskRemove, T_GenTaskHigh, T_GenTaskMove, T_GenTaskNew};
   const int order[GEN_TASK_COUNT] = {GEN_EDIT, GEN_REMOVE, GEN_MOVE, GEN_HIGHLIGHT, GEN_NEW};
   float avail = ImGui::GetContentRegionAvail().x, used = 0;
@@ -2350,19 +2547,36 @@ static void drawGenCard(App& a) {
     else if (k) used = 0;
     used += w + ImGui::GetStyle().ItemSpacing.x;
     ImGui::PushID(t);
-    if (uiPill(lab, a.genTask == t)) a.genTask = t;
+    if (uiPill(lab, a.genTask == t)) {
+      a.genTask = t;
+      a.genErr.clear();
+    }
     ImGui::PopID();
   }
   const int hints[GEN_TASK_COUNT] = {T_GenHintEdit, T_GenHintRemove, T_GenHintHigh, T_GenHintMove, T_GenHintNew};
   uiHint(tr(hints[a.genTask]));
   bool needEdits = a.genTask != GEN_NEW;
 
-  // Model
-  ImGui::Dummy(ImVec2(0, 2.f * s));
-  ImGui::TextUnformatted(tr(T_GenModel));
+  // 2 model
+  genStepHeader(a, 2, T_GenStep2);
   const orouter::Model* cur = genModel(a);
   std::string label = cur ? cur->name : std::string(a.orList.active ? tr(T_GenLoading) : tr(T_GenNoModels));
   if (cur && cur->free) label += std::string("  [") + tr(T_GenFree) + "]";
+  auto tagsOf = [&](const orouter::Model& m, bool* paidOut) {
+    std::string tags;
+    if (m.free) tags += tr(T_GenFree);
+    bool paid = false;
+    std::string pt = orouter::priceText(m, needEdits, a.genHiRes, &paid);
+    if (!pt.empty()) {
+      char pb[64];
+      snprintf(pb, sizeof(pb), tr(T_GenPerImage), pt.c_str());
+      tags += (tags.empty() ? "" : "  ") + std::string(pb);
+      if (paid) tags += std::string(" (") + tr(T_GenPaidBefore) + ")";
+    }
+    tags += std::string(tags.empty() ? "" : "  ") + tr(m.edits ? T_GenEdits : T_GenTextOnly);
+    if (paidOut) *paidOut = paid;
+    return tags;
+  };
   ImGui::SetNextItemWidth(-FLT_MIN);
   if (ImGui::BeginCombo("##ormodel", label.c_str(), ImGuiComboFlags_HeightLarge)) {
     ImGui::Checkbox(tr(T_GenFreeOnly), &a.orFreeOnly);
@@ -2373,21 +2587,13 @@ static void drawGenCard(App& a) {
       ImGui::BeginDisabled(!usable);
       if (ImGui::Selectable(m.name.c_str(), m.id == a.orModel)) {
         a.orModel = m.id;
+        a.genErr.clear();
         orouter::saveChosenModel(m.id);
       }
       ImGui::EndDisabled();
-      std::string tags;
-      if (m.free) tags += tr(T_GenFree);
-      std::string pt = orouter::priceText(m, needEdits, a.genHiRes);
-      if (!pt.empty()) {
-        char pb[64];
-        snprintf(pb, sizeof(pb), tr(T_GenPerImage), pt.c_str());
-        tags += (tags.empty() ? "" : "  ") + std::string(pb);
-      }
-      tags += std::string(tags.empty() ? "" : "  ") + tr(m.edits ? T_GenEdits : T_GenTextOnly);
       ImGui::SameLine(0, 10.f * s);
       ImGui::PushStyleColor(ImGuiCol_Text, m.free ? pal::kAccent : pal::kMuted);
-      ImGui::TextUnformatted(tags.c_str());
+      ImGui::TextUnformatted(tagsOf(m, nullptr).c_str());
       ImGui::PopStyleColor();
       ImGui::PopID();
     }
@@ -2395,18 +2601,9 @@ static void drawGenCard(App& a) {
   }
   if (cur) {
     ImGui::PushStyleColor(ImGuiCol_Text, cur->free ? pal::kAccent : pal::kMuted);
-    std::string tags = cur->free ? tr(T_GenFree) : "";
-    bool paid = false;
-    std::string pt = orouter::priceText(*cur, needEdits, a.genHiRes, &paid);
-    if (!pt.empty()) {
-      char pb[64];
-      snprintf(pb, sizeof(pb), tr(T_GenPerImage), pt.c_str());
-      tags += (tags.empty() ? "" : "  ") + std::string(pb);
-      if (paid) tags += std::string(" (") + tr(T_GenPaidBefore) + ")";
-    }
-    tags += std::string(tags.empty() ? "" : "  ") + tr(cur->edits ? T_GenEdits : T_GenTextOnly);
-    ImGui::TextUnformatted(tags.c_str());
+    ImGui::TextUnformatted(tagsOf(*cur, nullptr).c_str());
     ImGui::PopStyleColor();
+    if (needEdits && !cur->edits) genDotLine(a, pal::kAccent, pal::kAccent, tr(T_GenNeedEdits));
     if (!cur->resolutions.empty()) {  // picture size: the price follows it
       if (uiPill(trId(T_GenRes1K, "gr1"), !a.genHiRes)) a.genHiRes = false;
       ImGui::SameLine();
@@ -2417,20 +2614,28 @@ static void drawGenCard(App& a) {
   ImGui::BeginDisabled(a.orList.active);
   if (uiPill(trId(T_GenRefresh, "orref"), false)) genFetchModels(a);
   ImGui::EndDisabled();
-  if (a.orList.active) {
-    ImGui::SameLine();
-    ImGui::TextUnformatted(tr(T_GenLoading));
-  }
+  if (a.orList.active) genDotLine(a, pal::kFaint, pal::kMuted, tr(T_GenLoading));
   uiHint(tr(T_GenPriceNote));
 
-  // Prompt
-  ImGui::Dummy(ImVec2(0, 2.f * s));
+  // 3 prompt
+  genStepHeader(a, 3, T_GenStep3);
   bool optional = a.genTask == GEN_REMOVE || a.genTask == GEN_MOVE || a.genTask == GEN_HIGHLIGHT;
+  ImGui::PushStyleColor(ImGuiCol_Text, pal::kMuted);
   ImGui::TextUnformatted(tr(optional ? T_GenPromptOpt : T_GenPrompt));
-  ImGui::InputTextMultiline("##genprompt", a.genPrompt, sizeof(a.genPrompt), ImVec2(-FLT_MIN, 64.f * s));
+  ImGui::PopStyleColor();
+  if (ImGui::InputTextMultiline("##genprompt", a.genPrompt, sizeof(a.genPrompt), ImVec2(-FLT_MIN, 64.f * s))) a.genErr.clear();
+  if (!a.genPrompt[0]) {
+    const int ex[GEN_TASK_COUNT] = {T_GenExEdit, T_GenExRemove, T_GenExHigh, T_GenExMove, T_GenExNew};
+    ImGui::PushStyleColor(ImGuiCol_Text, pal::kFaint);
+    ImGui::PushTextWrapPos(0.f);
+    ImGui::TextUnformatted(tr(ex[a.genTask]));
+    ImGui::PopTextWrapPos();
+    ImGui::PopStyleColor();
+  }
 
+  // 4 area (or the shape of a new picture)
   if (a.genTask == GEN_NEW) {
-    ImGui::TextUnformatted(tr(T_GenAspect));
+    genStepHeader(a, 4, T_GenStep4New);
     const char* asp[5] = {"1:1", "4:3", "3:4", "16:9", "9:16"};
     for (int k = 0; k < 5; k++) {
       if (k) ImGui::SameLine();
@@ -2439,6 +2644,14 @@ static void drawGenCard(App& a) {
       ImGui::PopID();
     }
   } else {
+    genStepHeader(a, 4, T_GenStep4);
+    int state = !a.genMask.empty() ? T_GenAreaDone
+                : a.genTask == GEN_EDIT ? T_GenAreaWhole
+                : a.genTask == GEN_HIGHLIGHT ? T_GenAreaAuto
+                                           : T_GenAreaNone;
+    bool missing = a.genMask.empty() && (a.genTask == GEN_REMOVE || a.genTask == GEN_MOVE);
+    genDotLine(a, !a.genMask.empty() ? IM_COL32(120, 160, 255, 255) : missing ? pal::kAccent : pal::kFaint,
+               missing ? pal::kAccent : pal::kMuted, tr(state));
     EditResult dummy;
     uiSlider(dummy, T_BrushSize, "gsz", &a.brushPx, 4, 800, 60, "%.0f px");
     if (uiPill(trId(T_GenPaint, "gpaint"), !a.genErase)) a.genErase = false;
@@ -2451,43 +2664,69 @@ static void drawGenCard(App& a) {
         a.genMask.clear();
       }
     }
-    ImGui::PushStyleColor(ImGuiCol_Text, pal::kMuted);
-    ImGui::TextUnformatted(tr(a.genMask.empty() ? (a.genTask == GEN_EDIT ? T_GenWhole : T_GenNeedArea) : T_GenPainted));
-    if (!a.genUndo.empty()) ImGui::TextUnformatted(tr(T_GenUndoHint));
-    ImGui::PopStyleColor();
+    if (!a.genUndo.empty()) {
+      ImGui::PushStyleColor(ImGuiCol_Text, pal::kFaint);
+      ImGui::TextUnformatted(tr(T_GenUndoHint));
+      ImGui::PopStyleColor();
+    }
   }
+  ImGui::EndDisabled();
 
-  ImGui::Dummy(ImVec2(0, 4.f * s));
-  if (a.gen.active) {
-    char b[160];
-    snprintf(b, sizeof(b), tr(T_GenBusy), (int)(glfwGetTime() - a.gen.started));
-    ImGui::PushStyleColor(ImGuiCol_Text, pal::kAccent);
-    ImGui::TextUnformatted(b);
+  // Go / progress
+  ImGui::Dummy(ImVec2(0, 8.f * s));
+  if (busy) {
+    int secs = (int)(glfwGetTime() - a.gen.started);
+    char b[256];
+    int st = a.gen.stage;
+    if (st == GEN_STAGE_WAIT) snprintf(b, sizeof(b), tr(T_GenStageWait), a.gen.modelName.c_str(), secs);
+    else snprintf(b, sizeof(b), tr(st == GEN_STAGE_PLACE ? T_GenStagePlace : T_GenStagePrep), secs);
+    genDotLine(a, pal::kAccent, pal::kAccent, b);
+    ImGui::PushStyleColor(ImGuiCol_Text, pal::kFaint);
+    ImGui::TextUnformatted(tr(T_GenStageNote));
     ImGui::PopStyleColor();
-    ImGui::SameLine();
-    if (uiPill(trId(T_GenCancel, "gcan"), false)) orouter::cancel();
+    if (uiPill(trId(T_GenCancel, "gcan"), false)) orouter::cancel(orouter::kGenerate);
   } else {
-    ImGui::BeginDisabled(!cur || (a.genTask != GEN_NEW && !a.hasImage));
+    std::string price;
+    if (cur) price = cur->free ? std::string(tr(T_GenFree)) : orouter::priceText(*cur, needEdits, a.genHiRes);
+    char go[160];
+    ImGui::BeginDisabled(!cur || (a.genTask != GEN_NEW && !a.hasImage) || a.orKeyState == 3);
     if (a.genTask == GEN_NEW) {
-      if (uiPrimaryButton(trId(T_GenOpenNew, "gnew"), ImVec2(0, 0))) genStart(a, false);
+      snprintf(go, sizeof(go), tr(T_GenGoPrice), price.c_str());
+      std::string lab = std::string(tr(T_GenOpenNew)) + (price.empty() ? "" : "  " + price) + "###gnew";
+      if (uiPrimaryButton(lab.c_str(), ImVec2(0, 0))) genStart(a, false);
       if (a.hasImage) {
         ImGui::SameLine();
         if (uiPill(trId(T_GenAsLayer, "glay"), false)) genStart(a, true);
       }
-    } else if (uiPrimaryButton(trId(T_GenGo, "ggo"), ImVec2(-FLT_MIN, 0))) {
-      genStart(a, false);
+    } else {
+      snprintf(go, sizeof(go), tr(T_GenGoPrice), price.c_str());
+      std::string lab = std::string(go) + "###ggo";
+      if (uiPrimaryButton(lab.c_str(), ImVec2(-FLT_MIN, 0))) genStart(a, false);
     }
     ImGui::EndDisabled();
   }
-  if (a.genLastCost >= 0) {
-    char b[96];
-    snprintf(b, sizeof(b), tr(T_GenCost), a.genLastCost);
-    ImGui::PushStyleColor(ImGuiCol_Text, pal::kMuted);
-    ImGui::TextUnformatted(b);
-    ImGui::PopStyleColor();
+  genErrorBox(a);
+  if (a.genResult && !busy && a.genErr.empty()) {
+    std::string done = tr(a.genResult == 2 ? T_GenResultNew : T_GenResultLayer);
+    if (a.genLastCost >= 0) {
+      char b[96];
+      snprintf(b, sizeof(b), tr(T_GenCost), a.genLastCost);
+      done += "  " + std::string(b);
+    }
+    genDotLine(a, kGenGreen, pal::kText, done);
   }
+
+  ImGui::Dummy(ImVec2(0, 6.f * s));
   uiHint(tr(T_GenPrivacy));
   if (uiPill(trId(T_GenKeyChange, "orchg"), false)) a.orEditKey = true;
+  ImGui::SameLine();
+  if (uiPill(trId(T_GenRemoveKey, "orrm"), false)) {
+    orouter::clearKey();
+    orouter::wipe(&a.orKey[0], a.orKey.size());
+    a.orKey.clear();
+    a.orKeyState = 0;
+    a.orInfo = orouter::KeyInfo();
+  }
   uiCardEnd();
 }
 
@@ -3607,6 +3846,18 @@ static void openComposeDraw(App& a) {
   a.layerTool = 5;
 }
 
+// The AI page's pointer to the tool (it lives on the Compose page, where areas are painted).
+static void drawGenTeaser(App& a) {
+  genEnsureKey(a);
+  uiHint(tr(T_GenTeaser));
+  genStatus(a);
+  ImGui::Dummy(ImVec2(0, 2.f * a.scale));
+  if (uiPrimaryButton(trId(T_GenOpenTool, "genopen"))) {
+    setPage(a, PG_LAYERS);
+    a.layerTool = 6;
+  }
+}
+
 static void drawToolPanel(App& a) {
   static const int titles[PG_COUNT] = {T_TitleAI,    T_TitleLight, T_TitleColor, T_TitleDetail,  T_TitleEffects,
                                        T_TitleLocal, T_TitleLayers, T_TitleCrop, T_TitleLooks, T_TitleHistory};
@@ -3641,6 +3892,14 @@ static void drawToolPanel(App& a) {
       uiCardEnd();
       uiCardBegin("##recover", tr(T_Recover), false);
       drawRecoverPanel(a);
+      if (uiPill(trId(T_RecTryGen, "rectry"), false)) {
+        a.genTask = GEN_HIGHLIGHT;
+        setPage(a, PG_LAYERS);
+        a.layerTool = 6;
+      }
+      uiCardEnd();
+      uiCardBegin("##genteaser", tr(T_GenTitle), false);
+      drawGenTeaser(a);
       uiCardEnd();
       uiCardBegin("##aistyle", tr(T_AiStyle), false);
       drawAiStylePanel(a);
@@ -5274,7 +5533,20 @@ int main(int, char**) {
     }
   }
 
-  for (size_t i = 1; i < args.size(); i++)
+  // Developer check of the UI without screen access: --ui-shot <out.png> <photo> <view> opens the
+  // photo, shows a view (ai | gen | gen-demo), renders a while, saves the window as PNG and closes.
+  // gen-demo shows the AI card as connected with a fake key that is never saved or sent.
+  std::string shotOut, shotView;
+  int shotFrames = -1;
+  for (size_t i = 1; i + 3 < args.size(); i++)
+    if (args[i] == "--ui-shot") {
+      shotOut = args[i + 1];
+      shotView = args[i + 3];
+      openImage(a, args[i + 2]);
+      shotFrames = 0;
+      break;
+    }
+  for (size_t i = 1; i < args.size() && shotFrames < 0; i++)
     if (args[i].rfind("--", 0) != 0) {
       if (isDirectory(args[i])) {  // a folder opens straight into AI cull
         a.mode = 1;
@@ -5288,7 +5560,7 @@ int main(int, char**) {
   int framesLeft = 3;
   while (!glfwWindowShouldClose(a.win)) {
     bool busy = a.load.active || a.exp.stage != 0 || (!a.toast.empty() && Clock::now() < a.toastUntil) ||
-                a.cull.busy() || a.styles.creating() || a.segJob.active || a.recJob.active || a.batch.busy() || a.gen.active || a.orList.active ||
+                a.cull.busy() || a.styles.creating() || a.segJob.active || a.recJob.active || a.batch.busy() || a.gen.active || a.orList.active || a.orCheck.active ||
                 a.agent.animating() || glfwGetTime() < a.agentFlash || a.upd.working();
     if (framesLeft > 0) glfwPollEvents();
     else if (busy) glfwWaitEventsTimeout(0.05);
@@ -5323,6 +5595,7 @@ int main(int, char**) {
     }
     if (a.segJob.active && a.segJob.done) finishSegmentation(a);
     if (a.gen.active && a.gen.done) finishGen(a);
+    genPoll(a);
     if (a.recJob.active && a.recJob.done) finishRecover(a);
     updateMasks(a);
     if (a.hasImage && a.layers.sync(a.params, a.R)) a.maskVer++;
@@ -5354,6 +5627,22 @@ int main(int, char**) {
       applyTextSize(a);
       framesLeft = std::max(framesLeft, 2);
     }
+    if (shotFrames >= 0) {
+      framesLeft = std::max(framesLeft, 1);
+      if (a.hasImage && !a.load.active && shotFrames++ == 0) {
+        if (shotView == "ai") setPage(a, PG_AI);
+        if (shotView.rfind("gen", 0) == 0) {
+          setPage(a, PG_LAYERS);
+          a.layerTool = 6;
+        }
+        if (shotView == "gen-demo") {
+          a.orKeyLoaded = true;
+          a.orKey = "sk-or-v1-demo-not-a-real-key-0000a1b2";
+          a.orKeyState = 2;
+          a.orInfo.usage = 1.25;
+        }
+      }
+    }
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
@@ -5365,14 +5654,26 @@ int main(int, char**) {
     glClearColor(0.1f, 0.1f, 0.1f, 1.f);
     glClear(GL_COLOR_BUFFER_BIT);
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    if (shotFrames > 90) {  // settled (model list, layers): save the frame and close
+      std::vector<uint8_t> px((size_t)fbw * fbh * 4), flip(px.size());
+      glPixelStorei(GL_PACK_ALIGNMENT, 1);
+      glReadPixels(0, 0, fbw, fbh, GL_RGBA, GL_UNSIGNED_BYTE, px.data());
+      for (int y = 0; y < fbh; y++) std::memcpy(&flip[(size_t)y * fbw * 4], &px[(size_t)(fbh - 1 - y) * fbw * 4], (size_t)fbw * 4);
+      for (size_t i = 3; i < flip.size(); i += 4) flip[i] = 255;
+      std::string err;
+      writePngRgba(shotOut, flip.data(), fbw, fbh, err);
+      glfwSetWindowShouldClose(a.win, 1);
+      shotFrames = -1;
+    }
     glfwSwapBuffers(a.win);
   }
 
   if (a.load.active) a.load.th.join();
   if (a.segJob.th.joinable()) a.segJob.th.join();
-  if (a.gen.active || a.orList.active) orouter::cancel();
+  if (a.gen.active || a.orList.active || a.orCheck.active) orouter::cancelAll();  // closes open requests: no wait on the network
   if (a.gen.th.joinable()) a.gen.th.join();
   if (a.orList.th.joinable()) a.orList.th.join();
+  if (a.orCheck.th.joinable()) a.orCheck.th.join();
   if (a.recJob.th.joinable()) a.recJob.th.join();
   a.batch.shutdown();
   a.agent.watch.stop();

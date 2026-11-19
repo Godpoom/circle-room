@@ -29,14 +29,22 @@ std::string appDir() {
   return d;
 }
 
+// Requests in flight, per job, so cancel() can close them (closing wakes a blocked send / read).
+// The flags are reset by resetCancel() on the UI thread before a job starts, never by the job:
+// a Cancel pressed right after Generate can then never be lost.
 std::mutex g_reqM;
-HINTERNET g_req = nullptr;
-std::atomic<bool> g_cancel{false};
+struct Live {
+  HINTERNET h;
+  int job;
+};
+std::vector<Live> g_live;
+std::atomic<bool> g_cancel[2] = {{false}, {false}};
 
 // HTTPS only. body: request body for POST (empty = GET). Returns false on network errors;
 // status holds the HTTP status otherwise.
 bool https(const wchar_t* method, const std::wstring& host, const std::wstring& path, const std::string& headers,
-           const std::string& body, std::string& resp, int& status, int receiveMs, std::string& err, bool track = true) {
+           const std::string& body, std::string& resp, int& status, int receiveMs, std::string& err, int job) {
+  std::atomic<bool>& cancelled = g_cancel[job];
   resp.clear();
   status = 0;
   std::wstring agent = utf8ToWide(std::string("CircleRoom/") + CR_VERSION_STR);
@@ -51,12 +59,12 @@ bool https(const wchar_t* method, const std::wstring& host, const std::wstring& 
   HINTERNET req = con ? WinHttpOpenRequest(con, method, path.c_str(), nullptr, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES,
                                            WINHTTP_FLAG_SECURE)
                       : nullptr;
-  if (track) {
+  if (req) {
     std::lock_guard<std::mutex> lk(g_reqM);
-    g_req = req;
+    g_live.push_back({req, job});
   }
   bool ok = false;
-  if (req && !g_cancel) {
+  if (req && !cancelled) {
     std::wstring hdr = utf8ToWide(headers);
     BOOL sent = WinHttpSendRequest(req, hdr.empty() ? WINHTTP_NO_ADDITIONAL_HEADERS : hdr.c_str(), (DWORD)-1L,
                                    body.empty() ? WINHTTP_NO_REQUEST_DATA : (LPVOID)body.data(), (DWORD)body.size(),
@@ -70,7 +78,7 @@ bool https(const wchar_t* method, const std::wstring& host, const std::wstring& 
       ok = true;
       for (;;) {
         DWORD rd = 0;
-        if (g_cancel || !WinHttpReadData(req, buf.data(), (DWORD)buf.size(), &rd)) {
+        if (cancelled || !WinHttpReadData(req, buf.data(), (DWORD)buf.size(), &rd)) {
           ok = false;
           break;
         }
@@ -85,18 +93,20 @@ bool https(const wchar_t* method, const std::wstring& host, const std::wstring& 
     }
     if (!ok && err.empty()) {
       DWORD e = GetLastError();
-      err = g_cancel ? "cancelled" : e == ERROR_WINHTTP_TIMEOUT ? "the AI took too long to answer (timeout)"
+      err = cancelled ? "cancelled" : e == ERROR_WINHTTP_TIMEOUT ? "the AI took too long to answer (timeout)"
                                                                  : "network error " + std::to_string(e);
     }
   } else {
-    err = g_cancel ? "cancelled" : "network unavailable";
+    err = cancelled ? "cancelled" : "network unavailable";
   }
-  if (track) {
+  if (req) {  // close it unless cancel() already did
     std::lock_guard<std::mutex> lk(g_reqM);
-    if (g_req == req && req) WinHttpCloseHandle(req);
-    g_req = nullptr;
-  } else if (req) {
-    WinHttpCloseHandle(req);
+    for (size_t i = 0; i < g_live.size(); i++)
+      if (g_live[i].h == req) {
+        WinHttpCloseHandle(req);
+        g_live.erase(g_live.begin() + i);
+        break;
+      }
   }
   if (con) WinHttpCloseHandle(con);
   WinHttpCloseHandle(ses);
@@ -361,16 +371,15 @@ void rememberCost(const std::string& id, bool edit, bool hi, double usd) {
 }
 
 bool fetchModels(std::vector<Model>& out, std::string& err) {
-  g_cancel = false;
   std::string a, b, e2;
   int st = 0;
   const char* hdr = "Accept: application/json\r\n";
-  if (!https(L"GET", L"openrouter.ai", L"/api/v1/images/models", hdr, "", a, st, 30000, err)) return false;
+  if (!https(L"GET", L"openrouter.ai", L"/api/v1/images/models", hdr, "", a, st, 30000, err, kModelList)) return false;
   if (st != 200) {
     err = apiError(a, st);
     return false;
   }
-  if (!https(L"GET", L"openrouter.ai", L"/api/v1/models?output_modalities=image", hdr, "", b, st, 30000, e2) || st != 200)
+  if (!https(L"GET", L"openrouter.ai", L"/api/v1/models?output_modalities=image", hdr, "", b, st, 30000, e2, kModelList) || st != 200)
     b.clear();  // prices are a bonus: the list still works without them
   if (!parseModels(a, b, out)) {
     err = "unexpected model list from OpenRouter";
@@ -381,12 +390,12 @@ bool fetchModels(std::vector<Model>& out, std::string& err) {
   auto worker = [&]() {
     for (size_t i; (i = next++) < out.size();) {
       Model& m = out[i];
-      if (m.free || g_cancel) continue;
+      if (m.free || g_cancel[kModelList]) continue;
       std::string id = m.id, body, e;
       if (id.size() > 5 && id.compare(id.size() - 5, 5, ":free") == 0) id.resize(id.size() - 5);
       int s = 0;
       if (https(L"GET", L"openrouter.ai", utf8ToWide("/api/v1/images/models/" + id + "/endpoints"), hdr, "", body, s, 20000, e,
-                false) &&
+                kModelList) &&
           s == 200)
         parseEndpointPrice(body, m);
     }
@@ -583,7 +592,6 @@ bool parseResult(const std::string& body, Result& out, std::string& err) {
 }
 
 bool generate(const std::string& key, const Request& rq, Result& out, std::string& err) {
-  g_cancel = false;
   if (!plausibleKey(key)) {
     err = "no OpenRouter API key";
     return false;
@@ -593,7 +601,7 @@ bool generate(const std::string& key, const Request& rq, Result& out, std::strin
                     "\r\nContent-Type: application/json\r\nAccept: application/json\r\n"
                     "HTTP-Referer: https://godpoom.github.io/circle-room/\r\nX-Title: Circle Room\r\n";
   int st = 0;
-  bool ok = https(L"POST", L"openrouter.ai", L"/api/v1/images", hdr, body, resp, st, 300000, err);
+  bool ok = https(L"POST", L"openrouter.ai", L"/api/v1/images", hdr, body, resp, st, 300000, err, kGenerate);
   SecureZeroMemory(&hdr[0], hdr.size());
   if (!ok) return false;
   if (st != 200) {
@@ -603,14 +611,84 @@ bool generate(const std::string& key, const Request& rq, Result& out, std::strin
   return parseResult(resp, out, err);
 }
 
-void cancel() {
-  g_cancel = true;
+void resetCancel(Job job) { g_cancel[job] = false; }
+
+void cancel(Job job) {
+  g_cancel[job] = true;
   std::lock_guard<std::mutex> lk(g_reqM);
-  if (g_req) {
-    WinHttpCloseHandle(g_req);  // wakes a send / read that is waiting on the network
-    g_req = nullptr;
-  }
+  for (size_t i = 0; i < g_live.size();)
+    if (g_live[i].job == job) {
+      WinHttpCloseHandle(g_live[i].h);  // wakes a send / read that is waiting on the network
+      g_live.erase(g_live.begin() + i);
+    } else {
+      i++;
+    }
 }
+
+bool cancelled(Job job) { return g_cancel[job]; }
+
+void cancelAll() {
+  cancel(kGenerate);
+  cancel(kModelList);
+}
+
+bool parseKeyInfo(const std::string& body, KeyInfo& out) {
+  Json j;
+  if (!json::parse(body, j)) return false;
+  const Json* d = j.get("data");
+  if (!d || !d->isObj()) return false;
+  out = KeyInfo();
+  out.usage = d->num("usage", -1);
+  out.limit = d->num("limit", -1);
+  out.remaining = d->num("limit_remaining", -1);
+  out.freeTier = d->flag("is_free_tier", false);
+  if (const Json* f = d->get("free_model_daily_requests")) out.freeLeft = (int)f->num("remaining", -1);
+  return true;
+}
+
+bool keyInfo(const std::string& key, KeyInfo& out, std::string& err) {
+  if (!plausibleKey(key)) {
+    err = "API key not accepted (401)";
+    return false;
+  }
+  std::string hdr = "Authorization: Bearer " + key + "\r\nAccept: application/json\r\n", body;
+  int st = 0;
+  bool ok = https(L"GET", L"openrouter.ai", L"/api/v1/key", hdr, "", body, st, 20000, err, kModelList);
+  SecureZeroMemory(&hdr[0], hdr.size());
+  if (!ok) return false;
+  if (st != 200) {
+    err = apiError(body, st);
+    return false;
+  }
+  if (!parseKeyInfo(body, out)) {
+    err = "unexpected answer from OpenRouter";
+    return false;
+  }
+  return true;
+}
+
+std::string maskKey(const std::string& key) {
+  if (key.size() < 14) return "sk-or-...";
+  return key.substr(0, 9) + "..." + key.substr(key.size() - 4);
+}
+
+int errorKind(const std::string& e) {
+  auto has = [&](const char* s) { return e.find(s) != std::string::npos; };
+  if (e.empty()) return ERR_NONE;
+  if (has("cancelled")) return ERR_CANCELLED;
+  if (has("(401)") || has("(403)") || has("no OpenRouter API key")) return ERR_KEY;
+  if (has("(402)")) return ERR_CREDIT;
+  if (has("(429)") || has("OpenRouter 503") || has("OpenRouter 502")) return ERR_BUSY;
+  if (has("timeout")) return ERR_TIMEOUT;
+  if (has("network")) return ERR_NETWORK;
+  if (has("returned no image") || has("no image data") || has("refused")) return ERR_REFUSED;
+  if (has("no blown-out area")) return ERR_NO_CLIP;  // before "paint over": its message says both
+  if (has("paint over")) return ERR_NEED_AREA;
+  if (has("cannot edit photos")) return ERR_NEED_EDITS;
+  return ERR_OTHER;
+}
+
+void openCreditsPage() { ShellExecuteW(nullptr, L"open", L"https://openrouter.ai/settings/credits", nullptr, nullptr, SW_SHOWNORMAL); }
 
 void openKeysPage() { ShellExecuteW(nullptr, L"open", L"https://openrouter.ai/keys", nullptr, nullptr, SW_SHOWNORMAL); }
 void wipe(void* p, size_t n) { SecureZeroMemory(p, n); }

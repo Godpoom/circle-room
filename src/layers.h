@@ -26,10 +26,11 @@ struct Stroke {
 struct LayerAsset {
   int id = 0;
   std::string path, err;
-  int kind = 0;               // LAYER_PHOTO / LAYER_TEXT / LAYER_VECTOR
-  std::vector<uint8_t> genAlpha;  // text / vector: the rendered alpha, the mask's base
+  int kind = 0;               // LAYER_PHOTO / LAYER_TEXT / LAYER_VECTOR / LAYER_AI
+  std::vector<uint8_t> genAlpha;  // text / vector / AI: the rendered alpha, the mask's base
   std::thread th;
   std::atomic<int> stage{0};  // 1 decoding, 2 pixels ready, 3 segmenting, 4 done, -1 failed
+  std::atomic<bool> finished{false};  // the worker has returned (joining is instant)
   std::vector<uint8_t> rgb;   // oriented sRGB, freed once on the GPU
   int w = 0, h = 0;
   bool uploaded = false, segOk = false, maskOn = false;
@@ -73,6 +74,11 @@ class LayerStore {
 
  private:
   std::map<int, std::unique_ptr<LayerAsset>> assets_;
+  // Replaced or cleared layers whose worker may still run (AI cut-outs take seconds): kept here
+  // and joined once finished, so the UI thread never waits on them.
+  std::vector<std::unique_ptr<LayerAsset>> retired_;
+  void retire(std::unique_ptr<LayerAsset>& a);
+  void reap();
   std::map<int, std::vector<Stroke>> strokes_;
   std::map<int, int> gen_;  // bumped whenever a layer's stroke list is cut back
 };

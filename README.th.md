@@ -340,6 +340,8 @@ CircleRoom.exe --ai-style <โฟลเดอร์ Reference> in.jpg out.jpg [-
 CircleRoom.exe --make-style <ชื่อ> <โฟลเดอร์ภาพ>
 CircleRoom.exe --ai-search <โฟลเดอร์> "<ข้อความ>" [--top N]
 CircleRoom.exe --ai-auto in.jpg out.jpg [--no-layers]
+CircleRoom.exe --ai-models                 (รายชื่อโมเดลภาพของ OpenRouter พร้อมราคาต่อรูป)
+CircleRoom.exe --ui-shot out.png in.jpg ai|gen|gen-demo   (บันทึกภาพหน้าจอของมุมมองนั้นแล้วปิด)
 CircleRoom.exe --ai-recover in.jpg out.jpg [--strength 0-100] [--no-regions]
 CircleRoom.exe --ai-mask in.jpg <หมายเลขส่วน 0=คน 1=ท้องฟ้า 2=ถนน ...> mask.png [--invert] [--feather F]
 CircleRoom.exe --ai-tokcheck <ไฟล์ทดสอบ>   (ตรวจ tokenizer เทียบกับ Python)

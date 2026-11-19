@@ -321,6 +321,8 @@ CircleRoom.exe --ai-recover in.jpg out.jpg [--strength 0-100] [--no-regions]
 CircleRoom.exe --ai-mask in.jpg <region 0=people 1=sky 2=road ...> mask.png [--invert] [--feather F]
 CircleRoom.exe --ai-tokcheck <test file>   (checks the tokenizers against Python)
 CircleRoom.exe --selftest                  (safety and regression checks)
+CircleRoom.exe --ai-models                 (OpenRouter image models with price per picture)
+CircleRoom.exe --ui-shot out.png in.jpg ai|gen|gen-demo   (saves a screenshot of a view and closes)
 ```
 `tools/export_tokenizers.py` builds `mt_vocab.bin` and `clip_bpe.bin`; `tools/make_prompts.py` builds the scene prompts in `prompts.bin`.
 

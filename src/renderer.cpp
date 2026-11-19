@@ -1,6 +1,7 @@
 #include "renderer.h"
 
 #include <algorithm>
+#include <mutex>
 #include <cmath>
 #include <cstring>
 
@@ -322,8 +323,8 @@ static void uploadLevel(int level, int w, int h, const T* rgb, bool is16) {
 static void downsample8(const uint8_t* s, int w, int h, std::vector<uint8_t>& d, int nw, int nh) {
   static uint16_t s2l[256];
   static uint8_t l2s[4096];
-  static bool init = false;
-  if (!init) {
+  static std::once_flag once;  // thread-safe: called from worker threads too
+  std::call_once(once, [] {
     for (int i = 0; i < 256; i++) {
       double c = i / 255.0;
       s2l[i] = (uint16_t)std::lround((c <= 0.04045 ? c / 12.92 : std::pow((c + 0.055) / 1.055, 2.4)) * 65535.0);
@@ -332,8 +333,7 @@ static void downsample8(const uint8_t* s, int w, int h, std::vector<uint8_t>& d,
       double l = (i + 0.5) / 4096.0;
       l2s[i] = (uint8_t)std::lround((l <= 0.0031308 ? l * 12.92 : 1.055 * std::pow(l, 1 / 2.4) - 0.055) * 255.0);
     }
-    init = true;
-  }
+  });
   d.resize((size_t)nw * nh * 3);
   for (int y = 0; y < nh; y++) {
     const uint8_t* r0 = s + (size_t)std::min(2 * y, h - 1) * w * 3;

@@ -66,11 +66,35 @@ struct Result {
   std::string mime;
   double cost = -1;  // USD, when OpenRouter reports it
 };
-// Blocking (call from a worker thread). cancel() from any thread aborts it.
+// Blocking (call from a worker thread). cancel(kGenerate) from any thread aborts it.
 bool generate(const std::string& key, const Request& rq, Result& out, std::string& err);
-void cancel();
 
-void openKeysPage();                  // openrouter.ai/keys in the browser
+// Cancelling. Call resetCancel() on the starting thread before launching a job's worker.
+enum Job { kGenerate = 0, kModelList = 1 };
+void resetCancel(Job job);
+void cancel(Job job);
+bool cancelled(Job job);
+void cancelAll();  // on exit
+
+// ---- the key's account, for the status line (GET /api/v1/key; job kModelList)
+struct KeyInfo {
+  double usage = -1;          // USD this key has spent
+  double limit = -1;          // USD cap set on the key (-1 none)
+  double remaining = -1;      // USD left under that cap (-1 no cap)
+  bool freeTier = false;      // the account never bought credit: free models only
+  int freeLeft = -1;          // free-model requests left today (-1 unknown)
+};
+bool keyInfo(const std::string& key, KeyInfo& out, std::string& err);
+bool parseKeyInfo(const std::string& body, KeyInfo& out);
+std::string maskKey(const std::string& key);  // "sk-or-v1-...a1b2"
+
+// What went wrong, from the messages generate() / runGen() return (for a clear message + action).
+enum ErrKind { ERR_NONE, ERR_KEY, ERR_CREDIT, ERR_BUSY, ERR_TIMEOUT, ERR_NETWORK, ERR_REFUSED, ERR_CANCELLED,
+               ERR_NEED_AREA, ERR_NO_CLIP, ERR_NEED_EDITS, ERR_OTHER };
+int errorKind(const std::string& err);
+
+void openKeysPage();
+void openCreditsPage();                  // openrouter.ai/keys in the browser
 void wipe(void* p, size_t n);         // clears a buffer that held the key
 
 // pieces for the self-test

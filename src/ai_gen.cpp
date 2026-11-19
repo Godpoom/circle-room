@@ -14,6 +14,7 @@
 #include "ai/wic_decode.h"
 #include "image_io.h"
 #include "layer_content.h"
+#include "layers.h"  // loadLayerPixels
 #include "platform_win.h"
 #include "updater.h"  // sha256Hex
 
@@ -76,6 +77,10 @@ bool writeLayerPng(const std::string& dir, const std::vector<uint8_t>& rgba, int
 // Asks the model and returns its picture resampled to outW x outH.
 bool ask(const GenInput& in, const std::string& prompt, const std::vector<orouter::Input>& imgs, float ratio, int outW, int outH,
          const std::string& tmpDir, ai::SmallImage& res, GenOutput& out) {
+  if (!g_hook && orouter::cancelled(orouter::kGenerate)) {  // cancelled while the photo was being prepared
+    out.err = "cancelled";
+    return false;
+  }
   orouter::Request rq;
   rq.model = in.model.id;
   rq.prompt = prompt;
@@ -84,8 +89,10 @@ bool ask(const GenInput& in, const std::string& prompt, const std::vector<oroute
   rq.format = pickFormat(in.model);
   rq.images = imgs;
   orouter::Result r;
+  if (in.stage) *in.stage = GEN_STAGE_WAIT;
   if (!(g_hook ? g_hook(rq, r, out.err) : orouter::generate(in.key, rq, r, out.err))) return false;
   if (r.cost >= 0) out.cost = std::max(0.0, out.cost) + r.cost;
+  if (in.stage) *in.stage = GEN_STAGE_PLACE;
   ai::SmallImage got;
   if (!decodeResult(r, tmpDir, got, out.err)) return false;
   if (outW <= 0 || outH <= 0) {
@@ -215,6 +222,7 @@ std::string picturesSubDir(const char* name) {
 // ---------------------------------------------------------------- the job
 bool runGen(const GenInput& in, GenOutput& out) {
   out = GenOutput();
+  if (in.stage) *in.stage = GEN_STAGE_PREPARE;
   try {
     if (in.task == GEN_NEW) {
       std::string dir = picturesAiDir();
@@ -234,7 +242,9 @@ bool runGen(const GenInput& in, GenOutput& out) {
     }
 
     ai::SmallImage img;
-    if (!ai::decodeScaled(in.photo, kDecodeMax, img, nullptr, out.err)) return false;
+    // The same pixels the editor and the magic eraser start from (for RAW: the linear decode, not
+    // the camera's JPEG preview, whose tones differ): the patch then matches the photo under it.
+    if (!loadLayerPixels(in.photo, kDecodeMax, img.rgb, img.w, img.h, out.err)) return false;
     const int W = img.w, H = img.h;
     const std::string dir = layerContentDir(in.photo);
     std::vector<float> m;
