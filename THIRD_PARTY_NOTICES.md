@@ -1,5 +1,6 @@
 # Third-party components
 
+Circle Room's own code is under the MIT License ([LICENSE](LICENSE)).
 Circle Room bundles the components below. Each stays under its own license; the **full license
 texts are in the [`LICENSES/`](LICENSES) folder**, which also ships inside every release zip.
 

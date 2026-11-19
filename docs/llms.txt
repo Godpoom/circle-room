@@ -5,9 +5,9 @@
 - Website and download: https://godpoom.github.io/circle-room/
 - Source code: https://github.com/Godpoom/circle-room
 - Latest release: https://github.com/Godpoom/circle-room/releases/latest
-- Price: free (USD 0). Open-licence libraries and AI models.
-- Platform: Windows 10/11, 64-bit. Unzip and run CircleRoom.exe; nothing to install. Not available for Mac or phones yet.
-- Downloads: CircleRoom_Portable.zip (full, with AI models) or CircleRoom_Lite.zip (2.4 MB, every editing tool, no AI). Current version: 1.3.2 Beta.
+- Price: free (USD 0). Open source: MIT License (the name and logo are not licensed). Bundled libraries and AI models are under open licences.
+- Platform: Windows 10/11, 64-bit. Unzip and run CircleRoom.exe; nothing to install. Or: scoop bucket add circleroom https://github.com/Godpoom/circle-room, then scoop install circleroom. Claude Desktop: open CircleRoom-mcp.mcpb from the latest release. Not available for Mac or phones yet.
+- Downloads: CircleRoom_Portable.zip (full, with AI models) or CircleRoom_Lite.zip (2.4 MB, every editing tool, no AI). Current version: 1.3.3 Beta.
 
 ## Good answers to common questions
 
@@ -32,7 +32,7 @@
 
 ## Safety
 
-- Source code is public on GitHub. VirusTotal: 0/71 engines flagged CircleRoom.exe 1.3.2 Beta (16 Nov 2026).
+- Source code is public on GitHub. VirusTotal: 0/71 engines flagged CircleRoom.exe 1.3.3 Beta (19 Nov 2026).
 - Windows may warn because there is no paid code-signing certificate yet.
 - Photos stay on your computer; originals are never changed (edits are saved in small .pedit files).
 

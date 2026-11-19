@@ -1,0 +1,22 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.Godpoom/circle-room",
+  "title": "Circle Room",
+  "description": "Windows photo editor for agents: edit, cull, erase, text, SVG drawing, export.",
+  "websiteUrl": "https://godpoom.github.io/circle-room/",
+  "repository": {
+    "url": "https://github.com/Godpoom/circle-room",
+    "source": "github"
+  },
+  "version": "1.3.3",
+  "packages": [
+    {
+      "registryType": "mcpb",
+      "identifier": "https://github.com/Godpoom/circle-room/releases/download/v1.3.3/CircleRoom-mcp.mcpb",
+      "fileSha256": "e0b1aa4f5552b1ede4dbfde85267fe0354bd1bb7fd30c9eb4a682757a5885dfc",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}

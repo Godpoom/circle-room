@@ -91,10 +91,30 @@ std::vector<std::string> listFiles(const std::string& dir, const char* ext) {
   return out;
 }
 
+// The folder of the real exe file. Started through a symbolic link (winget's portable install puts
+// one on PATH), GetModuleFileName gives the link's folder, where ai\, fonts\ and settings are not:
+// so the path is resolved to the final file once.
 std::string exeDir() {
-  wchar_t buf[MAX_PATH * 4];
-  DWORD n = GetModuleFileNameW(nullptr, buf, (DWORD)(sizeof(buf) / sizeof(buf[0])));
-  return dirOf(wideToUtf8(std::wstring(buf, n)));
+  static const std::string dir = [] {
+    wchar_t buf[MAX_PATH * 4];
+    DWORD n = GetModuleFileNameW(nullptr, buf, (DWORD)(sizeof(buf) / sizeof(buf[0])));
+    std::wstring path(buf, n);
+    HANDLE h = CreateFileW(path.c_str(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
+                           FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h != INVALID_HANDLE_VALUE) {
+      wchar_t fin[MAX_PATH * 4];
+      DWORD m = GetFinalPathNameByHandleW(h, fin, (DWORD)(sizeof(fin) / sizeof(fin[0])), FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+      CloseHandle(h);
+      if (m > 0 && m < sizeof(fin) / sizeof(fin[0])) {
+        std::wstring f(fin, m);
+        if (f.compare(0, 8, L"\\\\?\\UNC\\") == 0) f = L"\\\\" + f.substr(8);  // \\?\UNC\server\share -> \\server\share
+        else if (f.compare(0, 4, L"\\\\?\\") == 0) f = f.substr(4);         // \\?\C:\... -> C:\...
+        path = f;
+      }
+    }
+    return dirOf(wideToUtf8(path));
+  }();
+  return dir;
 }
 
 std::string dirOf(const std::string& path) {

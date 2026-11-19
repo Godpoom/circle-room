@@ -48,6 +48,7 @@ def main():
 
     def common(z):
         z.write(exe, "CircleRoom/CircleRoom.exe")
+        z.write(os.path.join(root, "LICENSE"), "CircleRoom/LICENSE.txt")  # Circle Room itself: MIT
         z.write(os.path.join(root, "THIRD_PARTY_NOTICES.md"), "CircleRoom/THIRD_PARTY_NOTICES.md")
         for f in sorted(os.listdir(lic)):
             z.write(os.path.join(lic, f), "CircleRoom/LICENSES/" + f)

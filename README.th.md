@@ -7,13 +7,17 @@
 > **ดาวน์โหลดไปใช้เลย:** https://godpoom.github.io/circle-room/ (หรือหน้า [Releases](../../releases)) โหลด `CircleRoom_Portable.zip` (มี AI) หรือ `CircleRoom_Lite.zip` (2.4 MB ไม่มี AI) แตกไฟล์แล้วเปิด `CircleRoom.exe` (Windows 10/11 64 บิต)
 >
 > repo นี้เก็บเฉพาะซอร์สโค้ด ไฟล์โมเดล AI (~490 MB) อยู่ในไฟล์ zip ของ Release ถ้าจะ build เอง ให้คัดลอกโฟลเดอร์ `ai\` จาก zip มาไว้ที่ `ai\` ของโปรเจกต์
-> ดูสัญญาอนุญาตของไลบรารีและโมเดลได้ที่ [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) (ข้อความสัญญาฉบับเต็มอยู่ในโฟลเดอร์ [LICENSES](LICENSES))
+> Circle Room เป็นโอเพนซอร์สภายใต้ [MIT License](LICENSE) ดูสัญญาอนุญาตของไลบรารีและโมเดลได้ที่ [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) (ข้อความสัญญาฉบับเต็มอยู่ในโฟลเดอร์ [LICENSES](LICENSES))
 >
-> **ตรวจความปลอดภัย:** VirusTotal สแกน `CircleRoom.exe` 1.3.2 Beta แล้ว **0/71** ([รายงาน](https://www.virustotal.com/gui/file/3bf468de8a27335d7dc3e4733b92b3c92fb6a185d6b77decd702c483f3a2ffcd))
-> SHA-256 ของ `CircleRoom.exe`: `3bf468de8a27335d7dc3e4733b92b3c92fb6a185d6b77decd702c483f3a2ffcd` ตรวจเองได้ด้วย `Get-FileHash .\CircleRoom.exe` และแนะนำให้สแกนไฟล์ที่โหลดมาอีกครั้งเพื่อความปลอดภัย
+> **ตรวจความปลอดภัย:** VirusTotal สแกน `CircleRoom.exe` 1.3.3 Beta แล้ว **0/71** ([รายงาน](https://www.virustotal.com/gui/file/7118786f4e883ee0d7ab140a07b52fe4617638537d0bc45b43e026472ab1ea2b))
+> SHA-256 ของ `CircleRoom.exe`: `7118786f4e883ee0d7ab140a07b52fe4617638537d0bc45b43e026472ab1ea2b` ตรวจเองได้ด้วย `Get-FileHash .\CircleRoom.exe` และแนะนำให้สแกนไฟล์ที่โหลดมาอีกครั้งเพื่อความปลอดภัย
 
 ได้ไฟล์ `bin\CircleRoom.exe` ขนาดประมาณ 3 MB ไม่ต้องติดตั้งอะไรเพิ่ม
 ระบบ AI ใช้ไฟล์ในโฟลเดอร์ `bin\ai\` เพิ่มอีกประมาณ 466 MB (ถ้าไม่มีโฟลเดอร์นี้ ตัวแก้ไขภาพยังใช้ได้ตามปกติ)
+
+**ติดตั้งแบบอื่น:**
+- **Scoop:** `scoop bucket add circleroom https://github.com/Godpoom/circle-room` แล้ว `scoop install circleroom`
+- **Claude Desktop (คลิกเดียว):** โหลด `CircleRoom-mcp.mcpb` จาก[เวอร์ชันล่าสุด](../../releases/latest) แล้วเปิดไฟล์ Claude จะใช้เครื่องมือแต่งรูป ใส่ข้อความ และวาดได้ (เครื่องมือ AI ในเครื่องต้องใช้ตัวเต็ม)
 
 ## ตรงกับที่คุณหาอยู่ไหม
 Circle Room เหมาะถ้าคุณกำลังหา:
@@ -26,13 +30,16 @@ Circle Room เหมาะถ้าคุณกำลังหา:
 - **โปรแกรมแต่งรูปที่มีเลเยอร์ ใส่ข้อความ และฟอนต์ไทย** (1.3.2 Beta)
 - ให้ **Claude, ChatGPT Codex, Cursor หรือ Gemini แต่งรูปให้** ผ่าน MCP
 
-> **ใหม่ใน 1.3.2 Beta:** เพิ่มเลเยอร์ข้อความและภาพวาดเวกเตอร์ ฟอนต์ราว 110 แบบ สร้างฟอนต์จากลายมือ เริ่มจากผืนผ้าใบว่าง และสร้างภาพด้วย AI ผ่าน OpenRouter (ใช้ key ของคุณเอง)
+> **1.3.3 Beta:** เสถียรขึ้น (แก้บั๊ก พิมพ์ข้อความลื่นขึ้น) หน้าสร้างด้วย AI ชัดขึ้น บอกเครดิตของ key และราคาบนปุ่ม เป็นโอเพนซอร์ส MIT ติดตั้งผ่าน Scoop และ Claude Desktop ได้ **ใหม่ตั้งแต่ 1.3.2 Beta:** เพิ่มเลเยอร์ข้อความและภาพวาดเวกเตอร์ ฟอนต์ราว 110 แบบ สร้างฟอนต์จากลายมือ เริ่มจากผืนผ้าใบว่าง และสร้างภาพด้วย AI ผ่าน OpenRouter (ใช้ key ของคุณเอง)
 
 ## ผู้สร้าง
 ทำโดย **IAMPOOM** คนเดียวกับที่สร้าง **Circle Zone** โมเดลภาษา AI ขนาดเล็กที่ออกแบบและเทรนเองตั้งแต่ศูนย์ (ไทย/อังกฤษ)
 - [CircleZone 2.0 (70M)](https://huggingface.co/IAMPOOM/CircleZone-2.0-70M)
 - [CircleZone 1.0 (33M)](https://huggingface.co/IAMPOOM/CircleZone-1.0-33M)
 - [ผลงานทั้งหมดบน Hugging Face](https://huggingface.co/IAMPOOM)
+
+## สัญญาอนุญาต (License)
+Circle Room เป็นโอเพนซอร์สภายใต้ **[MIT License](LICENSE)**: นำโค้ดไปใช้ แก้ไข และแจกต่อได้ รวมถึงใช้ทางการค้า โดยคงข้อความลิขสิทธิ์ไว้ ชื่อ "Circle Room" และโลโก้ไม่อยู่ในสัญญานี้ ถ้านำไปแก้แล้วแจกต่อ ต้องใช้ชื่อและโลโก้ของตัวเอง ส่วนไลบรารี โมเดล AI และฟอนต์ของผู้อื่นใช้สัญญาของแต่ละตัว ([THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md))
 
 ## ชื่อและโลโก้
 **Circle Room** โลโก้เป็น "วงกลมในห้อง": กรอบสี่เหลี่ยมมุมมนสีกราไฟต์ (ห้อง) มีวงแหวนสีกระดาษ (เลนส์/หน้าต่าง) และวงกลมสีแดงแบบไฟ safelight อยู่ต่ำข้างใน เหมือนพระอาทิตย์ตกในกรอบหน้าต่าง
